@@ -7,10 +7,8 @@ struct JournalView: View {
     @State private var showingAddJournal = false
     @State private var selectedDate = Date()
     @State private var isSyncing = false
-    
-    var todayJournal: DailyJournal? {
-        journals.first { Calendar.current.isDate($0.date, inSameDayAs: Date()) }
-    }
+    @State private var editingJournal: DailyJournal? = nil
+    var tabSelection: Binding<Int>?
     
     var body: some View {
         NavigationView {
@@ -19,28 +17,42 @@ struct JournalView: View {
                     // Demo Data Button (only show if no data)
                     if journals.isEmpty {
                         DemoDataButton {
-                            DataSeeder.seedJournalData(context: modelContext)
+                            // DataSeeder.seedJournalData(context: modelContext) // Disabled demo data
+                        }
+                    }
+                    
+                    // Clear Demo Data Button (if there's data)
+                    if journals.contains(where: { $0.notes?.contains("demo") == true }) ||
+                        (try? modelContext.fetch(FetchDescriptor<Program>())).map { $0.contains(where: { ["Push Day", "Pull Day", "Legs Day"].contains($0.name) }) } == true {
+                        ClearDemoDataButton {
+                            clearAllDemoData()
                         }
                     }
                     
                     // Sync Health Data Button
-                    if journals.count > 0 {
-                        SyncHealthDataButton(isSyncing: $isSyncing)
-                    }
+                    // if journals.count > 0 {
+                    //     SyncHealthDataButton(isSyncing: $isSyncing)
+                    // }
                     
                     // Today's Quick Journal
-                    if let today = todayJournal {
-                        TodayJournalCard(journal: today) {
-                            showingAddJournal = true
-                        }
-                    } else {
-                        QuickJournalCard {
-                            showingAddJournal = true
-                        }
+                    QuickJournalCard {
+                        editingJournal = nil
+                        showingAddJournal = true
                     }
                     
                     // Insights Engine
-                    if journals.count >= 7 {
+                    if journals.count < 7 {
+                        ModernCard {
+                            HStack {
+                                Image(systemName: "lightbulb")
+                                    .foregroundColor(.orange)
+                                Text("Track at least 7 days to unlock lifestyle insights.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    } else if journals.count >= 7 {
                         InsightsCard(journals: journals)
                     }
                     
@@ -52,16 +64,57 @@ struct JournalView: View {
             .navigationTitle("Daily Journal")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddJournal = true }) {
+                    Button(action: {
+                        editingJournal = nil
+                        showingAddJournal = true
+                    }) {
                         Image(systemName: "plus")
                     }
                     .primaryButton()
                 }
             }
             .sheet(isPresented: $showingAddJournal) {
-                AddJournalView(existingJournal: todayJournal)
+                AddJournalView(existingJournal: editingJournal, allJournals: journals) { saved in
+                    // After saving, update the local list if needed
+                }
             }
         }
+    }
+    
+    private func clearAllDemoData() {
+        // Clear all journal entries
+        for journal in journals {
+            modelContext.delete(journal)
+        }
+        
+        // Clear all workout sessions
+        let workoutDescriptor = FetchDescriptor<WorkoutSession>()
+        if let workouts = try? modelContext.fetch(workoutDescriptor) {
+            for workout in workouts {
+                modelContext.delete(workout)
+            }
+        }
+        
+        // Clear all weight entries
+        let weightDescriptor = FetchDescriptor<WeightEntry>()
+        if let weights = try? modelContext.fetch(weightDescriptor) {
+            for weight in weights {
+                modelContext.delete(weight)
+            }
+        }
+        
+        // Clear all programs (except user-created ones)
+        let programDescriptor = FetchDescriptor<Program>()
+        if let programs = try? modelContext.fetch(programDescriptor) {
+            for program in programs {
+                if program.name == "Push Day" || program.name == "Pull Day" || program.name == "Legs Day" {
+                    modelContext.delete(program)
+                }
+            }
+        }
+        
+        // Save changes
+        try? modelContext.save()
     }
 }
 
@@ -461,6 +514,8 @@ struct AddJournalView: View {
     @Environment(\.dismiss) private var dismiss
     
     let existingJournal: DailyJournal?
+    let allJournals: [DailyJournal]
+    let onSave: (Bool) -> Void
     
     @State private var consumedAlcohol = false
     @State private var caffeineAfter2PM = false
@@ -469,16 +524,37 @@ struct AddJournalView: View {
     @State private var tookMagnesium = false
     @State private var tookAshwagandha = false
     @State private var notes = ""
-    
+    @State private var entryDate: Date = Date()
+    @State private var editingJournal: DailyJournal? = nil
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Date Picker
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Entry Date")
+                            .font(.headline)
+                        DatePicker("", selection: $entryDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .onChange(of: entryDate) { newDate in
+                                if let match = allJournals.first(where: { Calendar.current.isDate($0.date, inSameDayAs: newDate) }) {
+                                    loadJournal(match)
+                                    editingJournal = match
+                                } else {
+                                    clearFieldsForNewDate()
+                                    editingJournal = nil
+                                }
+                            }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
                     // Lifestyle Factors
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Lifestyle Factors")
                             .font(.headline)
-                        
                         VStack(spacing: 12) {
                             ToggleRow(title: "Consumed Alcohol", icon: "wineglass", isOn: $consumedAlcohol)
                             ToggleRow(title: "Caffeine after 2 PM", icon: "cup.and.saucer", isOn: $caffeineAfter2PM)
@@ -491,7 +567,6 @@ struct AddJournalView: View {
                     .padding()
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
-                    
                     // Notes
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes")
@@ -519,13 +594,15 @@ struct AddJournalView: View {
                 }
             }
             .onAppear {
-                loadExistingData()
+                if let existing = existingJournal {
+                    loadJournal(existing)
+                    editingJournal = existing
+                }
             }
         }
     }
-    
-    private func loadExistingData() {
-        guard let journal = existingJournal else { return }
+
+    private func loadJournal(_ journal: DailyJournal) {
         consumedAlcohol = journal.consumedAlcohol
         caffeineAfter2PM = journal.caffeineAfter2PM
         ateLate = journal.ateLate
@@ -533,10 +610,23 @@ struct AddJournalView: View {
         tookMagnesium = journal.tookMagnesium
         tookAshwagandha = journal.tookAshwagandha
         notes = journal.notes ?? ""
+        entryDate = journal.date
     }
-    
+
+    private func clearFieldsForNewDate() {
+        consumedAlcohol = false
+        caffeineAfter2PM = false
+        ateLate = false
+        highStressDay = false
+        tookMagnesium = false
+        tookAshwagandha = false
+        notes = ""
+    }
+
     private func saveJournal() {
-        if let existing = existingJournal {
+        // Check if a journal for this date exists
+        let match = allJournals.first(where: { Calendar.current.isDate($0.date, inSameDayAs: entryDate) })
+        if let existing = match ?? editingJournal {
             // Update existing
             existing.consumedAlcohol = consumedAlcohol
             existing.caffeineAfter2PM = caffeineAfter2PM
@@ -545,9 +635,11 @@ struct AddJournalView: View {
             existing.tookMagnesium = tookMagnesium
             existing.tookAshwagandha = tookAshwagandha
             existing.notes = notes.isEmpty ? nil : notes
+            existing.date = entryDate
         } else {
             // Create new
-            let journal = DailyJournal(
+            let newJournal = DailyJournal(
+                date: entryDate,
                 consumedAlcohol: consumedAlcohol,
                 caffeineAfter2PM: caffeineAfter2PM,
                 ateLate: ateLate,
@@ -556,11 +648,11 @@ struct AddJournalView: View {
                 tookAshwagandha: tookAshwagandha,
                 notes: notes.isEmpty ? nil : notes
             )
-            modelContext.insert(journal)
+            modelContext.insert(newJournal)
         }
-        
         try? modelContext.save()
         dismiss()
+        onSave(true)
     }
 }
 
@@ -588,33 +680,67 @@ struct ToggleRow: View {
 }
 
 struct DemoDataButton: View {
-    let onSeed: () -> Void
+    let onTap: () -> Void
     
     var body: some View {
         ModernCard {
             VStack(spacing: 16) {
                 HStack {
-                    Image(systemName: "sparkles")
+                    Image(systemName: "database.fill")
                         .font(.title2)
                         .foregroundColor(.orange)
-                    Text("Try Demo Data")
+                    Text("No Journal Data")
                         .font(.headline)
                     Spacer()
                 }
                 
-                Text("Generate 30 days of sample journal entries with realistic lifestyle patterns and health correlations to explore the features.")
+                Text("Start tracking your daily lifestyle factors to discover patterns with your health metrics.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.leading)
                 
-                Button(action: onSeed) {
+                Button(action: onTap) {
                     HStack {
-                        Image(systemName: "wand.and.stars")
-                        Text("Generate Demo Data")
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Your First Entry")
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .primaryButton()
+            }
+        }
+    }
+}
+
+struct ClearDemoDataButton: View {
+    let onClear: () -> Void
+    
+    var body: some View {
+        ModernCard {
+            VStack(spacing: 16) {
+                HStack {
+                    Image(systemName: "trash.fill")
+                        .font(.title2)
+                        .foregroundColor(.red)
+                    Text("Clear Demo Data")
+                        .font(.headline)
+                    Spacer()
+                }
+                
+                Text("Remove all demo data and start fresh with your own personal HealthKit data.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                
+                Button(action: onClear) {
+                    HStack {
+                        Image(systemName: "trash.circle.fill")
+                        Text("Clear All Demo Data")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
             }
         }
     }

@@ -116,57 +116,96 @@ class TrendsViewModel: ObservableObject {
         Task {
             let baseline = DynamicBaselineEngine.shared
             baseline.loadBaselines()
-            // For demo, create sample data
+            
+            // Use real HealthKit data instead of demo data
+            let hk = HealthKitManager.shared
             var history: [DailyPerformance] = []
             let calendar = Calendar.current
+            
+            // Fetch historical data for the last 90 days
             for offset in (0..<90).reversed() {
                 let day = calendar.date(byAdding: .day, value: -offset, to: Date())!
-                // Create sample data for demo
-                let recoveryScore = Int.random(in: 60...95)
-                let sleepScore = Int.random(in: 70...90)
-                let hrv = Double.random(in: 25...45)
-                let rhr = Double.random(in: 50...70)
-                history.append(DailyPerformance(
-                    date: day,
-                    recoveryScore: recoveryScore,
-                    sleepScore: sleepScore,
-                    hrv: hrv,
-                    rhr: rhr,
-                    sleepDuration: TimeInterval.random(in: 6*3600...9*3600),
-                    deepSleep: TimeInterval.random(in: 1*3600...2*3600),
-                    remSleep: TimeInterval.random(in: 1.5*3600...2.5*3600),
-                    hrvDelta: nil,
-                    rhrDelta: nil,
-                    sleepDelta: nil,
-                    directive: ""
-                ))
+                
+                // Fetch data for this specific day
+                let group = DispatchGroup()
+                var hrv: Double?
+                var rhr: Double?
+                var sleep: (duration: TimeInterval, deep: TimeInterval, rem: TimeInterval, bedtime: Date, wake: Date)?
+                
+                group.enter()
+                hk.fetchHRV(for: day) { value in
+                    hrv = value
+                    group.leave()
+                }
+                
+                group.enter()
+                hk.fetchRHR(for: day) { value in
+                    rhr = value
+                    group.leave()
+                }
+                
+                group.enter()
+                hk.fetchSleep(for: day) { value in
+                    sleep = value
+                    group.leave()
+                }
+                
+                group.notify(queue: .main) {
+                    let sleepScore = PerformanceDashboardViewModel.calculateSleepScore(sleep: sleep, baseline: baseline)
+                    let recoveryScore = PerformanceDashboardViewModel.calculateRecoveryScore(hrv: hrv, rhr: rhr, sleepScore: sleepScore, baseline: baseline)
+                    
+                    let performance = DailyPerformance(
+                        date: day,
+                        recoveryScore: recoveryScore,
+                        sleepScore: sleepScore,
+                        hrv: hrv,
+                        rhr: rhr,
+                        sleepDuration: sleep?.duration,
+                        deepSleep: sleep?.deep,
+                        remSleep: sleep?.rem,
+                        hrvDelta: nil,
+                        rhrDelta: nil,
+                        sleepDelta: nil,
+                        directive: ""
+                    )
+                    
+                    history.append(performance)
+                    
+                    // Update the published property when we have all data
+                    if history.count == 90 {
+                        Task { @MainActor in
+                            self.history = history
+                        }
+                    }
+                }
             }
-            // Sample workout dates
-            var workoutDates: Set<Date> = []
-            for _ in 0..<20 {
-                let randomDay = calendar.date(byAdding: .day, value: -Int.random(in: 0...30), to: Date())!
-                workoutDates.insert(calendar.startOfDay(for: randomDay))
-            }
-            await MainActor.run {
-                self.history = history
-                self.workoutDates = workoutDates
+            
+            // Fetch workout dates from HealthKit
+            hk.fetchWorkoutDates { dates in
+                Task { @MainActor in
+                    self.workoutDates = dates
+                }
             }
         }
     }
     func chartData(for metric: Metric, period: Period) -> [ChartPoint]? {
         let slice = Array(history.suffix(period.rawValue))
         guard !slice.isEmpty else { return nil }
-        return slice.map { day in
-            let value: Double = {
-                switch metric {
-                case .recovery: return Double(day.recoveryScore)
-                case .sleep: return Double(day.sleepScore)
-                case .hrv: return day.hrv ?? 0
-                case .rhr: return day.rhr ?? 0
-                }
-            }()
-            let isWorkout = workoutDates.contains(Calendar.current.startOfDay(for: day.date))
-            return ChartPoint(date: day.date, value: value, isWorkout: isWorkout)
-        }
+        return slice
+            .sorted { $0.date < $1.date }
+            .compactMap { day in
+                let value: Double = {
+                    switch metric {
+                    case .recovery: return Double(day.recoveryScore)
+                    case .sleep: return Double(day.sleepScore)
+                    case .hrv: return day.hrv ?? 0
+                    case .rhr: return day.rhr ?? 0
+                    }
+                }()
+                let isWorkout = workoutDates.contains(Calendar.current.startOfDay(for: day.date))
+                // Filter out NaN, zero, or negative values for chart clarity
+                if value.isNaN || value == 0 { return nil }
+                return ChartPoint(date: day.date, value: value, isWorkout: isWorkout)
+            }
     }
 } 

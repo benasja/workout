@@ -60,6 +60,10 @@ struct SettingsView: View {
                     .accessibilityLabel("Appearance Mode")
                 }
                 
+                Section("Health Data") {
+                    SyncHealthDataButton(isSyncing: .constant(false))
+                }
+
                 Section("Data") {
                     Button("Export Data") {
                         exportData()

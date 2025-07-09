@@ -187,48 +187,55 @@ struct CorrelationChartView: View {
                 }
                 
                 if chartData.count >= 7 {
-                    Chart(chartData) { dataPoint in
-                        LineMark(
-                            x: .value("Date", dataPoint.date),
-                            y: .value("Value", dataPoint.value)
-                        )
-                        .foregroundStyle(Color.blue)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                        
-                        PointMark(
-                            x: .value("Date", dataPoint.date),
-                            y: .value("Value", dataPoint.value)
-                        )
-                        .foregroundStyle(dataPoint.hasFactor ? Color.red : Color.blue)
-                        .symbolSize(100)
-                    }
-                    .frame(height: 200)
-                    .chartYAxis {
-                        AxisMarks(position: .leading)
-                    }
-                    .chartXAxis {
-                        AxisMarks(values: .stride(by: .day, count: 7)) { value in
-                            AxisGridLine()
-                            AxisValueLabel(format: .dateTime.month().day())
+                    let factorDays = chartData.filter { $0.hasFactor }.count
+                    let nonFactorDays = chartData.filter { !$0.hasFactor }.count
+                    if factorDays < 2 || nonFactorDays < 2 {
+                        Text("Not enough variation in \(factor) to show a correlation.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .frame(height: 200)
+                    } else {
+                        Chart(chartData) { dataPoint in
+                            LineMark(
+                                x: .value("Date", dataPoint.date),
+                                y: .value("Value", dataPoint.value)
+                            )
+                            .foregroundStyle(Color.blue)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            
+                            PointMark(
+                                x: .value("Date", dataPoint.date),
+                                y: .value("Value", dataPoint.value)
+                            )
+                            .foregroundStyle(dataPoint.hasFactor ? Color.red : Color.blue)
+                            .symbolSize(100)
                         }
-                    }
-                    
-                    // Legend
-                    HStack(spacing: 16) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 8, height: 8)
-                            Text("Normal Day")
-                                .font(.caption)
+                        .frame(height: 200)
+                        .chartYAxis {
+                            AxisMarks(position: .leading)
                         }
-                        
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 8, height: 8)
-                            Text("\(factor) Day")
-                                .font(.caption)
+                        .chartXAxis {
+                            AxisMarks(values: .stride(by: .day, count: 7)) { value in
+                                AxisGridLine()
+                                AxisValueLabel(format: .dateTime.month().day())
+                            }
+                        }
+                        // Legend
+                        HStack(spacing: 16) {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 8, height: 8)
+                                Text("Normal Day")
+                                    .font(.caption)
+                            }
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 8, height: 8)
+                                Text("\(factor) Day")
+                                    .font(.caption)
+                            }
                         }
                     }
                 } else {

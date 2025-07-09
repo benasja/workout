@@ -256,10 +256,92 @@ final class HealthKitManager {
         }
         return result
     }
+    
+    // MARK: - Historical Data Fetchers for Trends
+    func fetchHRV(for date: Date, completion: @escaping (Double?) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        guard let type = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "ms")) } ?? []
+            let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(average)
+        }
+        healthStore.execute(query)
+    }
+    
+    func fetchRHR(for date: Date, completion: @escaping (Double?) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        guard let type = HKObjectType.quantityType(forIdentifier: .restingHeartRate) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) } ?? []
+            let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(average)
+        }
+        healthStore.execute(query)
+    }
+    
+    func fetchSleep(for date: Date, completion: @escaping ((duration: TimeInterval, deep: TimeInterval, rem: TimeInterval, bedtime: Date, wake: Date)?) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let sleeps = (samples as? [HKCategorySample]) ?? []
+            guard !sleeps.isEmpty else { completion(nil); return }
+            
+            let total = sleeps.filter { $0.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue || $0.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue || $0.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue || $0.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue }.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+            let deep = sleeps.filter { $0.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue }.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+            let rem = sleeps.filter { $0.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue }.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+            let bedtime = sleeps.min(by: { $0.startDate < $1.startDate })?.startDate
+            let wake = sleeps.max(by: { $0.endDate < $1.endDate })?.endDate
+            
+            if let bedtime = bedtime, let wake = wake {
+                completion((duration: total, deep: deep, rem: rem, bedtime: bedtime, wake: wake))
+            } else {
+                completion(nil)
+            }
+        }
+        healthStore.execute(query)
+    }
+    
+    func fetchWorkoutDates(completion: @escaping (Set<Date>) -> Void) {
+        let workoutType = HKObjectType.workoutType()
+        let startDate = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: .strictStartDate)
+        
+        let query = HKSampleQuery(sampleType: workoutType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let workouts = (samples as? [HKWorkout]) ?? []
+            let workoutDates = Set(workouts.map { Calendar.current.startOfDay(for: $0.startDate) })
+            completion(workoutDates)
+        }
+        healthStore.execute(query)
+    }
 }
 
-// MARK: - Array Average Helper
-private extension Array where Element == Double {
+// MARK: - Extensions
+extension Array where Element == Double {
     var average: Double {
         guard !isEmpty else { return 0 }
         return reduce(0, +) / Double(count)

@@ -21,6 +21,17 @@ struct TodayView: View {
     @State private var showingProfileEditor = false
     @State private var showingStartWorkoutSheet = false
     @State private var timeOfDay: TimeOfDay = .morning
+    @State private var todayPerformance: DailyPerformance?
+    
+    var tabSelection: Binding<Int>?
+    
+    private var deepSleepString: String {
+        let total = todayPerformance?.sleepDuration ?? 0
+        if total <= 0 { return "--" }
+        let hours = Int(total) / 3600
+        let minutes = (Int(total) % 3600) / 60
+        return String(format: "%dh %02dm", hours, minutes)
+    }
     
     var lastWeight: Double? {
         weightEntries.first?.weight
@@ -55,41 +66,94 @@ struct TodayView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Time-aware greeting
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("\(timeOfDay.greeting), \(userProfile.first?.name ?? "there")")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                        Text(timeOfDay.subtitle)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                VStack(spacing: 28) {
+                    // 1. Header
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                            Text("Today").font(.largeTitle.bold())
+                        }
+                        Spacer()
+                        ProfileIcon()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    // Time-specific content
-                    switch timeOfDay {
-                    case .morning:
-                        MorningView(todayJournal: todayJournal)
-                    case .midday:
-                        MiddayView(weightEntries: weightEntries)
-                    case .evening:
-                        EveningView(todayJournal: todayJournal)
+                    .padding(.top, 8)
+                    .padding(.horizontal)
+
+                    // 1. Main Scores: Circular Gauges
+                    ModernCard {
+                        HStack(spacing: 32) {
+                            CircularGaugeView(
+                                score: todayPerformance?.recoveryScore ?? 0,
+                                title: "Recovery",
+                                primaryText: "\(todayPerformance?.recoveryScore ?? 0)%",
+                                secondaryText: "",
+                                gradient: AngularGradient(gradient: Gradient(colors: [.red, .orange, .green]), center: .center),
+                                textColor: .red
+                            )
+                            CircularGaugeView(
+                                score: todayPerformance?.sleepScore ?? 0,
+                                title: "Sleep",
+                                primaryText: "\(todayPerformance?.sleepScore ?? 0)%",
+                                secondaryText: "",
+                                gradient: AngularGradient(gradient: Gradient(colors: [.blue, .cyan]), center: .center),
+                                textColor: .blue
+                            )
+                        }
+                        .padding(.vertical, 8)
                     }
-                    
-                    // Common elements
-                    CommonElementsView(
-                        showingStartWorkoutSheet: $showingStartWorkoutSheet,
-                        currentWorkout: $currentWorkout,
-                        showingWorkoutView: $showingWorkoutView
-                    )
+                    .frame(maxWidth: 420, alignment: .center)
+
+                    // 2. Key Metrics Row
+                    ModernCard {
+                        HStack(spacing: 16) {
+                            MetricCard(icon: "waveform.path.ecg", color: .pink, label: "HRV", value: String(format: "%.1f ms", todayPerformance?.hrv ?? 0), deepSleepString: deepSleepString)
+                            MetricCard(icon: "heart.circle.fill", color: .purple, label: "RHR", value: String(format: "%.1f bpm", todayPerformance?.rhr ?? 0), deepSleepString: deepSleepString)
+                            MetricCard(icon: "bed.double.fill", color: .blue, label: "Total Sleep", value: deepSleepString, deepSleepString: deepSleepString)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(maxWidth: 420, alignment: .center)
+
+                    // 3. Focus Card
+                    ModernCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Today's Focus")
+                                .font(.headline)
+                            Text(todayPerformance?.directive ?? "No directive today.")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                            FocusTargetRow(icon: "flame.fill", iconColor: .orange, label: "Target", value: "12-16")
+                            FocusTargetRow(icon: "flame", iconColor: .gray, label: "Current", value: "0.0")
+                        }
+                    }
+                    .frame(maxWidth: 420, alignment: .center)
+
+                    // 4. Quick Action Row
+                    HStack {
+                        Spacer()
+                        QuickActionButton(icon: "scalemass", label: "Weight", color: .blue, action: {
+                            tabSelection?.wrappedValue = 7
+                        })
+                        Spacer()
+                        QuickActionButton(icon: "book.closed.fill", label: "Journal", color: .blue, action: {
+                            tabSelection?.wrappedValue = 5
+                        })
+                        Spacer()
+                        QuickActionButton(icon: "pills.fill", label: "Supplements", color: .blue, action: {
+                            tabSelection?.wrappedValue = 10
+                        })
+                        Spacer()
+                    }
+                    .frame(maxWidth: 420)
+                    .padding(.vertical, 8)
+
+                    // 5. Outlook Card (optional)
+                    // ...
                 }
-                .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, AppSpacing.md)
             }
             .background(AppColors.background)
-            .navigationTitle("Today")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingWorkoutView) {
                 if let workout = currentWorkout {
                     WorkoutView(workout: workout)
@@ -103,6 +167,9 @@ struct TodayView: View {
             .onAppear {
                 updateTimeOfDay()
                 seedDataIfNeeded()
+                PerformanceDashboardViewModel.performance(for: Date()) { perf in
+                    self.todayPerformance = perf
+                }
             }
         }
     }
@@ -119,16 +186,17 @@ struct TodayView: View {
     }
     
     private func seedDataIfNeeded() {
-        if exercises.isEmpty {
-            DataSeeder.seedExerciseLibrary(modelContext: modelContext)
-        }
-        if activeProgram.isEmpty {
-            DataSeeder.seedSamplePrograms(modelContext: modelContext)
-        }
+        // All demo data seeding disabled - use only real HealthKit data
+        // if exercises.isEmpty {
+        //     DataSeeder.seedExerciseLibrary(modelContext: modelContext)
+        // }
+        // if activeProgram.isEmpty {
+        //     DataSeeder.seedSamplePrograms(modelContext: modelContext)
+        // }
         // Always seed demo push/pull/legs if not present
-        if activeProgram.filter({ $0.name == "Push Day" || $0.name == "Pull Day" || $0.name == "Legs Day" }).isEmpty {
-            DataSeeder.seedDemoPushPullLegs(modelContext: modelContext)
-        }
+        // if activeProgram.filter({ $0.name == "Push Day" || $0.name == "Pull Day" || $0.name == "Legs Day" }).isEmpty {
+        //     DataSeeder.seedDemoPushPullLegs(modelContext: modelContext) // Disabled demo data
+        // }
     }
     
     private func startEmptyWorkout() {
@@ -340,13 +408,19 @@ struct SleepCard: View {
                 Spacer()
                 if let duration = duration {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text("Total: \(String(format: "%.1f", duration/3600)) hrs")
+                        Text("Total: \(formatDuration(duration))")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
             }
         }
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = (Int(duration) % 3600) / 60
+        return String(format: "%d:%02dh", hours, minutes)
     }
 }
 
@@ -670,59 +744,152 @@ struct BreathingSessionView: View {
     }
 }
 
+// MARK: - New Subviews
 
-struct StartWorkoutSheet: View {
-    let programs: [Program]
-    let onStartEmpty: () -> Void
-    let onStartFromLibrary: (Program) -> Void
-    @Environment(\.dismiss) private var dismiss
+// 1. Refactor QuickActionButton for vertical layout, fixed width, centered content, no text wrapping.
+struct QuickActionButton: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.15))
+                        .frame(width: 56, height: 56)
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundColor(color)
+                }
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .frame(maxWidth: 80)
+            }
+            .frame(width: 80)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// 2. Refactor CircularGaugeView: score centered in circle, label below, both centered.
+struct CircularGaugeView: View {
+    let score: Int
+    let title: String
+    let primaryText: String
+    let secondaryText: String
+    let gradient: AngularGradient
+    let textColor: Color
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 8)
+                    .frame(width: 90, height: 90)
+                Circle()
+                    .trim(from: 0, to: CGFloat(score)/100)
+                    .stroke(gradient, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 90, height: 90)
+                Text(primaryText)
+                    .font(.title2.bold())
+                    .foregroundColor(textColor)
+            }
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+// Helper for total sleep formatting
+// private var sleepString: String {
+//     let total = todayPerformance?.sleepDuration ?? 0
+//     if total <= 0 { return "--" }
+//     let hours = Int(total) / 3600
+//     let minutes = (Int(total) % 3600) / 60
+//     return String(format: "%dh %02dm", hours, minutes)
+// }
+
+// 3. Change metric card from 'Deep Sleep' to 'Total Sleep', format as '7h 15m'.
+struct MetricCard: View {
+    let icon: String
+    let color: Color
+    let label: String
+    let value: String
+    let deepSleepString: String
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(color)
+                .frame(width: 32, height: 32)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.headline.bold())
+                .foregroundColor(.primary)
+        }
+        .frame(width: 90)
+        .padding(8)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(14)
+    }
+}
+
+struct MetricRowView: View {
+    let title: String
+    let value: Double
+    let unit: String
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: AppSpacing.xl) {
-                Text("Start a Workout")
-                    .font(AppTypography.title2)
-                    .padding(.top, AppSpacing.xl)
-                if programs.isEmpty {
-                    Text("No programs available. Please create a program in the Programs tab.")
-                        .foregroundColor(AppColors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                } else {
-                    List(programs, id: \.id) { program in
-                        Button(action: {
-                            onStartFromLibrary(program)
-                        }) {
-                            VStack(alignment: .leading) {
-                                Text(program.name)
-                                    .font(AppTypography.title3)
-                                Text(program.programDescription)
-                                    .font(AppTypography.body)
-                                    .foregroundColor(AppColors.textSecondary)
-                                    .lineLimit(2)
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .frame(maxHeight: 250)
-                }
-                Button(action: onStartEmpty) {
-                    HStack {
-                        Image(systemName: "plus.circle")
-                        Text("Start Empty Workout")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .secondaryButton()
-                Spacer()
-            }
-            .padding()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text("\(String(format: "%.1f", value)) \(unit)")
+                .font(.subheadline)
+                .foregroundColor(.primary)
         }
+    }
+}
+
+struct FocusTargetRow: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(iconColor)
+            Text(label)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+        }
+    }
+}
+
+struct ProfileIcon: View {
+    var body: some View {
+        Button(action: { /* Show profile editor sheet */ }) {
+            Image(systemName: "person.fill")
+                .font(.title2)
+                .foregroundColor(.secondary)
+        }
+        .accessibilityLabel("Profile")
     }
 }
 

@@ -76,7 +76,7 @@ class PerformanceDashboardViewModel: ObservableObject {
         }
     }
     
-    static func calculateRecoveryScore(hrv: Double?, rhr: Double?, sleepScore: Int, baseline: DynamicBaselineEngine) -> Int {
+    static nonisolated func calculateRecoveryScore(hrv: Double?, rhr: Double?, sleepScore: Int, baseline: DynamicBaselineEngine) -> Int {
         guard let hrv = hrv, let rhr = rhr, let baseHRV = baseline.hrv60, let baseRHR = baseline.rhr60 else { return 0 }
         // HRV (60%)
         let hrvRatio = hrv / baseHRV
@@ -92,7 +92,7 @@ class PerformanceDashboardViewModel: ObservableObject {
         let total = hrvContribution + rhrContribution + sleepContribution
         return Int(min(max(total, 0), 100))
     }
-    static func calculateSleepScore(sleep: (duration: TimeInterval, deep: TimeInterval, rem: TimeInterval, bedtime: Date, wake: Date)?, baseline: DynamicBaselineEngine) -> Int {
+    static nonisolated func calculateSleepScore(sleep: (duration: TimeInterval, deep: TimeInterval, rem: TimeInterval, bedtime: Date, wake: Date)?, baseline: DynamicBaselineEngine) -> Int {
         guard let sleep = sleep, let baseBed = baseline.bedtime14, let baseWake = baseline.wake14 else { return 0 }
         // Duration (40%)
         let hours = sleep.duration / 3600
@@ -116,15 +116,15 @@ class PerformanceDashboardViewModel: ObservableObject {
         let total = durationContribution + restorativeContribution + consistencyContribution
         return Int(min(max(total, 0), 100))
     }
-    static func normalizeScore(_ value: Double, min: Double, max: Double) -> Double {
+    static nonisolated func normalizeScore(_ value: Double, min: Double, max: Double) -> Double {
         if value < min { return (value / min) * 60 }
         if value > max { return (max / value) * 60 }
         return 100 - (abs(((min+max)/2) - value) * 5)
     }
-    static func minutesBetween(_ d1: Date, _ d2: Date) -> Double {
+    static nonisolated func minutesBetween(_ d1: Date, _ d2: Date) -> Double {
         abs(d1.timeIntervalSince1970 - d2.timeIntervalSince1970) / 60.0
     }
-    static func generateDirective(recoveryScore: Int, sleepScore: Int) -> String {
+    static nonisolated func generateDirective(recoveryScore: Int, sleepScore: Int) -> String {
         if recoveryScore > 85 {
             return "Primed for peak performance. Your body is ready for a high-strain workout."
         } else if recoveryScore < 55 {
@@ -133,6 +133,43 @@ class PerformanceDashboardViewModel: ObservableObject {
             return "Sleep was not restorative. Focus on your wind-down routine tonight."
         } else {
             return "Maintain your current habits for continued progress."
+        }
+    }
+
+    static func performance(for date: Date, completion: @escaping (DailyPerformance?) -> Void) {
+        let hk = HealthKitManager.shared
+        let baseline = DynamicBaselineEngine.shared
+        baseline.loadBaselines()
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        let group = DispatchGroup()
+        var hrv: Double?; var rhr: Double?; var sleep: (duration: TimeInterval, deep: TimeInterval, rem: TimeInterval, bedtime: Date, wake: Date)?
+        group.enter(); hk.fetchHRV(for: date) { v in hrv = v; group.leave() }
+        group.enter(); hk.fetchRHR(for: date) { v in rhr = v; group.leave() }
+        group.enter(); hk.fetchSleep(for: date) { s in sleep = s; group.leave() }
+        group.notify(queue: .main) {
+            let hrvDelta = (hrv != nil && baseline.hrv60 != nil) ? hrv! - baseline.hrv60! : nil
+            let rhrDelta = (rhr != nil && baseline.rhr60 != nil) ? rhr! - baseline.rhr60! : nil
+            let sleepDelta = (sleep != nil && baseline.sleepDuration14 != nil) ? (sleep!.duration - baseline.sleepDuration14!) / 3600 : nil
+            let sleepScore = Self.calculateSleepScore(sleep: sleep, baseline: baseline)
+            let recoveryScore = Self.calculateRecoveryScore(hrv: hrv, rhr: rhr, sleepScore: sleepScore, baseline: baseline)
+            let directive = Self.generateDirective(recoveryScore: recoveryScore, sleepScore: sleepScore)
+            let perf = DailyPerformance(
+                date: date,
+                recoveryScore: recoveryScore,
+                sleepScore: sleepScore,
+                hrv: hrv,
+                rhr: rhr,
+                sleepDuration: sleep?.duration,
+                deepSleep: sleep?.deep,
+                remSleep: sleep?.rem,
+                hrvDelta: hrvDelta,
+                rhrDelta: rhrDelta,
+                sleepDelta: sleepDelta,
+                directive: directive
+            )
+            completion(perf)
         }
     }
 }
@@ -246,12 +283,29 @@ struct MetricDeltaView: View {
                 .foregroundColor(.secondary)
             if let value = value {
                 HStack(spacing: 4) {
-                    Text(String(format: format, value) + " " + unit)
-                        .font(.title3.bold())
+                    if title == "Sleep" {
+                        Text(formatDuration(value))
+                            .font(.title3.bold())
+                    } else {
+                        Text(String(format: format, value) + " " + unit)
+                            .font(.title3.bold())
+                    }
                     if let delta = delta {
-                        Text(delta > 0 ? "+\(String(format: format, delta))" : "\(String(format: format, delta))")
-                            .font(.caption2)
-                            .foregroundColor(delta > 0 ? .red : .green)
+                        if title == "Sleep" {
+                            let minutes = Int((delta * 60).rounded())
+                            let isPositive = minutes > 0
+                            Text(String(format: "%+d min", minutes))
+                                .font(.caption2)
+                                .foregroundColor(isPositive ? .green : .red)
+                        } else if title == "RHR" && abs(delta) < 0.01 {
+                            Text("0")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text(delta > 0 ? "+\(String(format: format, delta))" : "\(String(format: format, delta))")
+                                .font(.caption2)
+                                .foregroundColor(delta > 0 ? .red : .green)
+                        }
                     }
                 }
             } else {
@@ -261,6 +315,12 @@ struct MetricDeltaView: View {
             }
         }
         .frame(minWidth: 60)
+    }
+    private func formatDuration(_ hours: Double) -> String {
+        let totalMinutes = Int((hours * 60).rounded())
+        let h = totalMinutes / 60
+        let m = totalMinutes % 60
+        return String(format: "%d:%02dh", h, m)
     }
 }
 
