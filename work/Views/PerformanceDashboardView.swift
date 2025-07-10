@@ -51,28 +51,55 @@ class PerformanceDashboardViewModel: ObservableObject {
         group.enter(); hk.fetchLatestRHR { v in rhr = v; group.leave() }
         group.enter(); hk.fetchLatestSleep { s in sleep = s; group.leave() }
         group.notify(queue: .main) {
-            let hrvDelta = (hrv != nil && baseline.hrv60 != nil) ? hrv! - baseline.hrv60! : nil
-            let rhrDelta = (rhr != nil && baseline.rhr60 != nil) ? rhr! - baseline.rhr60! : nil
-            let sleepDelta = (sleep != nil && baseline.sleepDuration14 != nil) ? (sleep!.duration - baseline.sleepDuration14!) / 3600 : nil
-            let sleepScore = Self.calculateSleepScore(sleep: sleep, baseline: baseline)
-            let recoveryScore = Self.calculateRecoveryScore(hrv: hrv, rhr: rhr, sleepScore: sleepScore, baseline: baseline)
-            let directive = Self.generateDirective(recoveryScore: recoveryScore, sleepScore: sleepScore)
-            self.today = DailyPerformance(
-                date: Date(),
-                recoveryScore: recoveryScore,
-                sleepScore: sleepScore,
-                hrv: hrv,
-                rhr: rhr,
-                sleepDuration: sleep?.duration,
-                deepSleep: sleep?.deep,
-                remSleep: sleep?.rem,
-                hrvDelta: hrvDelta,
-                rhrDelta: rhrDelta,
-                sleepDelta: sleepDelta,
-                directive: directive
-            )
-            self.isLoading = false
-            self.lastRefreshTime = Date()
+            Task {
+                let hrvDelta = (hrv != nil && baseline.hrv60 != nil) ? hrv! - baseline.hrv60! : nil
+                let rhrDelta = (rhr != nil && baseline.rhr60 != nil) ? rhr! - baseline.rhr60! : nil
+                let sleepDelta = (sleep != nil && baseline.sleepDuration14 != nil) ? (sleep!.duration - baseline.sleepDuration14!) / 3600 : nil
+                
+                // Use the comprehensive recovery and sleep score calculators
+                let recoveryScore: Int
+                let sleepScore: Int
+                let directive: String
+                
+                do {
+                    let recoveryResult = try await RecoveryScoreCalculator.shared.calculateRecoveryScore(for: Date())
+                    recoveryScore = recoveryResult.finalScore
+                    sleepScore = Int(recoveryResult.sleepComponent.score)
+                    directive = recoveryResult.directive
+                } catch {
+                    print("⚠️ Could not calculate recovery score: \(error)")
+                    // Fallback to simple calculation if comprehensive calculation fails
+                    let fallbackSleepScore: Int
+                    do {
+                        let detailedSleepScore = try await SleepScoreCalculator.shared.calculateSleepScore(for: Date())
+                        fallbackSleepScore = detailedSleepScore.finalScore
+                    } catch {
+                        fallbackSleepScore = Self.calculateSleepScore(sleep: sleep, baseline: baseline)
+                    }
+                    recoveryScore = Self.calculateRecoveryScore(hrv: hrv, rhr: rhr, sleepScore: fallbackSleepScore, baseline: baseline)
+                    sleepScore = fallbackSleepScore
+                    directive = Self.generateDirective(recoveryScore: recoveryScore, sleepScore: sleepScore)
+                }
+                
+                await MainActor.run {
+                    self.today = DailyPerformance(
+                        date: Date(),
+                        recoveryScore: recoveryScore,
+                        sleepScore: sleepScore,
+                        hrv: hrv,
+                        rhr: rhr,
+                        sleepDuration: sleep?.duration,
+                        deepSleep: sleep?.deep,
+                        remSleep: sleep?.rem,
+                        hrvDelta: hrvDelta,
+                        rhrDelta: rhrDelta,
+                        sleepDelta: sleepDelta,
+                        directive: directive
+                    )
+                    self.isLoading = false
+                    self.lastRefreshTime = Date()
+                }
+            }
         }
     }
     
@@ -137,39 +164,34 @@ class PerformanceDashboardViewModel: ObservableObject {
     }
 
     static func performance(for date: Date, completion: @escaping (DailyPerformance?) -> Void) {
-        let hk = HealthKitManager.shared
-        let baseline = DynamicBaselineEngine.shared
-        baseline.loadBaselines()
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
-        let group = DispatchGroup()
-        var hrv: Double?; var rhr: Double?; var sleep: (duration: TimeInterval, deep: TimeInterval, rem: TimeInterval, bedtime: Date, wake: Date)?
-        group.enter(); hk.fetchHRV(for: date) { v in hrv = v; group.leave() }
-        group.enter(); hk.fetchRHR(for: date) { v in rhr = v; group.leave() }
-        group.enter(); hk.fetchSleep(for: date) { s in sleep = s; group.leave() }
-        group.notify(queue: .main) {
-            let hrvDelta = (hrv != nil && baseline.hrv60 != nil) ? hrv! - baseline.hrv60! : nil
-            let rhrDelta = (rhr != nil && baseline.rhr60 != nil) ? rhr! - baseline.rhr60! : nil
-            let sleepDelta = (sleep != nil && baseline.sleepDuration14 != nil) ? (sleep!.duration - baseline.sleepDuration14!) / 3600 : nil
-            let sleepScore = Self.calculateSleepScore(sleep: sleep, baseline: baseline)
-            let recoveryScore = Self.calculateRecoveryScore(hrv: hrv, rhr: rhr, sleepScore: sleepScore, baseline: baseline)
-            let directive = Self.generateDirective(recoveryScore: recoveryScore, sleepScore: sleepScore)
-            let perf = DailyPerformance(
-                date: date,
-                recoveryScore: recoveryScore,
-                sleepScore: sleepScore,
-                hrv: hrv,
-                rhr: rhr,
-                sleepDuration: sleep?.duration,
-                deepSleep: sleep?.deep,
-                remSleep: sleep?.rem,
-                hrvDelta: hrvDelta,
-                rhrDelta: rhrDelta,
-                sleepDelta: sleepDelta,
-                directive: directive
-            )
-            completion(perf)
+        Task {
+            do {
+                let recoveryResult = try await RecoveryScoreCalculator.shared.calculateRecoveryScore(for: date)
+                let baseline = DynamicBaselineEngine.shared
+                baseline.loadBaselines()
+                
+                let hrvDelta = (recoveryResult.hrvComponent.currentValue != nil && baseline.hrv60 != nil) ? recoveryResult.hrvComponent.currentValue! - baseline.hrv60! : nil
+                let rhrDelta = (recoveryResult.rhrComponent.currentValue != nil && baseline.rhr60 != nil) ? recoveryResult.rhrComponent.currentValue! - baseline.rhr60! : nil
+                
+                let perf = DailyPerformance(
+                    date: date,
+                    recoveryScore: recoveryResult.finalScore,
+                    sleepScore: Int(recoveryResult.sleepComponent.score),
+                    hrv: recoveryResult.hrvComponent.currentValue,
+                    rhr: recoveryResult.rhrComponent.currentValue,
+                    sleepDuration: nil, // Will be available in sleep component details
+                    deepSleep: nil,
+                    remSleep: nil,
+                    hrvDelta: hrvDelta,
+                    rhrDelta: rhrDelta,
+                    sleepDelta: nil,
+                    directive: recoveryResult.directive
+                )
+                completion(perf)
+            } catch {
+                print("⚠️ Could not calculate performance for date \(date): \(error)")
+                completion(nil)
+            }
         }
     }
 }
@@ -181,7 +203,7 @@ struct PerformanceDashboardView: View {
         ScrollView {
             VStack(spacing: 32) {
                 HStack {
-                    Text("Recovery & Sleep")
+                    Text("Performance")
                         .font(.largeTitle.bold())
                     Spacer()
                     Button(action: {
@@ -196,6 +218,7 @@ struct PerformanceDashboardView: View {
                     }
                     .disabled(vm.isLoading)
                 }
+                
                 if vm.isLoading {
                     ProgressView("Loading health data...")
                         .padding()
@@ -215,51 +238,34 @@ struct PerformanceDashboardView: View {
                     }
                     .padding()
                 } else if let today = vm.today {
-                    HStack(spacing: 32) {
-                        CircularScoreGauge(
-                            score: today.recoveryScore,
-                            label: "Recovery",
-                            gradient: Gradient(colors: [.red, .orange, .yellow, .green])
-                        )
-                        CircularScoreGauge(
-                            score: today.sleepScore,
-                            label: "Sleep",
-                            gradient: Gradient(colors: [.blue, .cyan])
-                        )
-                    }
-                    .frame(height: 180)
-                    VStack(spacing: 8) {
-                        HStack(spacing: 24) {
-                            MetricDeltaView(title: "HRV", value: today.hrv, delta: today.hrvDelta, unit: "ms")
-                            MetricDeltaView(title: "RHR", value: today.rhr, delta: today.rhrDelta, unit: "bpm")
+                    VStack(spacing: 24) {
+                        HStack(spacing: 32) {
+                            NavigationLink(destination: RecoveryDetailView()) {
+                                CircularScoreGauge(
+                                    score: today.recoveryScore,
+                                    label: "Recovery",
+                                    gradient: Gradient(colors: [.red, .orange, .yellow, .green])
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            NavigationLink(destination: SleepDetailView()) {
+                                CircularScoreGauge(
+                                    score: today.sleepScore,
+                                    label: "Sleep",
+                                    gradient: Gradient(colors: [.blue, .cyan])
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        HStack(spacing: 24) {
-                            MetricDeltaView(title: "Sleep", value: today.sleepDuration.map { $0/3600 }, delta: today.sleepDelta, unit: "h", format: "%.1f")
-                            let deepRem: Double? = {
-                                if let deep = today.deepSleep, let rem = today.remSleep {
-                                    return (deep + rem) / 3600
-                                } else {
-                                    return nil
-                                }
-                            }()
-                            MetricView(title: "Deep+REM", value: deepRem, unit: "h", format: "%.1f")
+                        .frame(height: 180)
+                        
+                        if !vm.isLoading {
+                            Text("Last updated: \(vm.lastRefreshTime, style: .time)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Daily Directive")
-                            .font(.headline)
-                        Text(today.directive)
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                    }
-                    .padding(.top, 8)
-                }
-                Divider()
-                // Trends and history would go here (omitted for brevity)
-                if !vm.isLoading {
-                    Text("Last updated: \(vm.lastRefreshTime, style: .time)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
             .padding()

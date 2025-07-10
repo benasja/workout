@@ -495,11 +495,11 @@ struct ExerciseDetailView: View {
     
     // Calculate y-axis range with padding
     var yAxisRange: ClosedRange<Double>? {
-        guard let min = chartPoints.map({ $0.value }).min(), let max = chartPoints.map({ $0.value }).max(), min != max else {
+        guard let minValue = chartPoints.map({ $0.value }).min(), let maxValue = chartPoints.map({ $0.value }).max(), minValue != maxValue else {
             return nil
         }
-        let padding = (max - min) * 0.1
-        return (min - padding)...(max + padding)
+        let padding = (maxValue - minValue) * 0.1
+        return (minValue - padding)...(maxValue + padding)
     }
     
     // MARK: - Chart Mark Computed Properties (fixed for ChartContent)

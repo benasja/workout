@@ -62,6 +62,16 @@ struct SettingsView: View {
                 
                 Section("Health Data") {
                     SyncHealthDataButton(isSyncing: .constant(false))
+                    
+                    Button("Reset Health Baselines") {
+                        resetHealthBaselines()
+                    }
+                    .foregroundColor(.orange)
+                    
+                    Button("Re-request HealthKit Permissions") {
+                        forceReauthorization()
+                    }
+                    .foregroundColor(.blue)
                 }
 
                 Section("Data") {
@@ -504,6 +514,43 @@ struct SettingsView: View {
             print("❌ Error deleting all weight entries: \(error)")
         }
         refreshViews()
+    }
+    
+    private func resetHealthBaselines() {
+        print("🔄 Resetting health baselines...")
+        
+        // Reset baselines
+        DynamicBaselineEngine.shared.resetBaselines()
+        
+        // Clear cached data
+        UserDefaults.standard.removeObject(forKey: "DynamicBaselines")
+        
+        // Re-request authorization and rebuild baselines
+        HealthKitManager.shared.requestAuthorization { success in
+            if success {
+                print("✅ Authorization granted, rebuilding baselines with personal data...")
+                DynamicBaselineEngine.shared.updateAndStoreBaselines {
+                    print("✅ Health baselines reset and rebuilt with personal data")
+                }
+            } else {
+                print("❌ Authorization denied - cannot access personal health data")
+            }
+        }
+    }
+    
+    private func forceReauthorization() {
+        print("🔄 Force re-requesting HealthKit authorization...")
+        HealthKitManager.shared.forceReauthorization { success in
+            if success {
+                print("✅ HealthKit re-authorization successful")
+                // Rebuild baselines after successful authorization
+                DynamicBaselineEngine.shared.updateAndStoreBaselines {
+                    print("✅ Baselines rebuilt after re-authorization")
+                }
+            } else {
+                print("❌ HealthKit re-authorization failed")
+            }
+        }
     }
 }
 

@@ -9,85 +9,120 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selection: Int = 0
+    @State private var showingMoreMenu = false
+    @StateObject private var dateModel = PerformanceDateModel()
+    
     var body: some View {
         TabView(selection: $selection) {
-            TodayView(tabSelection: $selection)
-                .tabItem {
-                    Image(systemName: "bolt.fill")
-                    Text("Today")
-                }
-                .tag(0)
-            
-            WorkoutLibraryView()
-                .tabItem {
-                    Image(systemName: "dumbbell.fill")
-                    Text("Train")
-                }
-                .tag(1)
-            
-            PerformanceDashboardView()
+            PerformanceView()
+                .environmentObject(dateModel)
                 .tabItem {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                     Text("Performance")
                 }
-                .tag(2)
+                .tag(0)
             
-            TrendsView()
-                .tabItem {
-                    Image(systemName: "chart.xyaxis.line")
-                    Text("Trends")
-                }
-                .tag(3)
-            SleepAnalysisView()
+            SleepDetailView()
+                .environmentObject(dateModel)
                 .tabItem {
                     Image(systemName: "bed.double.fill")
                     Text("Sleep")
                 }
-                .tag(4)
+                .tag(1)
             
-            JournalView(tabSelection: $selection)
+            RecoveryDetailView()
+                .environmentObject(dateModel)
                 .tabItem {
-                    Image(systemName: "book.closed.fill")
-                    Text("Journal")
+                    Image(systemName: "heart.fill")
+                    Text("Recovery")
                 }
-                .tag(5)
+                .tag(2)
             
-            CorrelationView()
+            MoreView(showingMenu: $showingMoreMenu)
                 .tabItem {
-                    Image(systemName: "function")
-                    Text("Correlations")
+                    Image(systemName: "ellipsis.circle.fill")
+                    Text("More")
                 }
-                .tag(6)
-            
-            WeightTrackerView()
-                .tabItem {
-                    Image(systemName: "scalemass.fill")
-                    Text("Weight")
-                }
-                .tag(7)
-            
-            WorkoutHistoryView()
-                .tabItem {
-                    Image(systemName: "clock.arrow.circlepath")
-                    Text("History")
-                }
-                .tag(8)
-            
-            SettingsView()
-                .tabItem {
-                    Image(systemName: "gear")
-                    Text("Settings")
-                }
-                .tag(9)
-            
-            SupplementsView(tabSelection: $selection)
-                .tabItem {
-                    Image(systemName: "pills.fill")
-                    Text("Supplements")
-                }
-                .tag(10)
+                .tag(3)
         }
         .accentColor(.blue)
+    }
+}
+
+// RecoveryView is now defined in RecoveryView.swift
+
+struct MoreView: View {
+    @Binding var showingMenu: Bool
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Training") {
+                    NavigationLink(destination: WorkoutLibraryView()) {
+                        HStack {
+                            Image(systemName: "dumbbell.fill")
+                                .foregroundColor(.blue)
+                            Text("Train")
+                        }
+                    }
+                    
+                    NavigationLink(destination: WorkoutHistoryView()) {
+                        HStack {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .foregroundColor(.green)
+                            Text("History")
+                        }
+                    }
+                }
+                
+                Section("Health & Wellness") {
+                    NavigationLink(destination: JournalView(tabSelection: .constant(0))) {
+                        HStack {
+                            Image(systemName: "book.closed.fill")
+                                .foregroundColor(.teal)
+                            Text("Journal")
+                        }
+                    }
+                    
+                    NavigationLink(destination: WeightTrackerView()) {
+                        HStack {
+                            Image(systemName: "scalemass.fill")
+                                .foregroundColor(.orange)
+                            Text("Weight")
+                        }
+                    }
+                    
+                    NavigationLink(destination: SupplementsView(tabSelection: .constant(0))) {
+                        HStack {
+                            Image(systemName: "pills.fill")
+                                .foregroundColor(.purple)
+                            Text("Supplements")
+                        }
+                    }
+                }
+                
+                Section("Analytics") {
+                    NavigationLink(destination: CorrelationView()) {
+                        HStack {
+                            Image(systemName: "function")
+                                .foregroundColor(.indigo)
+                            Text("Correlations")
+                        }
+                    }
+                }
+                
+                Section("Settings") {
+                    NavigationLink(destination: SettingsView()) {
+                        HStack {
+                            Image(systemName: "gear")
+                                .foregroundColor(.gray)
+                            Text("Settings")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("More")
+        }
     }
 }
 

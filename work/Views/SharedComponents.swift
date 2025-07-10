@@ -6,6 +6,34 @@
 //
 
 import SwiftUI
+import Charts
+
+extension Color {
+    static let cardBackground = Color(red: 0.2, green: 0.2, blue: 0.2)
+    static let cardSelected = Color(red: 0.3, green: 0.3, blue: 0.3)
+}
+
+// MARK: - Shared Components
+
+struct ScoreBreakdownRow: View {
+    let component: String
+    let score: Double
+    let maxScore: Double
+    
+    var body: some View {
+        HStack {
+            Text(component)
+                .font(.subheadline)
+                .foregroundColor(.white)
+            Spacer()
+            // For recovery scores, clamp to 100 and show as percentage
+            let percentageScore = min(score, 100.0)
+            Text("\(Int(percentageScore)) / 100")
+                .font(.subheadline)
+                .foregroundColor(.gray)
+        }
+    }
+}
 
 // MARK: - Design System
 struct AppColors {
@@ -332,5 +360,252 @@ extension View {
     
     func iconButton(color: Color = AppColors.primary) -> some View {
         self.buttonStyle(IconButtonStyle(color: color))
+    }
+} 
+
+// MARK: - Biomarker Trend Card
+struct BiomarkerTrendCard: View {
+    let title: String
+    let value: Double
+    let unit: String
+    let percentageChange: Double?
+    let trendData: [Double]
+    let color: Color
+    
+    init(
+        title: String,
+        value: Double,
+        unit: String,
+        percentageChange: Double? = nil,
+        trendData: [Double] = [],
+        color: Color = .green
+    ) {
+        self.title = title
+        self.value = value
+        self.unit = unit
+        self.percentageChange = percentageChange
+        self.trendData = trendData
+        self.color = color
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Title
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            HStack {
+                // Main value
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .bottom, spacing: 4) {
+                        if unit == "ms" || unit == "bpm" {
+                            // HRV and RHR should be displayed as integers
+                            Text("\(Int(value))")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                        } else if unit == "%" {
+                            // Percentages should be displayed as integers
+                            Text("\(Int(value))")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                        } else {
+                            // Other values can have decimals
+                            Text("\(String(format: "%.1f", value))")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                        }
+                        
+                        Text(unit)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // Percentage change
+                if let change = percentageChange {
+                    HStack(spacing: 2) {
+                        Image(systemName: change >= 0 ? "arrow.up" : "arrow.down")
+                            .font(.caption)
+                        
+                        Text("\(abs(Int(change)))%")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(change >= 0 ? .green : .red)
+                }
+            }
+            
+            // Mini trend chart
+            if !trendData.isEmpty {
+                if #available(iOS 16.0, *) {
+                    Chart {
+                        ForEach(Array(trendData.enumerated()), id: \.offset) { index, dataPoint in
+                            LineMark(
+                                x: .value("Day", index),
+                                y: .value("Value", dataPoint)
+                            )
+                            .foregroundStyle(color)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                        }
+                    }
+                    .frame(height: 40)
+                    .chartYScale(domain: .automatic(includesZero: false))
+                    .chartXAxis(.hidden)
+                    .chartYAxis(.hidden)
+                } else {
+                    // Fallback for iOS 15 and earlier
+                    SimpleTrendView(data: trendData, color: color)
+                        .frame(height: 40)
+                }
+            } else {
+                // Placeholder when no trend data
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 40)
+                    .overlay(
+                        Text("No trend data")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+        .cornerRadius(12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(unit == "ms" || unit == "bpm" || unit == "%" ? "\(Int(value))" : String(format: "%.1f", value)) \(unit)")
+    }
+}
+
+// MARK: - Score Display Card
+struct ScoreDisplayCard: View {
+    let title: String
+    let score: Int
+    let subtitle: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("\(score)")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(color)
+            
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground))
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+    }
+}
+
+
+
+
+
+
+
+// MARK: - Error View
+struct ErrorView: View {
+    let message: String
+    let retryAction: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundColor(.orange)
+            
+            Text("Error")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Retry") {
+                retryAction()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+}
+
+
+
+// MARK: - Simple Trend View (Fallback for iOS 15 and earlier)
+struct SimpleTrendView: View {
+    let data: [Double]
+    let color: Color
+    
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                guard !data.isEmpty else { return }
+                
+                let width = geometry.size.width
+                let height = geometry.size.height
+                let stepX = width / CGFloat(max(1, data.count - 1))
+                
+                let minValue = data.min() ?? 0
+                let maxValue = data.max() ?? 1
+                let valueRange = maxValue - minValue
+                
+                for (index, value) in data.enumerated() {
+                    let x = CGFloat(index) * stepX
+                    let normalizedValue = valueRange > 0 ? (value - minValue) / valueRange : 0.5
+                    let y = height - (CGFloat(normalizedValue) * height)
+                    
+                    if index == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+            }
+            .stroke(color, lineWidth: 2)
+        }
+    }
+}
+
+// MARK: - Preview
+struct SharedComponents_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(spacing: 20) {
+            BiomarkerTrendCard(
+                title: "Resting HRV",
+                value: 58,
+                unit: "ms",
+                percentageChange: 8,
+                trendData: [45, 52, 48, 55, 58, 62, 58],
+                color: .green
+            )
+            
+            ScoreDisplayCard(
+                title: "Recovery Score",
+                score: 85,
+                subtitle: "Primed for peak performance",
+                color: .green
+            )
+        }
+        .padding()
+        .background(Color(.systemGroupedBackground))
     }
 } 

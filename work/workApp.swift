@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import HealthKit
 
 @main
 struct workApp: App {
@@ -27,6 +28,9 @@ struct workApp: App {
                         seedDataIfNeeded()
                         hasSeededData = true
                     }
+                    
+                    // Force data reset to ensure only personal data is used
+                    forceDataReset()
                 }
                 .preferredColorScheme(
                     AppearanceMode(rawValue: appearanceMode) == .light ? .light :
@@ -57,5 +61,49 @@ struct workApp: App {
         print("Resetting database...")
         // This will be called when the app launches
         // The actual seeding will happen in the views when they access the model context
+    }
+    
+    private func initializeBaselineEngine() {
+        print("Initializing baseline engine...")
+        
+        // Request HealthKit authorization first
+        HealthKitManager.shared.requestAuthorization { success in
+            if success {
+                print("HealthKit authorization granted, updating baselines...")
+                
+                // Reset old baseline data first to ensure clean personal data
+                DynamicBaselineEngine.shared.resetBaselines()
+                
+                // Update with corrected algorithm
+                DynamicBaselineEngine.shared.updateAndStoreBaselines {
+                    print("Baseline engine initialized successfully")
+                }
+            } else {
+                print("HealthKit authorization denied")
+            }
+        }
+    }
+    
+    /// Forces a complete reset of all data to ensure only personal data is used
+    private func forceDataReset() {
+        print("🔄 Force resetting all data to use only personal data...")
+        
+        // Reset baselines
+        DynamicBaselineEngine.shared.resetBaselines()
+        
+        // Clear any cached data
+        UserDefaults.standard.removeObject(forKey: "DynamicBaselines")
+        
+        // Re-request authorization and rebuild baselines
+        HealthKitManager.shared.requestAuthorization { success in
+            if success {
+                print("✅ Authorization granted, rebuilding baselines with personal data...")
+                DynamicBaselineEngine.shared.updateAndStoreBaselines {
+                    print("✅ Baseline engine rebuilt with personal data")
+                }
+            } else {
+                print("❌ Authorization denied - cannot access personal health data")
+            }
+        }
     }
 }

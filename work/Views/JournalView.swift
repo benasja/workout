@@ -24,9 +24,9 @@ struct JournalView: View {
                     // Clear Demo Data Button (if there's data)
                     if journals.contains(where: { $0.notes?.contains("demo") == true }) ||
                         (try? modelContext.fetch(FetchDescriptor<Program>())).map { $0.contains(where: { ["Push Day", "Pull Day", "Legs Day"].contains($0.name) }) } == true {
-                        ClearDemoDataButton {
+                        ClearDemoDataButton(action: {
                             clearAllDemoData()
-                        }
+                        })
                     }
                     
                     // Sync Health Data Button
@@ -538,7 +538,7 @@ struct AddJournalView: View {
                         DatePicker("", selection: $entryDate, displayedComponents: .date)
                             .datePickerStyle(.compact)
                             .labelsHidden()
-                            .onChange(of: entryDate) { newDate in
+                            .onChange(of: entryDate) { _, newDate in
                                 if let match = allJournals.first(where: { Calendar.current.isDate($0.date, inSameDayAs: newDate) }) {
                                     loadJournal(match)
                                     editingJournal = match
@@ -713,7 +713,7 @@ struct DemoDataButton: View {
 }
 
 struct ClearDemoDataButton: View {
-    let onClear: () -> Void
+    let action: () -> Void
     
     var body: some View {
         ModernCard {
@@ -732,7 +732,7 @@ struct ClearDemoDataButton: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.leading)
                 
-                Button(action: onClear) {
+                Button(action: action) {
                     HStack {
                         Image(systemName: "trash.circle.fill")
                         Text("Clear All Demo Data")
