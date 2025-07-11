@@ -389,7 +389,7 @@ final class HealthKitManager {
     func fetchEnhancedHRV(for date: Date, completion: @escaping (EnhancedHRVData?) -> Void) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        _ = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
         
         let group = DispatchGroup()
         var sdnn: Double?; var heartRateSamples: [HKQuantitySample] = []

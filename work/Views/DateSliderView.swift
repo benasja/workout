@@ -5,7 +5,7 @@ struct DateSliderView: View {
     private let dates: [Date] = {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        return (0..<30).map { calendar.date(byAdding: .day, value: -$0, to: today)! }.reversed()
+        return (0..<30).map { calendar.date(byAdding: .day, value: -$0, to: today)! }
     }()
     
     var body: some View {
@@ -17,14 +17,14 @@ struct DateSliderView: View {
                         VStack(spacing: 2) {
                             Text(dayOfWeek(for: date))
                                 .font(.caption2)
-                                .foregroundColor(isSelected ? .white : .gray)
+                                .foregroundColor(isSelected ? .primary : .secondary)
                             Text(shortDateString(for: date))
                                 .font(.subheadline)
                                 .fontWeight(isSelected ? .bold : .regular)
-                                .foregroundColor(isSelected ? .white : .gray)
+                                .foregroundColor(isSelected ? .primary : .secondary)
                         }
                         .padding(8)
-                        .background(isSelected ? Color(red: 0.3, green: 0.3, blue: 0.3) : Color(red: 0.2, green: 0.2, blue: 0.2))
+                        .background(isSelected ? AppColors.primary.opacity(0.15) : AppColors.secondaryBackground)
                         .cornerRadius(8)
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("\(dayOfWeek(for: date)), \(shortDateString(for: date))")

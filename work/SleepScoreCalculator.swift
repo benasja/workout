@@ -66,37 +66,43 @@ struct SleepScoreDetails {
 }
 
 // MARK: - Sleep Score Calculator
-@MainActor
 final class SleepScoreCalculator {
     static let shared = SleepScoreCalculator()
     private let healthStore = HealthKitManager.shared.healthStore
     private let baselineEngine = DynamicBaselineEngine.shared
+    private var sleepScoreCache: [String: SleepScoreResult] = [:]
     
     private init() {}
     
+    // MARK: - Cache Management
+    func clearCache() {
+        sleepScoreCache.removeAll()
+        print("🗑️ Sleep score cache cleared")
+    }
+    
     // MARK: - Main Sleep Score Calculation
     func calculateSleepScore(for date: Date) async throws -> SleepScoreResult {
+        // Check cache first
+        let calendar = Calendar.current
+        let cacheKey = "\(calendar.component(.year, from: date))-\(calendar.component(.month, from: date))-\(calendar.component(.day, from: date))"
+        
+        if let cachedResult = sleepScoreCache[cacheKey] {
+            print("📋 Using cached sleep score for \(cacheKey)")
+            return cachedResult
+        }
+        
         // Check HealthKit authorization first
         guard HealthKitManager.shared.checkAuthorizationStatus() else {
             print("❌ HealthKit authorization not granted for sleep score calculation")
             throw SleepScoreError.healthKitNotAvailable
         }
         
-        // For sleep analysis, we need to look at the previous night's sleep
-        // If the date is today, we want last night's sleep data
-        let sleepDate: Date
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            // If it's today, get yesterday's sleep data
-            sleepDate = calendar.date(byAdding: .day, value: -1, to: date) ?? date
-        } else {
-            // If it's a past date, use that date directly
-            sleepDate = date
-        }
-        
+        // Always use the date as the 'wake date' for sleep
+        let sleepDate = date
+        let cal = Calendar.current
         print("🔍 Attempting to calculate sleep score for recovery...")
-        print("   Sleep Date: \(sleepDate)")
-        print("   Sleep Date components: year: \(calendar.component(.year, from: sleepDate)) month: \(calendar.component(.month, from: sleepDate)) day: \(calendar.component(.day, from: sleepDate))")
+        print("   Sleep Date (wake date): \(sleepDate)")
+        print("   Sleep Date components: year: \(cal.component(.year, from: sleepDate)) month: \(cal.component(.month, from: sleepDate)) day: \(cal.component(.day, from: sleepDate))")
         
         // Fetch all required data - use try-catch for individual components
         let sleepData: (timeInBed: TimeInterval, timeAsleep: TimeInterval, deepSleepDuration: TimeInterval, remSleepDuration: TimeInterval, bedtime: Date?, wakeTime: Date?)
@@ -161,7 +167,7 @@ final class SleepScoreCalculator {
         print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
         print("   Sleep Efficiency: \((sleepData.timeAsleep / sleepData.timeInBed) * 100)%")
         
-        // Calculate components using the new algorithm
+        // Calculate components using the FINAL CALIBRATED algorithm
         let restorationComponent = calculateRestorationComponent(
             timeAsleep: sleepData.timeAsleep,
             deepSleepDuration: sleepData.deepSleepDuration,
@@ -183,20 +189,28 @@ final class SleepScoreCalculator {
             baselineWakeTime: baselineData.wakeTime
         )
         
-        // Calculate final score using the new formula
-        let totalSleepScore = 
-            (restorationComponent * 0.50) +
+        // Calculate final score using the FINAL CALIBRATED formula
+        let componentScore = 
+            (restorationComponent * 0.45) +
             (efficiencyComponent * 0.30) +
-            (consistencyComponent * 0.20)
+            (consistencyComponent * 0.25)
+        
+        // Apply the Duration Multiplier (The Gatekeeper)
+        let hoursAsleep = sleepData.timeAsleep / 3600
+        let durationMultiplier = calculateDurationMultiplier(hoursAsleep: hoursAsleep)
+        let totalSleepScore = componentScore * durationMultiplier
         
         // Apply final clamping to ensure score is between 0 and 100
         let finalScore = Int(round(clamp(totalSleepScore, min: 0, max: 100)))
         
         // Debug: Print component values
-        print("🔍 Recalibrated Sleep Score Debug:")
+        print("🔍 FINAL CALIBRATED Sleep Score Debug:")
         print("   Restoration Component: \(restorationComponent)")
         print("   Efficiency Component: \(efficiencyComponent)")
         print("   Consistency Component: \(consistencyComponent)")
+        print("   Component Score: \(componentScore)")
+        print("   Hours Asleep: \(hoursAsleep)")
+        print("   Duration Multiplier: \(durationMultiplier)")
         print("   Total Score: \(totalSleepScore)")
         print("   Final Score: \(finalScore)")
         print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
@@ -229,7 +243,7 @@ final class SleepScoreCalculator {
             )
         )
         
-        return SleepScoreResult(
+        let result = SleepScoreResult(
             finalScore: finalScore,
             keyFindings: keyFindings,
             efficiencyComponent: efficiencyComponent,
@@ -250,17 +264,24 @@ final class SleepScoreCalculator {
                 heartRateDipPercentage: effectiveRHR > 0 ? (1 - (adjustedHeartRate / effectiveRHR)) : nil
             )
         )
+        
+        // Cache the result
+        sleepScoreCache[cacheKey] = result
+        print("📋 Cached sleep score for \(cacheKey)")
+        
+        return result
     }
     
     // MARK: - Data Fetching
     private func fetchDetailedSleepData(for date: Date) async throws -> (timeInBed: TimeInterval, timeAsleep: TimeInterval, deepSleepDuration: TimeInterval, remSleepDuration: TimeInterval, bedtime: Date?, wakeTime: Date?) {
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        // Fetch sleep samples that end between previous day noon and this day noon
+        let startOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: calendar.date(byAdding: .day, value: -1, to: date)!))!
+        let endOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: date))!
         
-        print("🌙 Fetching sleep data for date: \(date)")
-        print("   Start of day: \(startOfDay)")
-        print("   End of day: \(endOfDay)")
+        print("🌙 Fetching sleep data for wake date: \(date)")
+        print("   Start of window: \(startOfWindow)")
+        print("   End of window: \(endOfWindow)")
         
         // Check authorization status for sleep data specifically
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
@@ -276,7 +297,7 @@ final class SleepScoreCalculator {
         }
         
         return try await withCheckedThrowingContinuation { continuation in
-            let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+            let predicate = HKQuery.predicateForSamples(withStart: startOfWindow, end: endOfWindow, options: .strictStartDate)
             let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
                 if let error = error {
                     continuation.resume(throwing: error)
@@ -287,7 +308,7 @@ final class SleepScoreCalculator {
                 print("🌙 Sleep samples found: \(sleepSamples.count)")
                 
                 guard !sleepSamples.isEmpty else {
-                    print("❌ No sleep samples found for date: \(date)")
+                    print("❌ No sleep samples found for wake date: \(date)")
                     continuation.resume(throwing: SleepScoreError.noSleepData)
                     return
                 }
@@ -530,7 +551,26 @@ final class SleepScoreCalculator {
     
     // MARK: - Recalibrated Component Calculations
     
-    /// Restoration Component (50% Weight) - The Core of Sleep Quality
+    /// Duration Multiplier (The Gatekeeper)
+    /// Problem: A 6h 53m sleep should never result in a 90+ score.
+    /// Solution: This new multiplier acts as a hard cap on your potential score based purely on sleep duration.
+    private func calculateDurationMultiplier(hoursAsleep: Double) -> Double {
+        if hoursAsleep < 6.0 {
+            // Harsh penalty for very short sleep
+            return 0.65
+        } else if hoursAsleep < 7.0 {
+            // Maps the range [6.0, 7.0) to a multiplier of [0.65, 0.90)
+            return 0.65 + (hoursAsleep - 6.0) * 0.25
+        } else if hoursAsleep <= 9.0 {
+            // Optimal duration range
+            return 1.0
+        } else { // hoursAsleep > 9.0
+            // Gradual penalty for potential oversleeping/sickness
+            return max(0.8, 1.0 - (hoursAsleep - 9.0) * 0.1)
+        }
+    }
+    
+    /// Restoration Component (45% Weight) - The Core of Sleep Quality
     /// Combines Deep Sleep Score, REM Sleep Score, and Sleeping HR Dip Score
     private func calculateRestorationComponent(
         timeAsleep: TimeInterval,
@@ -544,25 +584,23 @@ final class SleepScoreCalculator {
         
         // Deep Sleep Score (40% of restoration component)
         let deepSleepPercentage = deepSleepDuration / timeAsleep
-        let deepSleepScore = normalizeDeepSleepPercentage(deepSleepPercentage)
+        let deepScore = normalizeScore(deepSleepPercentage, min: 13, max: 23)
         
-        // REM Sleep Score (30% of restoration component)
+        // REM Sleep Score (40% of restoration component)
         let remSleepPercentage = remSleepDuration / timeAsleep
-        let remSleepScore = normalizeREMSleepPercentage(remSleepPercentage)
+        let remScore = normalizeScore(remSleepPercentage, min: 20, max: 35)
         
-        // Sleeping HR Dip Score (30% of restoration component)
-        let hrDipScore = calculateHeartRateDipScore(
-            averageHeartRate: averageHeartRate,
-            dailyRestingHeartRate: dailyRestingHeartRate
-        )
+        // HR Dip score (20% of restoration component)
+        let hrDipPercentage = dailyRestingHeartRate > 0 ? (1 - (averageHeartRate / dailyRestingHeartRate)) : 0.1
+        let hrDipScore = clamp(hrDipPercentage * 5.0, min: 0, max: 100)
         
         // Calculate weighted average
-        let restorationScore = (deepSleepScore * 0.4) + (remSleepScore * 0.3) + (hrDipScore * 0.3)
+        let restorationScore = (deepScore * 0.40) + (remScore * 0.40) + (hrDipScore * 0.20)
         
-        print("🔍 Restoration Component Debug:")
-        print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepSleepScore)")
-        print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remSleepScore)")
-        print("   HR Dip: \(averageHeartRate)/\(dailyRestingHeartRate) -> \(hrDipScore)")
+        print("🔍 FINAL CALIBRATED Restoration Component Debug:")
+        print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepScore)")
+        print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remScore)")
+        print("   HR Dip: \(hrDipPercentage * 100)% -> \(hrDipScore)")
         print("   Final Restoration Score: \(restorationScore)")
         
         return restorationScore
@@ -640,7 +678,7 @@ final class SleepScoreCalculator {
         let sleepEfficiency = timeAsleep / timeInBed
         let efficiencyScore = sleepEfficiency * 100
         
-        print("🔍 Efficiency Component Debug:")
+        print("🔍 FINAL CALIBRATED Efficiency Component Debug:")
         print("   Time in Bed: \(timeInBed / 3600) hours")
         print("   Time Asleep: \(timeAsleep / 3600) hours")
         print("   Sleep Efficiency: \(sleepEfficiency * 100)%")
@@ -649,9 +687,9 @@ final class SleepScoreCalculator {
         return efficiencyScore
     }
     
-    /// Consistency Component (20% Weight)
+    /// Consistency Component (25% Weight)
     /// Metric: Compare last night's bedtime to the 14-day average bedtime
-    /// Scoring: Consistency_Score = max(0, 100 - (Total_Deviation_in_Minutes / 1.8))
+    /// Scoring: Consistency_Score = 100 * exp(-0.005 * totalDeviationInMinutes)
     private func calculateConsistencyComponent(
         bedtime: Date?,
         wakeTime: Date?,
@@ -663,21 +701,41 @@ final class SleepScoreCalculator {
         }
         
         // Calculate deviation in minutes
-        let deviation = abs(bedtime.timeIntervalSince(baselineBedtime)) / 60.0
+        let totalDeviationInMinutes = abs(bedtime.timeIntervalSince(baselineBedtime)) / 60.0
         
-        // Apply the scoring formula from the master prompt
-        let consistencyScore = max(0, 100 - (deviation / 1.8))
+        // Apply the FINAL CALIBRATED scoring formula
+        let consistencyScore = 100 * Foundation.exp(-0.005 * totalDeviationInMinutes)
         
-        print("🔍 Consistency Component Debug:")
+        print("🔍 FINAL CALIBRATED Consistency Component Debug:")
         print("   Bedtime: \(bedtime)")
         print("   Baseline Bedtime: \(baselineBedtime)")
-        print("   Deviation: \(deviation) minutes")
+        print("   Total Deviation: \(totalDeviationInMinutes) minutes")
         print("   Consistency Score: \(consistencyScore)")
         
         return consistencyScore
     }
     
     // MARK: - Helper Functions
+    
+    /// Normalizes a percentage value against optimal ranges
+    /// Returns a score between 0-100 based on how well the value fits the optimal range
+    private func normalizeScore(_ percentage: Double, min: Double, max: Double) -> Double {
+        let percentageValue = percentage * 100 // Convert to percentage
+        
+        if percentageValue >= min && percentageValue <= max {
+            return 100.0 // Perfect score for ideal range
+        } else if percentageValue < min {
+            // Below ideal: linear decrease from 100 to 0
+            let ratio = percentageValue / min
+            return clamp(ratio * 100, min: 0, max: 100)
+        } else {
+            // Above ideal: linear decrease from 100 to 0
+            let excess = percentageValue - max
+            let maxExcess = (max + 10) - max // Allow up to 10% above max before zero score
+            let ratio = 1.0 - (excess / maxExcess)
+            return clamp(ratio * 100, min: 0, max: 100)
+        }
+    }
     
     private func clamp(_ value: Double, min: Double, max: Double) -> Double {
         return Swift.max(min, Swift.min(value, max))
@@ -820,7 +878,7 @@ final class SleepScoreCalculator {
         let timeAsleep: TimeInterval
     }
     
-    private func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
+    private nonisolated func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
         guard !samples.isEmpty else { return [] }
         
         // Filter out "In Bed" samples that span too long (more than 12 hours)
@@ -876,12 +934,12 @@ final class SleepScoreCalculator {
         return sessions
     }
     
-    private func isSleepStage(_ sample: HKCategorySample) -> Bool {
+    private nonisolated func isSleepStage(_ sample: HKCategorySample) -> Bool {
         let value = HKCategoryValueSleepAnalysis(rawValue: sample.value)
         return value == .asleepUnspecified || value == .asleepDeep || value == .asleepREM || value == .asleepCore || value == .inBed
     }
     
-    private func createSleepSession(from samples: [HKCategorySample], startTime: Date) -> SleepSession {
+    private nonisolated func createSleepSession(from samples: [HKCategorySample], startTime: Date) -> SleepSession {
         let endTime = samples.max(by: { $0.endDate < $1.endDate })?.endDate ?? startTime
         let totalDuration = endTime.timeIntervalSince(startTime)
         

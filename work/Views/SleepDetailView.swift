@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct SleepScoreBreakdown {
     static let durationMax: Double = 25
@@ -29,6 +30,7 @@ struct SleepDetailView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var biomarkerData: [String: (value: Double, change: Double?, trend: [Double])] = [:]
+    @State private var loadingWorkItem: DispatchWorkItem? = nil
     
     var selectedDate: Date { dateModel.selectedDate }
     
@@ -52,7 +54,7 @@ struct SleepDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(16)
-                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+                    .background(AppColors.secondaryBackground)
                     .cornerRadius(16)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Sleep Score: \(result.finalScore)")
@@ -62,7 +64,7 @@ struct SleepDetailView: View {
                         Text("How It Was Calculated")
                             .font(.headline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                         VStack(spacing: 8) {
                             ScoreBreakdownRow(
                                 component: "Sleep Duration",
@@ -71,7 +73,7 @@ struct SleepDetailView: View {
                             )
                             ScoreBreakdownRow(
                                 component: "Sleep Efficiency",
-                                score: result.efficiencyComponent * 100,
+                                score: result.efficiencyComponent,
                                 maxScore: SleepScoreBreakdown.efficiencyMax
                             )
                             ScoreBreakdownRow(
@@ -92,7 +94,7 @@ struct SleepDetailView: View {
                         }
                     }
                     .padding(16)
-                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+                    .background(AppColors.secondaryBackground)
                     .cornerRadius(16)
                     
                     // Sleep Insights Card
@@ -100,7 +102,7 @@ struct SleepDetailView: View {
                         Text("Sleep Insights")
                             .font(.headline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(generateInsightsList(from: result), id: \.self) { insight in
                                 HStack(alignment: .top, spacing: 8) {
@@ -115,7 +117,7 @@ struct SleepDetailView: View {
                         }
                     }
                     .padding(16)
-                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+                    .background(AppColors.secondaryBackground)
                     .cornerRadius(16)
                     
                     // Sleep Metrics Grid
@@ -172,7 +174,7 @@ struct SleepDetailView: View {
             }
             .padding()
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(AppColors.background)
         .navigationTitle("Sleep")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
@@ -190,9 +192,9 @@ struct SleepDetailView: View {
             Color.black.opacity(0.5).ignoresSafeArea()
             ProgressView("Loading...")
                 .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .padding()
-                .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+                .background(AppColors.secondaryBackground)
                 .cornerRadius(12)
         }
     }
@@ -213,18 +215,26 @@ struct SleepDetailView: View {
     }
     
     private func loadSleepData() {
-        isLoading = true
+        isLoading = false
         errorMessage = nil
+        loadingWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            self.isLoading = true
+        }
+        loadingWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
         Task {
             do {
                 let result = try await SleepScoreCalculator.shared.calculateSleepScore(for: selectedDate)
                 await loadBiomarkerData(for: selectedDate)
                 await MainActor.run {
+                    self.loadingWorkItem?.cancel()
                     self.sleepResult = result
                     self.isLoading = false
                 }
             } catch {
                 await MainActor.run {
+                    self.loadingWorkItem?.cancel()
                     self.errorMessage = error.localizedDescription
                     self.isLoading = false
                 }
@@ -313,40 +323,50 @@ struct SleepDetailView: View {
         let hoursAsleep = result.timeAsleep / 3600
         let optimal = 8.0
         let deviation = abs(hoursAsleep - optimal)
-        return 100 * exp(-0.5 * pow(deviation / 1.5, 2))
+        return 100 * Foundation.exp(-0.5 * Foundation.pow(deviation / 1.5, 2))
     }
     
     private func calculateDeepSleepScore(from result: SleepScoreResult) -> Double {
         let deepPercentage = result.deepSleepPercentage * 100
-        return normalizeScore(deepPercentage, min: 13, max: 23)
+        return normalizeScore(deepPercentage, min: 13, maxValue: 23)
     }
     
     private func calculateREMSleepScore(from result: SleepScoreResult) -> Double {
         let remPercentage = result.remSleepPercentage * 100
-        return normalizeScore(remPercentage, min: 20, max: 25)
+        return normalizeScore(remPercentage, min: 20, maxValue: 25)
     }
     
     private func calculateOnsetScore(from result: SleepScoreResult) -> Double {
         let fallAsleepTime = result.timeToFallAsleep
-        if fallAsleepTime <= 15 {
+        // Use a smooth exponential decay curve instead of discrete steps
+        if fallAsleepTime <= 10 {
             return 100
-        } else if fallAsleepTime <= 30 {
-            return 80
-        } else if fallAsleepTime <= 45 {
-            return 60
+        } else if fallAsleepTime <= 60 {
+            // Smooth curve from 100 to 0 over 50 minutes
+            let normalizedTime = (fallAsleepTime - 10) / 50.0
+            return 100 * Foundation.exp(-2.0 * normalizedTime)
         } else {
-            return max(0, 100 - (fallAsleepTime - 45) * 2)
+            return max(0, 100 * Foundation.exp(-2.0 * (60 - 10) / 50.0) - (fallAsleepTime - 60) * 0.5)
         }
     }
     
-    private func normalizeScore(_ value: Double, min: Double, max: Double) -> Double {
+    private func normalizeScore(_ value: Double, min: Double, maxValue: Double) -> Double {
         if value < min {
-            return (value / min) * 60
+            // Smooth curve for values below minimum
+            return 60 * (value / min) * (value / min)
         }
-        if value > max {
-            return (max / value) * 60
+        if value > maxValue {
+            // Smooth curve for values above maximum
+            let excess = value - maxValue
+            let penalty = excess * 3.0
+            return max(60, 100 - penalty)
         }
-        return 100 - (abs(((min + max) / 2) - value) * 5)
+        // Smooth curve within optimal range
+        let optimal = (min + maxValue) / 2
+        let deviation = abs(value - optimal)
+        let maxDeviation = (maxValue - min) / 2
+        let normalizedDeviation = deviation / maxDeviation
+        return 100 - (normalizedDeviation * normalizedDeviation * 40)
     }
 }
 
@@ -367,12 +387,12 @@ struct SleepMetricCard: View {
                     Text(formatTimeInHoursAndMinutes(value))
                         .font(.title2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                 } else if unit == "%" {
                     Text("\(Int(value))")
                         .font(.title2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                     Text(unit)
                         .font(.subheadline)
                         .foregroundColor(.gray)
@@ -380,7 +400,7 @@ struct SleepMetricCard: View {
                     Text("\(Int(value))")
                         .font(.title2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                     Text(unit)
                         .font(.subheadline)
                         .foregroundColor(.gray)
@@ -389,7 +409,7 @@ struct SleepMetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+        .background(AppColors.secondaryBackground)
         .cornerRadius(12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(unit == "h" ? formatTimeInHoursAndMinutes(value) : "\(Int(value)) \(unit)")")

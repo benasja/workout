@@ -5,11 +5,13 @@ class PerformanceDateModel: ObservableObject {
 }
 
 struct PerformanceView: View {
-    @StateObject private var dateModel = PerformanceDateModel()
+    @EnvironmentObject var dateModel: PerformanceDateModel
+    @EnvironmentObject var tabSelectionModel: TabSelectionModel
     @State private var recoveryScore: Int? = nil
     @State private var sleepScore: Int? = nil
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
+    @State private var loadingWorkItem: DispatchWorkItem? = nil
     
     var body: some View {
         NavigationView {
@@ -17,7 +19,10 @@ struct PerformanceView: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         HStack(spacing: 20) {
-                            NavigationLink(destination: RecoveryDetailView().environmentObject(dateModel)) {
+                            Button(action: {
+                                tabSelectionModel.selection = 1
+                                tabSelectionModel.moreTabDetail = .recovery
+                            }) {
                                 ScoreGaugeView(
                                     title: "Recovery",
                                     score: recoveryScore,
@@ -25,7 +30,10 @@ struct PerformanceView: View {
                                 )
                                 .accessibilityLabel("Recovery Score: \(recoveryScore ?? 0)")
                             }
-                            NavigationLink(destination: SleepDetailView().environmentObject(dateModel)) {
+                            Button(action: {
+                                tabSelectionModel.selection = 1
+                                tabSelectionModel.moreTabDetail = .sleep
+                            }) {
                                 ScoreGaugeView(
                                     title: "Sleep",
                                     score: sleepScore,
@@ -39,7 +47,7 @@ struct PerformanceView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .background(Color.black.ignoresSafeArea())
+                .background(AppColors.background)
                 .navigationTitle("Performance")
                 .onAppear(perform: fetchScores)
                 .refreshable { fetchScores() }
@@ -73,10 +81,17 @@ struct PerformanceView: View {
     }
     
     private func fetchScores() {
-        isLoading = true
+        isLoading = false
         errorMessage = nil
+        loadingWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            self.isLoading = true
+        }
+        loadingWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
         HealthKitManager.shared.fetchScores(for: dateModel.selectedDate) { recovery, sleep, error in
             DispatchQueue.main.async {
+                self.loadingWorkItem?.cancel()
                 self.recoveryScore = recovery
                 self.sleepScore = sleep
                 self.isLoading = false
@@ -95,7 +110,7 @@ struct ScoreGaugeView: View {
         VStack(spacing: 8) {
             Text(title)
                 .font(.headline)
-                .foregroundColor(.gray)
+                .foregroundColor(.primary)
             ZStack {
                 Circle()
                     .stroke(Color.gray.opacity(0.3), lineWidth: 16)
@@ -112,7 +127,7 @@ struct ScoreGaugeView: View {
             }
         }
         .padding()
-        .background(Color(red: 0.2, green: 0.2, blue: 0.2).opacity(0.9))
+        .background(AppColors.secondaryBackground)
         .cornerRadius(20)
     }
 } 

@@ -9,8 +9,8 @@ import SwiftUI
 import Charts
 
 extension Color {
-    static let cardBackground = Color(red: 0.2, green: 0.2, blue: 0.2)
-    static let cardSelected = Color(red: 0.3, green: 0.3, blue: 0.3)
+    static let cardBackground = AppColors.secondaryBackground
+    static let cardSelected = AppColors.tertiaryBackground
 }
 
 // MARK: - Shared Components
@@ -24,13 +24,13 @@ struct ScoreBreakdownRow: View {
         HStack {
             Text(component)
                 .font(.subheadline)
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
             Spacer()
             // For recovery scores, clamp to 100 and show as percentage
             let percentageScore = min(score, 100.0)
             Text("\(Int(percentageScore)) / 100")
                 .font(.subheadline)
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
         }
     }
 }
@@ -474,7 +474,7 @@ struct BiomarkerTrendCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+        .background(AppColors.secondaryBackground)
         .cornerRadius(12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(unit == "ms" || unit == "bpm" || unit == "%" ? "\(Int(value))" : String(format: "%.1f", value)) \(unit)")
@@ -505,7 +505,7 @@ struct ScoreDisplayCard: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
+        .background(AppColors.background)
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
     }
@@ -544,7 +544,7 @@ struct ErrorView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+        .background(AppColors.background)
     }
 }
 
@@ -606,6 +606,6 @@ struct SharedComponents_Previews: PreviewProvider {
             )
         }
         .padding()
-        .background(Color(.systemGroupedBackground))
+        .background(AppColors.background)
     }
 } 

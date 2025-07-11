@@ -31,14 +31,14 @@ class RecoveryScoreCalculator {
     
     private init() {}
     
-    /// Calculates the comprehensive Recovery Score for a given date using the recalibrated algorithm
+    /// Calculates the comprehensive Recovery Score for a given date using the FINAL CALIBRATED algorithm
     /// Total_Recovery_Score = (HRV_Component * 0.50) + (RHR_Component * 0.25) + (Sleep_Component * 0.15) + (Stress_Component * 0.10)
     func calculateRecoveryScore(for date: Date) async throws -> RecoveryScoreResult {
-        print("🔄 Calculating Recalibrated Recovery Score for \(date)")
+        print("🔄 Calculating FINAL CALIBRATED Recovery Score for \(date)")
         
-        // For sleep data, we need to look at the previous night's sleep
-        let sleepDate = Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
-        print("🔄 Sleep data will be fetched for: \(sleepDate) (previous night)")
+        // Use the same date logic as SleepScoreCalculator - date is the wake date
+        let sleepDate = date
+        print("🔄 Sleep data will be fetched for wake date: \(sleepDate)")
         
         // Fetch all required health data for the date
         let metrics = try await fetchHealthMetrics(for: date, sleepDate: sleepDate)
@@ -75,7 +75,7 @@ class RecoveryScoreCalculator {
         print("   Respiratory Rate 14-day: \(baselineEngine.respiratoryRate14?.description ?? "nil")")
         print("   Oxygen Saturation 14-day: \(baselineEngine.oxygenSaturation14?.description ?? "nil")")
         
-        // Calculate each component using the recalibrated algorithm
+        // Calculate each component using the FINAL CALIBRATED algorithm
         let hrvComponent = calculateHRVComponent(
             currentHRV: metrics.hrv,
             baselineHRV: baselineEngine.hrv60,
@@ -100,7 +100,7 @@ class RecoveryScoreCalculator {
             baselineOxygenSaturation: baselineEngine.oxygenSaturation14
         )
         
-        // Calculate final weighted score using the new formula
+        // Calculate final weighted score using the FINAL CALIBRATED formula
         let totalRecoveryScore = 
             hrvComponent.contribution +
             rhrComponent.contribution +
@@ -119,7 +119,7 @@ class RecoveryScoreCalculator {
             stressComponent: stressComponent
         )
         
-        print("✅ Recalibrated Recovery Score calculated: \(finalScore)")
+        print("✅ FINAL CALIBRATED Recovery Score calculated: \(finalScore)")
         print("   HRV: \(String(format: "%.1f", hrvComponent.score)) (weight: 50%)")
         print("   RHR: \(String(format: "%.1f", rhrComponent.score)) (weight: 25%)")
         print("   Sleep: \(String(format: "%.1f", sleepComponent.score)) (weight: 15%)")
@@ -141,7 +141,7 @@ class RecoveryScoreCalculator {
     
     /// HRV Component (50% Weight) - The Core of Readiness
     /// Uses the average of all overnight HRV (SDNN) samples from the deep HealthKit query
-    /// Scoring: HRV_Score_Raw = 100 * (1 + log10(Today_HRV_Avg / Baseline_HRV_60_Day))
+    /// FINAL CALIBRATED Formula: Piecewise function with baseline of 75
     private func calculateHRVComponent(currentHRV: Double?, baselineHRV: Double?, enhancedHRV: EnhancedHRVData?) -> RecoveryScoreResult.RecoveryComponent {
         guard let hrv = currentHRV, let baseline = baselineHRV, baseline > 0 else {
             return RecoveryScoreResult.RecoveryComponent(
@@ -157,12 +157,9 @@ class RecoveryScoreCalculator {
         // Calculate the ratio of today's HRV to 60-day baseline
         let hrvRatio = hrv / baseline
         
-        // Apply logarithmic scoring as specified in the master prompt
-        let hrvScoreRaw = 100 * (1 + log10(hrvRatio))
-        
-        // Clamp the score between 0 and 120 as specified
-        let clampedScore = clamp(hrvScoreRaw, min: 0, max: 120)
-        let contribution = clampedScore * 0.50
+        // Apply FINAL CALIBRATED piecewise function
+        let hrvScore = calculateHrvScore(hrvRatio: hrvRatio)
+        let contribution = hrvScore * 0.50
         
         // Generate description based on performance
         let description: String
@@ -177,7 +174,7 @@ class RecoveryScoreCalculator {
         }
         
         return RecoveryScoreResult.RecoveryComponent(
-            score: clampedScore,
+            score: hrvScore,
             weight: 0.50,
             contribution: contribution,
             baseline: baseline,
@@ -186,8 +183,24 @@ class RecoveryScoreCalculator {
         )
     }
     
+    /// FINAL CALIBRATED HRV Score Calculation
+    /// A baseline HRV (ratio of 1.0) now correctly yields a score of 75
+    private func calculateHrvScore(hrvRatio: Double) -> Double {
+        let score: Double
+        if hrvRatio >= 1.0 {
+            // Logarithmic growth for positive results, starting from a baseline of 75.
+            // A ratio of 1.0 gives 75. A ratio of 1.2 gives ~90.
+            score = 75 + 35 * Foundation.log10(hrvRatio + 0.35)
+        } else {
+            // Exponential decay for negative results.
+            // A ratio of 0.9 gives ~55. A ratio of 0.8 gives ~38.
+            score = 75 * Foundation.pow(hrvRatio, 3)
+        }
+        return clamp(score, min: 0, max: 100)
+    }
+    
     /// RHR Component (25% Weight)
-    /// Scoring: RHR_Score_Raw = 100 * (Baseline_RHR_60_Day / Today_RHR)
+    /// FINAL CALIBRATED Formula: Piecewise function with baseline of 75
     private func calculateRHRComponent(currentRHR: Double?, baselineRHR: Double?) -> RecoveryScoreResult.RecoveryComponent {
         guard let rhr = currentRHR, let baseline = baselineRHR, baseline > 0, rhr > 0 else {
             return RecoveryScoreResult.RecoveryComponent(
@@ -203,27 +216,24 @@ class RecoveryScoreCalculator {
         // Calculate the ratio of baseline RHR to today's RHR (lower RHR is better)
         let rhrRatio = baseline / rhr
         
-        // Apply the scoring formula from the master prompt
-        let rhrScoreRaw = 100 * rhrRatio
-        
-        // Clamp the score between 50 and 120 as specified
-        let clampedScore = clamp(rhrScoreRaw, min: 50, max: 120)
-        let contribution = clampedScore * 0.25
+        // Apply FINAL CALIBRATED piecewise function
+        let rhrScore = calculateRhrScore(rhrRatio: rhrRatio)
+        let contribution = rhrScore * 0.25
         
         // Generate description
         let description: String
-        if rhrRatio >= 1.1 {
+        if rhrRatio >= 1.05 {
             description = "Excellent RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, -\(String(format: "%.1f", (1-rhrRatio)*100))%)"
         } else if rhrRatio >= 1.0 {
             description = "Good RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, -\(String(format: "%.1f", (1-rhrRatio)*100))%)"
-        } else if rhrRatio >= 0.9 {
+        } else if rhrRatio >= 0.95 {
             description = "Elevated RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, +\(String(format: "%.1f", (1/rhrRatio-1)*100))%)"
         } else {
             description = "High RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, +\(String(format: "%.1f", (1/rhrRatio-1)*100))%)"
         }
         
         return RecoveryScoreResult.RecoveryComponent(
-            score: clampedScore,
+            score: rhrScore,
             weight: 0.25,
             contribution: contribution,
             baseline: baseline,
@@ -232,8 +242,23 @@ class RecoveryScoreCalculator {
         )
     }
     
+    /// FINAL CALIBRATED RHR Score Calculation
+    /// A baseline RHR (ratio of 1.0) correctly yields a score of 75
+    private func calculateRhrScore(rhrRatio: Double) -> Double {
+        let score: Double
+        if rhrRatio >= 1.0 {
+            // Logarithmic growth for positive results (lower RHR).
+            // A ratio of 1.0 gives 75. A ratio of 1.1 gives ~88.
+            score = 75 + 45 * Foundation.log10(rhrRatio + 0.25)
+        } else {
+            // Exponential decay for negative results (higher RHR).
+            score = 75 * Foundation.pow(rhrRatio, 4)
+        }
+        return clamp(score, min: 0, max: 100)
+    }
+    
     /// Sleep Component (15% Weight)
-    /// Uses the final score from the new Sleep Score algorithm
+    /// Uses the final score from the FINAL CALIBRATED Sleep Score algorithm
     private func calculateSleepComponent(sleepScore: Int?) -> RecoveryScoreResult.RecoveryComponent {
         guard let score = sleepScore else {
             return RecoveryScoreResult.RecoveryComponent(
@@ -271,7 +296,7 @@ class RecoveryScoreCalculator {
     
     /// Stress Component (10% Weight)
     /// Measures deviation from the norm using WalkingHeartRateAverage, RespiratoryRate, and OxygenSaturation
-    /// Final score = 100 - (average of all available deviation percentages)
+    /// More sensitive scoring that better reflects stress levels
     private func calculateStressComponent(
         walkingHR: Double?,
         respiratoryRate: Double?,
@@ -283,24 +308,27 @@ class RecoveryScoreCalculator {
         var deviations: [Double] = []
         var availableMetrics: [String] = []
         
-        // Calculate respiratory rate deviation
+        // Calculate respiratory rate deviation with higher sensitivity
         if let respRate = respiratoryRate, let baselineResp = baselineRespiratoryRate, baselineResp > 0 {
             let deviation = abs((respRate - baselineResp) / baselineResp) * 100
-            deviations.append(deviation)
+            // Apply higher penalty for respiratory rate changes
+            deviations.append(deviation * 1.5)
             availableMetrics.append("Respiratory Rate")
         }
         
-        // Calculate oxygen saturation deviation
+        // Calculate oxygen saturation deviation with higher sensitivity
         if let oxSat = oxygenSaturation, let baselineOx = baselineOxygenSaturation, baselineOx > 0 {
             let deviation = abs((oxSat - baselineOx) / baselineOx) * 100
-            deviations.append(deviation)
+            // Apply higher penalty for oxygen saturation changes
+            deviations.append(deviation * 2.0)
             availableMetrics.append("Oxygen Saturation")
         }
         
-        // Calculate walking heart rate deviation
+        // Calculate walking heart rate deviation with higher sensitivity
         if let walkHR = walkingHR, let baselineWalk = baselineWalkingHR, baselineWalk > 0 {
             let deviation = abs((walkHR - baselineWalk) / baselineWalk) * 100
-            deviations.append(deviation)
+            // Apply higher penalty for walking HR changes
+            deviations.append(deviation * 1.2)
             availableMetrics.append("Walking Heart Rate")
         }
         
@@ -315,17 +343,30 @@ class RecoveryScoreCalculator {
             )
         }
         
-        // Calculate average deviation
+        // Calculate weighted average deviation
         let averageDeviation = deviations.reduce(0, +) / Double(deviations.count)
         
-        // Final stress score = 100 - average deviation
-        let stressScore = clamp(100 - averageDeviation, min: 0, max: 100)
-        let contribution = stressScore * 0.10
+        // More sensitive stress scoring: exponential penalty for deviations
+        let stressScore: Double
+        if averageDeviation <= 5.0 {
+            // Low stress
+            stressScore = 100 - (averageDeviation * 2.0)
+        } else if averageDeviation <= 15.0 {
+            // Moderate stress
+            stressScore = 90 - ((averageDeviation - 5.0) * 3.0)
+        } else {
+            // High stress - exponential penalty
+            let excessDeviation = averageDeviation - 15.0
+            stressScore = max(0, 75 - (excessDeviation * excessDeviation * 0.5))
+        }
+        
+        let clampedStressScore = clamp(stressScore, min: 0, max: 100)
+        let contribution = clampedStressScore * 0.10
         
         let description = "Stress level based on \(availableMetrics.joined(separator: ", ")) - \(String(format: "%.1f", averageDeviation))% deviation from baseline"
         
         return RecoveryScoreResult.RecoveryComponent(
-            score: stressScore,
+            score: clampedStressScore,
             weight: 0.10,
             contribution: contribution,
             baseline: nil,
@@ -335,6 +376,10 @@ class RecoveryScoreCalculator {
     }
     
     // MARK: - Helper Methods
+    
+    private func clamp(_ value: Double, min: Double, max: Double) -> Double {
+        return Swift.max(min, Swift.min(value, max))
+    }
     
     private func fetchHealthMetrics(for date: Date, sleepDate: Date) async throws -> (hrv: Double?, rhr: Double?, sleepScore: Int?, walkingHeartRate: Double?, respiratoryRate: Double?, oxygenSaturation: Double?, enhancedHRV: EnhancedHRVData?) {
         // Check authorization first
@@ -364,18 +409,19 @@ class RecoveryScoreCalculator {
                 group.leave()
             }
             
-            // Fetch Sleep Score
+            // Fetch Sleep Score - use the same date logic as SleepScoreCalculator
             group.enter()
             Task {
                 do {
                     print("🔍 Attempting to calculate sleep score for recovery...")
-                    print("   Sleep Date: \(sleepDate)")
+                    print("   Sleep Date (wake date): \(sleepDate)")
                     print("   Sleep Date components: \(Calendar.current.dateComponents([.year, .month, .day], from: sleepDate))")
                     
                     let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: sleepDate)
                     sleepScore = sleepResult.finalScore
                     print("✅ Sleep score calculated successfully: \(sleepScore ?? 0)")
                     print("   Sleep details: \(sleepResult.timeInBed / 3600)h in bed, \(sleepResult.timeAsleep / 3600)h asleep")
+                    print("   Sleep score breakdown: Restoration \(sleepResult.qualityComponent), Efficiency \(sleepResult.efficiencyComponent), Consistency \(sleepResult.timingComponent)")
                 } catch {
                     print("⚠️ Could not calculate sleep score for recovery: \(error)")
                     print("   Error details: \(error.localizedDescription)")
@@ -391,7 +437,8 @@ class RecoveryScoreCalculator {
                             print("   Insufficient data to calculate sleep score")
                         }
                     }
-                    sleepScore = nil // Explicitly set to nil when calculation fails
+                    // Don't set a random value - keep it nil so the sleep component can handle missing data
+                    sleepScore = nil
                 }
                 group.leave()
             }

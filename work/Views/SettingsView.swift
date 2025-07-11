@@ -35,6 +35,20 @@ struct SettingsView: View {
         weightEntries.first?.weight ?? 0.0
     }
     
+    var colorScheme: ColorScheme? {
+        let mode = AppearanceMode(rawValue: appearanceMode)
+        switch mode {
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        case .system:
+            return nil
+        case .none:
+            return nil
+        }
+    }
+    
     var body: some View {
         NavigationView {
             List {
@@ -61,7 +75,10 @@ struct SettingsView: View {
                 }
                 
                 Section("Health Data") {
-                    SyncHealthDataButton(isSyncing: .constant(false))
+                    Button("Sync Health Data") {
+                        syncHealthData()
+                    }
+                    .foregroundColor(.green)
                     
                     Button("Reset Health Baselines") {
                         resetHealthBaselines()
@@ -173,10 +190,7 @@ struct SettingsView: View {
                 Text("This will permanently delete all weight entries. This action cannot be undone.")
             }
         }
-        .preferredColorScheme(
-            AppearanceMode(rawValue: appearanceMode) == .light ? .light :
-            AppearanceMode(rawValue: appearanceMode) == .dark ? .dark : nil
-        )
+        .preferredColorScheme(colorScheme)
     }
     
     private func createDefaultProfile() {
@@ -534,6 +548,21 @@ struct SettingsView: View {
                 }
             } else {
                 print("❌ Authorization denied - cannot access personal health data")
+            }
+        }
+    }
+    
+    private func syncHealthData() {
+        print("🔄 Syncing health data...")
+        HealthKitManager.shared.requestAuthorization { success in
+            if success {
+                print("✅ Health data sync successful")
+                // Update baselines with fresh data
+                DynamicBaselineEngine.shared.updateAndStoreBaselines {
+                    print("✅ Health baselines updated with fresh data")
+                }
+            } else {
+                print("❌ Health data sync failed - authorization denied")
             }
         }
     }

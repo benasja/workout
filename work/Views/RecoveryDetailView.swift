@@ -9,143 +9,154 @@ struct RecoveryScoreBreakdown {
 
 struct RecoveryDetailView: View {
     @EnvironmentObject var dateModel: PerformanceDateModel
+    @EnvironmentObject var tabSelectionModel: TabSelectionModel
     @State private var recoveryResult: RecoveryScoreResult?
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var biomarkerData: [String: (value: Double, change: Double?, trend: [Double])] = [:]
+    @State private var scrollToTopTrigger = false
+    @State private var loadingWorkItem: DispatchWorkItem? = nil
     
     var selectedDate: Date { dateModel.selectedDate }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                DateSliderView(selectedDate: $dateModel.selectedDate)
-                if isLoading {
-                    loadingOverlay
-                } else if let error = errorMessage {
-                    errorOverlay(error)
-                } else if let result = recoveryResult {
-                    // Main Score Card
-                    VStack(spacing: 8) {
-                        Text("Recovery Score")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                        Text("\(result.finalScore)")
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
-                            .foregroundColor(.green)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(16)
-                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
-                    .cornerRadius(16)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Recovery Score: \(result.finalScore)")
-                    
-                    // How It Was Calculated Card
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("How It Was Calculated")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    DateSliderView(selectedDate: $dateModel.selectedDate)
+                    if isLoading {
+                        loadingOverlay
+                    } else if let error = errorMessage {
+                        errorOverlay(error)
+                    } else if let result = recoveryResult {
+                        // Main Score Card
                         VStack(spacing: 8) {
-                            ScoreBreakdownRow(
-                                component: "HRV Component",
-                                score: result.hrvComponent.score,
-                                maxScore: RecoveryScoreBreakdown.hrvMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "RHR Component",
-                                score: result.rhrComponent.score,
-                                maxScore: RecoveryScoreBreakdown.rhrMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "Sleep Component",
-                                score: result.sleepComponent.score,
-                                maxScore: RecoveryScoreBreakdown.sleepMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "Stress Component",
-                                score: result.stressComponent.score,
-                                maxScore: RecoveryScoreBreakdown.stressMax
-                            )
+                            Text("Recovery Score")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Text("\(result.finalScore)")
+                                .font(.system(size: 48, weight: .bold, design: .rounded))
+                                .foregroundColor(.green)
                         }
-                    }
-                    .padding(16)
-                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
-                    .cornerRadius(16)
-                    
-                    // Recovery Insights Card
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Recovery Insights")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(generateInsightsList(from: result), id: \.self) { insight in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text("•")
-                                        .font(.headline)
-                                        .foregroundColor(.green)
-                                    Text(insight)
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity)
+                        .padding(16)
+                        .background(AppColors.secondaryBackground)
+                        .cornerRadius(16)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Recovery Score: \(result.finalScore)")
+                        
+                        // How It Was Calculated Card
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("How It Was Calculated")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            VStack(spacing: 8) {
+                                ScoreBreakdownRow(
+                                    component: "HRV Component",
+                                    score: result.hrvComponent.score,
+                                    maxScore: RecoveryScoreBreakdown.hrvMax
+                                )
+                                ScoreBreakdownRow(
+                                    component: "RHR Component",
+                                    score: result.rhrComponent.score,
+                                    maxScore: RecoveryScoreBreakdown.rhrMax
+                                )
+                                ScoreBreakdownRow(
+                                    component: "Sleep Component",
+                                    score: result.sleepComponent.score,
+                                    maxScore: RecoveryScoreBreakdown.sleepMax
+                                )
+                                ScoreBreakdownRow(
+                                    component: "Stress Component",
+                                    score: result.stressComponent.score,
+                                    maxScore: RecoveryScoreBreakdown.stressMax
+                                )
+                            }
+                        }
+                        .padding(16)
+                        .background(AppColors.secondaryBackground)
+                        .cornerRadius(16)
+                        
+                        // Recovery Insights Card
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Recovery Insights")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(generateInsightsList(from: result), id: \.self) { insight in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Text("•")
+                                            .font(.headline)
+                                            .foregroundColor(.green)
+                                        Text(insight)
+                                            .font(.subheadline)
+                                            .foregroundColor(.gray)
+                                    }
                                 }
                             }
                         }
+                        .padding(16)
+                        .background(AppColors.secondaryBackground)
+                        .cornerRadius(16)
+                        
+                        // Biomarkers Grid
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 12) {
+                            BiomarkerCard(
+                                title: "Resting HRV",
+                                value: biomarkerData["hrv"]?.value ?? 0,
+                                unit: "ms",
+                                color: .green
+                            )
+                            BiomarkerCard(
+                                title: "Resting HR",
+                                value: biomarkerData["rhr"]?.value ?? 0,
+                                unit: "bpm",
+                                color: .blue
+                            )
+                            BiomarkerCard(
+                                title: "Wrist Temp",
+                                value: biomarkerData["temperature"]?.value ?? 0,
+                                unit: "°C",
+                                color: .orange
+                            )
+                            BiomarkerCard(
+                                title: "Respiratory Rate",
+                                value: biomarkerData["respiratory"]?.value ?? 0,
+                                unit: "rpm",
+                                color: .purple
+                            )
+                            BiomarkerCard(
+                                title: "Oxygen Saturation",
+                                value: biomarkerData["oxygen"]?.value ?? 0,
+                                unit: "%",
+                                color: .cyan
+                            )
+                        }
+                    } else {
+                        EmptyStateView(
+                            icon: "heart.text.square",
+                            title: "No Recovery Data",
+                            message: "Recovery data will appear here once you have sufficient health data for the selected date.",
+                            actionTitle: nil,
+                            action: nil
+                        )
                     }
-                    .padding(16)
-                    .background(Color(red: 0.2, green: 0.2, blue: 0.2))
-                    .cornerRadius(16)
-                    
-                    // Biomarkers Grid
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 12) {
-                        BiomarkerCard(
-                            title: "Resting HRV",
-                            value: biomarkerData["hrv"]?.value ?? 0,
-                            unit: "ms",
-                            color: .green
-                        )
-                        BiomarkerCard(
-                            title: "Resting HR",
-                            value: biomarkerData["rhr"]?.value ?? 0,
-                            unit: "bpm",
-                            color: .blue
-                        )
-                        BiomarkerCard(
-                            title: "Wrist Temp",
-                            value: biomarkerData["temperature"]?.value ?? 0,
-                            unit: "°C",
-                            color: .orange
-                        )
-                        BiomarkerCard(
-                            title: "Respiratory Rate",
-                            value: biomarkerData["respiratory"]?.value ?? 0,
-                            unit: "rpm",
-                            color: .purple
-                        )
-                        BiomarkerCard(
-                            title: "Oxygen Saturation",
-                            value: biomarkerData["oxygen"]?.value ?? 0,
-                            unit: "%",
-                            color: .cyan
-                        )
-                    }
-                } else {
-                    EmptyStateView(
-                        icon: "heart.text.square",
-                        title: "No Recovery Data",
-                        message: "Recovery data will appear here once you have sufficient health data for the selected date.",
-                        actionTitle: nil,
-                        action: nil
-                    )
+                }
+                .id("recoveryRoot")
+                .padding()
+            }
+            .onChange(of: scrollToTopTrigger) { _, _ in
+                withAnimation {
+                    proxy.scrollTo("recoveryRoot", anchor: .top)
                 }
             }
-            .padding()
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(AppColors.background)
         .navigationTitle("Recovery")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
@@ -153,6 +164,12 @@ struct RecoveryDetailView: View {
         }
         .onChange(of: selectedDate) { _, _ in
             loadRecoveryData()
+        }
+        .onChange(of: tabSelectionModel.selection) { old, new in
+            if new == 2 && old == 2 {
+                // Tab reselected, pop to root
+                scrollToTopTrigger.toggle()
+            }
         }
     }
     
@@ -163,9 +180,9 @@ struct RecoveryDetailView: View {
             Color.black.opacity(0.5).ignoresSafeArea()
             ProgressView("Loading...")
                 .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .padding()
-                .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+                .background(AppColors.secondaryBackground)
                 .cornerRadius(12)
         }
     }
@@ -186,18 +203,26 @@ struct RecoveryDetailView: View {
     }
     
     private func loadRecoveryData() {
-        isLoading = true
+        isLoading = false
         errorMessage = nil
+        loadingWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            self.isLoading = true
+        }
+        loadingWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
         Task {
             do {
                 let result = try await RecoveryScoreCalculator.shared.calculateRecoveryScore(for: selectedDate)
                 await loadBiomarkerData(for: selectedDate)
                 await MainActor.run {
+                    self.loadingWorkItem?.cancel()
                     self.recoveryResult = result
                     self.isLoading = false
                 }
             } catch {
                 await MainActor.run {
+                    self.loadingWorkItem?.cancel()
                     self.errorMessage = error.localizedDescription
                     self.isLoading = false
                 }
@@ -344,19 +369,19 @@ struct BiomarkerCard: View {
                     Text("\(Int(value))")
                         .font(.title2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                 } else if unit == "%" {
                     // Percentages should be displayed as integers
                     Text("\(Int(value))")
                         .font(.title2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                 } else {
                     // Other values can have decimals
                     Text("\(String(format: "%.1f", value))")
                         .font(.title2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                 }
                 Text(unit)
                     .font(.subheadline)
@@ -365,7 +390,7 @@ struct BiomarkerCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(red: 0.2, green: 0.2, blue: 0.2))
+        .background(AppColors.secondaryBackground)
         .cornerRadius(12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(unit == "ms" || unit == "bpm" || unit == "%" ? "\(Int(value))" : String(format: "%.1f", value)) \(unit)")
