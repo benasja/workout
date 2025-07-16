@@ -11,10 +11,8 @@ struct MainTabView: View {
     @StateObject private var tabSelectionModel = TabSelectionModel()
     @StateObject private var dateModel = PerformanceDateModel()
     @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
-    @AppStorage("openRecoveryFromToday") private var openRecoveryFromToday: Bool = false
-    @AppStorage("openSleepFromToday") private var openSleepFromToday: Bool = false
-    @State private var showRecoverySheet = false
-    @State private var showSleepSheet = false
+    @State private var showingHealthKitAlert = false
+    @State private var healthKitAuthorized = false
     
     private var colorScheme: ColorScheme? {
         let mode = AppearanceMode(rawValue: appearanceMode)
@@ -27,112 +25,181 @@ struct MainTabView: View {
     
     var body: some View {
         TabView(selection: $tabSelectionModel.selection) {
-            PerformanceView()
-                .environmentObject(dateModel)
-                .environmentObject(tabSelectionModel)
-                .tabItem {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                    Text("Today")
-                }
-                .tag(0)
-            
+            // Today Tab - Main Performance Dashboard
             NavigationStack {
-                if tabSelectionModel.moreTabDetail == .recovery {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Button(action: { tabSelectionModel.moreTabDetail = .none }) {
-                                Image(systemName: "chevron.left")
-                                    .font(.title2)
-                                    .padding(.leading)
-                            }
-                            Spacer()
-                        }
-                        RecoveryDetailView()
-                            .environmentObject(dateModel)
-                            .environmentObject(tabSelectionModel)
-                    }
-                    .navigationBarHidden(true)
-                } else if tabSelectionModel.moreTabDetail == .sleep {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Button(action: { tabSelectionModel.moreTabDetail = .none }) {
-                                Image(systemName: "chevron.left")
-                                    .font(.title2)
-                                    .padding(.leading)
-                            }
-                            Spacer()
-                        }
-                        SleepDetailView()
-                            .environmentObject(dateModel)
-                            .environmentObject(tabSelectionModel)
-                    }
-                    .navigationBarHidden(true)
-                } else {
-                List {
-                    Section(header: Text("Settings")) {
-                        NavigationLink(destination: SettingsView()) {
-                            Label("Settings", systemImage: "gearshape.fill")
-                        }
-                    }
-                    Section(header: Text("Done")) {
-                        NavigationLink(destination: SleepDetailView().environmentObject(dateModel).environmentObject(tabSelectionModel)) {
-                            Label("Sleep", systemImage: "bed.double.fill")
-                        }
-                        NavigationLink(destination: RecoveryDetailView().environmentObject(dateModel).environmentObject(tabSelectionModel)) {
-                            Label("Recovery", systemImage: "heart.fill")
-                        }
-                        NavigationLink(destination: WeightTrackerView()) {
-                            Label("Weight Tracker", systemImage: "scalemass")
-                        }
-                    }
-                    Section(header: Text("Work in Progress")) {
-                        NavigationLink(destination: JournalView(tabSelection: $tabSelectionModel.selection)) {
-                            Label("Journal", systemImage: "book.closed.fill")
-                        }
-                        NavigationLink(destination: StepsView()) {
-                            Label("Steps", systemImage: "figure.walk")
-                        }
-                        NavigationLink(destination: SupplementsView()) {
-                            Label("Supplements", systemImage: "pills.fill")
-                        }
-                        NavigationLink(destination: WorkoutLibraryView()) {
-                            Label("Workouts", systemImage: "dumbbell.fill")
-                        }
-                        NavigationLink(destination: WorkoutHistoryView()) {
-                            Label("History", systemImage: "clock.arrow.circlepath")
-                        }
-                        NavigationLink(destination: ProgramsView()) {
-                            Label("Programs", systemImage: "list.bullet.rectangle")
-                        }
-                        NavigationLink(destination: ExerciseLibraryView()) {
-                            Label("Exercises", systemImage: "figure.strengthtraining.traditional")
-                        }
-                        NavigationLink(destination: AnalyticsView()) {
-                            Label("Analytics", systemImage: "chart.bar.xaxis")
-                        }
-                        NavigationLink(destination: InsightsView()) {
-                            Label("Insights", systemImage: "lightbulb.fill")
-                        }
-                    }
-                }
-                .navigationTitle("More")
-                .listStyle(.insetGrouped)
-                }
+                PerformanceView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
+            }
+            .tabItem {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                Text("Today")
+            }
+            .tag(0)
+            
+            // Recovery Tab
+            NavigationStack {
+                RecoveryDetailView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
+            }
+            .tabItem {
+                Image(systemName: "heart.fill")
+                Text("Recovery")
+            }
+            .tag(1)
+            
+            // Sleep Tab
+            NavigationStack {
+                SleepDetailView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
+            }
+            .tabItem {
+                Image(systemName: "bed.double.fill")
+                Text("Sleep")
+            }
+            .tag(2)
+            
+            // Workouts Tab
+            NavigationStack {
+                WorkoutLibraryView()
+            }
+            .tabItem {
+                Image(systemName: "dumbbell.fill")
+                Text("Train")
+            }
+            .tag(3)
+            
+            // More Tab
+            NavigationStack {
+                MoreView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
             }
             .tabItem {
                 Image(systemName: "ellipsis.circle.fill")
                 Text("More")
             }
-            .tag(1)
+            .tag(4)
         }
-        .accentColor(.blue)
+        .accentColor(AppColors.primary)
         .preferredColorScheme(colorScheme)
+        .onAppear {
+            checkHealthKitAuthorization()
+        }
+        .alert("HealthKit Required", isPresented: $showingHealthKitAlert) {
+            Button("Grant Access") {
+                requestHealthKitAccess()
+            }
+            Button("Skip", role: .cancel) { }
+        } message: {
+            Text("This app requires HealthKit access to provide personalized health insights. Please grant access to continue.")
+        }
         .onChange(of: tabSelectionModel.selection) { oldValue, newValue in
             if newValue == 0 && oldValue == 0 {
                 let today = Calendar.current.startOfDay(for: Date())
                 dateModel.selectedDate = today
             }
         }
+    }
+    
+    private func checkHealthKitAuthorization() {
+        healthKitAuthorized = HealthKitManager.shared.checkAuthorizationStatus()
+        if !healthKitAuthorized {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                showingHealthKitAlert = true
+            }
+        }
+    }
+    
+    private func requestHealthKitAccess() {
+        HealthKitManager.shared.requestAuthorization { success in
+            DispatchQueue.main.async {
+                healthKitAuthorized = success
+                if success {
+                    // Initialize baselines after authorization
+                    DynamicBaselineEngine.shared.updateAndStoreBaselines {
+                        print("✅ Baselines initialized")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Separate More view for better organization
+struct MoreView: View {
+    @EnvironmentObject var dateModel: PerformanceDateModel
+    @EnvironmentObject var tabSelectionModel: TabSelectionModel
+    
+    var body: some View {
+        List {
+            Section("Health & Wellness") {
+                NavigationLink(destination: WeightTrackerView()) {
+                    Label("Weight Tracker", systemImage: "scalemass")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: JournalView(tabSelection: $tabSelectionModel.selection)) {
+                    Label("Journal", systemImage: "book.closed.fill")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: StepsView()) {
+                    Label("Steps", systemImage: "figure.walk")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: SupplementsView()) {
+                    Label("Supplements", systemImage: "pills.fill")
+                        .foregroundColor(.primary)
+                }
+            }
+            
+            Section("Fitness") {
+                NavigationLink(destination: WorkoutHistoryView()) {
+                    Label("Workout History", systemImage: "clock.arrow.circlepath")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: ProgramsView()) {
+                    Label("Programs", systemImage: "list.bullet.rectangle")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: ExerciseLibraryView()) {
+                    Label("Exercise Library", systemImage: "figure.strengthtraining.traditional")
+                        .foregroundColor(.primary)
+                }
+            }
+            
+            Section("Analytics") {
+                NavigationLink(destination: AnalyticsView()) {
+                    Label("Analytics", systemImage: "chart.bar.xaxis")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: InsightsView()) {
+                    Label("Insights", systemImage: "lightbulb.fill")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: CorrelationView()) {
+                    Label("Correlations", systemImage: "arrow.triangle.branch")
+                        .foregroundColor(.primary)
+                }
+            }
+            
+            Section("Settings") {
+                NavigationLink(destination: SettingsView()) {
+                    Label("Settings", systemImage: "gearshape.fill")
+                        .foregroundColor(.primary)
+                }
+            }
+        }
+        .navigationTitle("More")
+        .listStyle(.insetGrouped)
     }
 }
 

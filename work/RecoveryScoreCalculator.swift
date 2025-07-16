@@ -258,10 +258,7 @@ class RecoveryScoreCalculator {
     
     /// Stress Component (10% Weight)
     /// Measures deviation from the norm using WalkingHeartRateAverage, RespiratoryRate, and OxygenSaturation
-    /// More sensitive scoring that better reflects stress levels
-    // User-provided fixed baselines for stress metrics
-    private let userFixedStressBaselines: (walkingHR: Double, respiratoryRate: Double, oxygenSaturation: Double, stress: Double) = (0, 0, 0, 87.9)
-
+    /// Uses your actual Apple Health baselines for accurate stress assessment
     private func calculateStressComponent(
         walkingHR: Double?,
         respiratoryRate: Double?,
@@ -272,58 +269,72 @@ class RecoveryScoreCalculator {
     ) -> RecoveryScoreResult.RecoveryComponent {
         var deviations: [Double] = []
         var availableMetrics: [String] = []
+        var descriptions: [String] = []
 
-        // Use user-provided fixed baselines if available
-        let fixedWalkingHR = userFixedStressBaselines.walkingHR
-        let fixedRespiratoryRate = userFixedStressBaselines.respiratoryRate
-        let fixedOxygenSaturation = userFixedStressBaselines.oxygenSaturation
-        let fixedStress = userFixedStressBaselines.stress
-
-        // Calculate respiratory rate deviation
-        if let respRate = respiratoryRate, fixedRespiratoryRate > 0 {
-            let deviation = abs((respRate - fixedRespiratoryRate) / fixedRespiratoryRate) * 100
-            deviations.append(deviation * 1.5)
-            availableMetrics.append("Respiratory Rate")
-        }
-        // Calculate oxygen saturation deviation
-        if let oxSat = oxygenSaturation, fixedOxygenSaturation > 0 {
-            let deviation = abs((oxSat - fixedOxygenSaturation) / fixedOxygenSaturation) * 100
-            deviations.append(deviation * 2.0)
-            availableMetrics.append("Oxygen Saturation")
-        }
-        // Calculate walking heart rate deviation
-        if let walkHR = walkingHR, fixedWalkingHR > 0 {
-            let deviation = abs((walkHR - fixedWalkingHR) / fixedWalkingHR) * 100
-            deviations.append(deviation * 1.2)
+        // Calculate walking heart rate deviation using your baseline
+        if let walkHR = walkingHR, let baseline = baselineWalkingHR, baseline > 0 {
+            let deviation = abs((walkHR - baseline) / baseline) * 100
+            deviations.append(deviation * 1.2) // Weight walking HR slightly higher
             availableMetrics.append("Walking Heart Rate")
+            descriptions.append("Walking HR: \(String(format: "%.0f", walkHR)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM)")
+        }
+        
+        // Calculate respiratory rate deviation using your baseline
+        if let respRate = respiratoryRate, let baseline = baselineRespiratoryRate, baseline > 0 {
+            let deviation = abs((respRate - baseline) / baseline) * 100
+            deviations.append(deviation * 1.5) // Weight respiratory rate higher as it's more sensitive
+            availableMetrics.append("Respiratory Rate")
+            descriptions.append("Resp Rate: \(String(format: "%.1f", respRate)) BPM (baseline: \(String(format: "%.1f", baseline)) BPM)")
+        }
+        
+        // Calculate oxygen saturation deviation using your baseline
+        if let oxSat = oxygenSaturation, let baseline = baselineOxygenSaturation, baseline > 0 {
+            let deviation = abs((oxSat - baseline) / baseline) * 100
+            deviations.append(deviation * 2.0) // Weight oxygen saturation highest as it's most critical
+            availableMetrics.append("Oxygen Saturation")
+            descriptions.append("O2 Sat: \(String(format: "%.1f", oxSat))% (baseline: \(String(format: "%.1f", baseline))%)")
         }
 
-        // If no metrics, use fixed stress value
+        // If no metrics available, return neutral score
         if deviations.isEmpty {
             return RecoveryScoreResult.RecoveryComponent(
-                score: fixedStress,
+                score: 75.0, // Neutral score when no stress data available
                 weight: 0.10,
-                contribution: fixedStress * 0.10,
+                contribution: 7.5,
                 baseline: nil,
                 currentValue: nil,
-                description: "User fixed stress baseline"
+                description: "Stress metrics unavailable - using neutral score"
             )
         }
 
         // Calculate weighted average deviation
         let averageDeviation = deviations.reduce(0, +) / Double(deviations.count)
+        
+        // Calculate stress score based on deviation from your personal baselines
         let stressScore: Double
-        if averageDeviation <= 5.0 {
-            stressScore = 100 - (averageDeviation * 2.0)
+        if averageDeviation <= 3.0 {
+            // Very low deviation - excellent stress management
+            stressScore = 100 - (averageDeviation * 1.5)
+        } else if averageDeviation <= 8.0 {
+            // Low to moderate deviation - good stress levels
+            stressScore = 95 - ((averageDeviation - 3.0) * 2.5)
         } else if averageDeviation <= 15.0 {
-            stressScore = 90 - ((averageDeviation - 5.0) * 3.0)
+            // Moderate to high deviation - elevated stress
+            stressScore = 82.5 - ((averageDeviation - 8.0) * 3.0)
         } else {
+            // High deviation - significant stress
             let excessDeviation = averageDeviation - 15.0
-            stressScore = max(0, 75 - (excessDeviation * excessDeviation * 0.5))
+            stressScore = max(0, 61.5 - (excessDeviation * 2.0))
         }
+        
         let clampedStressScore = clamp(stressScore, min: 0, max: 100)
         let contribution = clampedStressScore * 0.10
-        let description = "Stress level based on user baseline - \(String(format: "%.1f", averageDeviation))% deviation from baseline"
+        
+        // Generate comprehensive description
+        let metricsDescription = descriptions.joined(separator: ", ")
+        let deviationDescription = String(format: "%.1f", averageDeviation)
+        let description = "Stress indicators: \(metricsDescription) - \(deviationDescription)% avg deviation from baseline"
+        
         return RecoveryScoreResult.RecoveryComponent(
             score: clampedStressScore,
             weight: 0.10,

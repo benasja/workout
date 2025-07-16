@@ -63,6 +63,27 @@ struct SleepScoreDetails {
     let deepSleepPercentage: Double
     let remSleepPercentage: Double
     let heartRateDipPercentage: Double?
+    
+    init(timeInBed: TimeInterval, timeAsleep: TimeInterval, deepSleepDuration: TimeInterval, remSleepDuration: TimeInterval, averageHeartRate: Double?, dailyRestingHeartRate: Double?, bedtime: Date?, wakeTime: Date?, sleepEfficiency: Double, deepSleepPercentage: Double, remSleepPercentage: Double) {
+        self.timeInBed = timeInBed
+        self.timeAsleep = timeAsleep
+        self.deepSleepDuration = deepSleepDuration
+        self.remSleepDuration = remSleepDuration
+        self.averageHeartRate = averageHeartRate
+        self.dailyRestingHeartRate = dailyRestingHeartRate
+        self.bedtime = bedtime
+        self.wakeTime = wakeTime
+        self.sleepEfficiency = sleepEfficiency
+        self.deepSleepPercentage = deepSleepPercentage
+        self.remSleepPercentage = remSleepPercentage
+        
+        // Calculate heart rate dip percentage safely
+        if let hr = averageHeartRate, let rhr = dailyRestingHeartRate, rhr > 0 {
+            self.heartRateDipPercentage = (1 - (hr / rhr))
+        } else {
+            self.heartRateDipPercentage = nil
+        }
+    }
 }
 
 // MARK: - Sleep Score Calculator
@@ -152,16 +173,22 @@ final class SleepScoreCalculator {
             throw SleepScoreError.noSleepData
         }
         
-        // Use fallback values if heart rate data is missing
-        let effectiveHeartRate = heartRateData ?? 65.0 // Default to 65 BPM if missing
-        let effectiveRHR = restingHeartRate ?? 60.0 // Default to 60 BPM if missing
+        // Only use actual heart rate data - don't use fallback values that could skew scores
+        let effectiveHeartRate = heartRateData
+        let effectiveRHR = restingHeartRate
         
-        // Ensure heart rate during sleep is reasonable (should be lower than RHR)
-        let adjustedHeartRate = min(effectiveHeartRate, effectiveRHR * 1.1) // Cap at 110% of RHR
+        // Only adjust heart rate if we have both values
+        let adjustedHeartRate: Double?
+        if let hr = effectiveHeartRate, let rhr = effectiveRHR {
+            // Ensure heart rate during sleep is reasonable (should be lower than RHR)
+            adjustedHeartRate = min(hr, rhr * 1.1) // Cap at 110% of RHR
+        } else {
+            adjustedHeartRate = effectiveHeartRate
+        }
         
         print("💓 Heart Rate Data:")
-        print("   Average HR: \(heartRateData ?? 0) (using \(adjustedHeartRate))")
-        print("   RHR: \(restingHeartRate ?? 0) (using \(effectiveRHR))")
+        print("   Average HR: \(heartRateData ?? 0) (using \(adjustedHeartRate ?? 0))")
+        print("   RHR: \(restingHeartRate ?? 0) (using \(effectiveRHR ?? 0))")
         print("🌙 Sleep Data Validation:")
         print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
         print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
@@ -217,10 +244,19 @@ final class SleepScoreCalculator {
         print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
         print("   Deep Sleep: \(sleepData.deepSleepDuration / 3600) hours")
         print("   REM Sleep: \(sleepData.remSleepDuration / 3600) hours")
-        print("   Heart Rate: \(adjustedHeartRate)")
-        print("   RHR: \(effectiveRHR)")
+        print("   Heart Rate: \(adjustedHeartRate ?? 0)")
+        print("   RHR: \(effectiveRHR ?? 0)")
         print("   Baseline Bedtime: \(baselineData.bedtime?.description ?? "nil")")
         print("   Baseline Wake: \(baselineData.wakeTime?.description ?? "nil")")
+        
+        // Helper function to calculate heart rate dip percentage
+        func calculateHeartRateDipPercentage() -> Double? {
+            if let hr = adjustedHeartRate, let rhr = effectiveRHR, rhr > 0 {
+                return (1 - (hr / rhr))
+            } else {
+                return nil
+            }
+        }
         
         // Generate key findings
         let keyFindings = generateKeyFindings(
@@ -238,8 +274,7 @@ final class SleepScoreCalculator {
                 wakeTime: sleepData.wakeTime,
                 sleepEfficiency: sleepData.timeAsleep / sleepData.timeInBed,
                 deepSleepPercentage: sleepData.deepSleepDuration / sleepData.timeAsleep,
-                remSleepPercentage: sleepData.remSleepDuration / sleepData.timeAsleep,
-                heartRateDipPercentage: effectiveRHR > 0 ? (1 - (adjustedHeartRate / effectiveRHR)) : nil
+                remSleepPercentage: sleepData.remSleepDuration / sleepData.timeAsleep
             )
         )
         
@@ -260,8 +295,7 @@ final class SleepScoreCalculator {
                 wakeTime: sleepData.wakeTime,
                 sleepEfficiency: sleepData.timeAsleep / sleepData.timeInBed,
                 deepSleepPercentage: sleepData.deepSleepDuration / sleepData.timeAsleep,
-                remSleepPercentage: sleepData.remSleepDuration / sleepData.timeAsleep,
-                heartRateDipPercentage: effectiveRHR > 0 ? (1 - (adjustedHeartRate / effectiveRHR)) : nil
+                remSleepPercentage: sleepData.remSleepDuration / sleepData.timeAsleep
             )
         )
         
@@ -314,7 +348,7 @@ final class SleepScoreCalculator {
                 }
                 
                 // Group sleep samples by session (continuous periods)
-                let sleepSessions = self.groupSleepSamplesIntoSessions(sleepSamples)
+                let sleepSessions = SleepScoreCalculator.groupSleepSamplesIntoSessions(sleepSamples)
                 print("🌙 Found \(sleepSessions.count) sleep sessions")
                 
                 // Find the main sleep session (longest one)
@@ -550,23 +584,27 @@ final class SleepScoreCalculator {
         timeAsleep: TimeInterval,
         deepSleepDuration: TimeInterval,
         remSleepDuration: TimeInterval,
-        averageHeartRate: Double,
-        dailyRestingHeartRate: Double,
+        averageHeartRate: Double?,
+        dailyRestingHeartRate: Double?,
         enhancedHRV: EnhancedHRVData?
     ) -> Double {
         guard timeAsleep > 0 else { return 0 }
         
         // Deep Sleep Score (40% of restoration component)
         let deepSleepPercentage = deepSleepDuration / timeAsleep
-        let deepScore = normalizeScore(deepSleepPercentage, min: 13, max: 23)
+        let deepScore = normalizeDeepSleepPercentage(deepSleepPercentage)
         
         // REM Sleep Score (40% of restoration component)
         let remSleepPercentage = remSleepDuration / timeAsleep
-        let remScore = normalizeScore(remSleepPercentage, min: 20, max: 35)
+        let remScore = normalizeREMSleepPercentage(remSleepPercentage)
         
-        // HR Dip score (20% of restoration component)
-        let hrDipPercentage = dailyRestingHeartRate > 0 ? (1 - (averageHeartRate / dailyRestingHeartRate)) : 0.1
-        let hrDipScore = clamp(hrDipPercentage * 5.0, min: 0, max: 100)
+        // HR Dip score (20% of restoration component) - only calculate if we have both values
+        let hrDipScore: Double
+        if let avgHR = averageHeartRate, let rhr = dailyRestingHeartRate {
+            hrDipScore = calculateHeartRateDipScore(averageHeartRate: avgHR, dailyRestingHeartRate: rhr)
+        } else {
+            hrDipScore = 50.0 // Neutral score when heart rate data is missing
+        }
         
         // Calculate weighted average
         let restorationScore = (deepScore * 0.40) + (remScore * 0.40) + (hrDipScore * 0.20)
@@ -574,7 +612,7 @@ final class SleepScoreCalculator {
         print("🔍 FINAL CALIBRATED Restoration Component Debug:")
         print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepScore)")
         print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remScore)")
-        print("   HR Dip: \(hrDipPercentage * 100)% -> \(hrDipScore)")
+        print("   HR Dip: \(hrDipScore)")
         print("   Final Restoration Score: \(restorationScore)")
         
         return restorationScore
@@ -852,7 +890,7 @@ final class SleepScoreCalculator {
         let timeAsleep: TimeInterval
     }
     
-    private nonisolated func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
+    private static func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
         guard !samples.isEmpty else { return [] }
         
         // Filter out "In Bed" samples that span too long (more than 12 hours)
@@ -873,7 +911,7 @@ final class SleepScoreCalculator {
         var sessionStart: Date?
         
         for sample in sortedSamples {
-            let isSleepSample = isSleepStage(sample)
+            let isSleepSample = SleepScoreCalculator.isSleepStage(sample)
             
             if isSleepSample {
                 if sessionStart == nil {
@@ -886,7 +924,7 @@ final class SleepScoreCalculator {
                    sample.startDate.timeIntervalSince(lastSample.endDate) > 30 * 60 {
                     // End current session
                     if let start = sessionStart, !currentSessionSamples.isEmpty {
-                        let session = createSleepSession(from: currentSessionSamples, startTime: start)
+                        let session = SleepScoreCalculator.createSleepSession(from: currentSessionSamples, startTime: start)
                         sessions.append(session)
                     }
                     
@@ -901,19 +939,19 @@ final class SleepScoreCalculator {
         
         // Add the last session
         if let start = sessionStart, !currentSessionSamples.isEmpty {
-            let session = createSleepSession(from: currentSessionSamples, startTime: start)
+            let session = SleepScoreCalculator.createSleepSession(from: currentSessionSamples, startTime: start)
             sessions.append(session)
         }
         
         return sessions
     }
     
-    private nonisolated func isSleepStage(_ sample: HKCategorySample) -> Bool {
+    private static func isSleepStage(_ sample: HKCategorySample) -> Bool {
         let value = HKCategoryValueSleepAnalysis(rawValue: sample.value)
         return value == .asleepUnspecified || value == .asleepDeep || value == .asleepREM || value == .asleepCore || value == .inBed
     }
     
-    private nonisolated func createSleepSession(from samples: [HKCategorySample], startTime: Date) -> SleepSession {
+    private static func createSleepSession(from samples: [HKCategorySample], startTime: Date) -> SleepSession {
         let endTime = samples.max(by: { $0.endDate < $1.endDate })?.endDate ?? startTime
         let totalDuration = endTime.timeIntervalSince(startTime)
         

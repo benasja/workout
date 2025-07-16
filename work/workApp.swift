@@ -29,8 +29,8 @@ struct workApp: App {
                         hasSeededData = true
                     }
                     
-                    // Force data reset to ensure only personal data is used
-                    forceDataReset()
+                    // Initialize baseline engine with your personal data
+                    initializeBaselineEngine()
                 }
                 .preferredColorScheme(
                     AppearanceMode(rawValue: appearanceMode) == .light ? .light :

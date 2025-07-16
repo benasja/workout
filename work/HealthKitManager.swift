@@ -421,7 +421,9 @@ final class HealthKitManager {
                 sdnn: sdnn,
                 rmssd: calculatedMetrics.rmssd > 0 ? calculatedMetrics.rmssd : nil,
                 heartRateSamples: heartRateSamples,
-                calculatedMetrics: calculatedMetrics
+                calculatedMetrics: calculatedMetrics,
+                hasBeatToBeatData: heartRateSamples.count >= 10,
+                stressLevel: max(0, min(100, 100 - calculatedMetrics.rmssd))
             )
             
             completion(enhancedData)
@@ -460,7 +462,9 @@ final class HealthKitManager {
                 pnn50: 0,
                 triangularIndex: 0,
                 stressIndex: 0,
-                autonomicBalance: 0
+                autonomicBalance: 0,
+                recoveryScore: 50,
+                autonomicBalanceScore: 50
             )
         }
         
@@ -485,7 +489,9 @@ final class HealthKitManager {
                 pnn50: 0,
                 triangularIndex: 0,
                 stressIndex: 0,
-                autonomicBalance: 0
+                autonomicBalance: 0,
+                recoveryScore: 50,
+                autonomicBalanceScore: 50
             )
         }
         
@@ -517,7 +523,9 @@ final class HealthKitManager {
             pnn50: pnn50,
             triangularIndex: triangularIndex,
             stressIndex: stressIndex,
-            autonomicBalance: autonomicBalance
+            autonomicBalance: autonomicBalance,
+            recoveryScore: min(100, max(0, rmssd * 2)), // Simple recovery score based on RMSSD
+            autonomicBalanceScore: min(100, max(0, autonomicBalance * 100)) // Balance score
         )
     }
     
@@ -840,75 +848,7 @@ final class HealthKitManager {
     }
 }
 
-// MARK: - Data Models
-struct DailyMetrics {
-    let date: Date
-    let hrv: Double?
-    let rhr: Double?
-    let respiratoryRate: Double?
-    let walkingHeartRate: Double?
-    let oxygenSaturation: Double?
-    let sleepDuration: TimeInterval?
-    let deepSleep: TimeInterval?
-    let remSleep: TimeInterval?
-    let bedtime: Date?
-    let wakeTime: Date?
-}
-
-struct EnhancedHRVData {
-    let sdnn: Double
-    let rmssd: Double?
-    let heartRateSamples: [HKQuantitySample]
-    let calculatedMetrics: AdvancedHRVMetrics
-    
-    var hasBeatToBeatData: Bool {
-        return heartRateSamples.count >= 10
-    }
-    
-    var averageHeartRate: Double {
-        let values = heartRateSamples.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) }
-        return values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
-    }
-    
-    var heartRateVariability: Double {
-        return calculatedMetrics.sdnn
-    }
-    
-    var recoveryIndicator: Double {
-        // Higher RMSSD indicates better parasympathetic activity (recovery)
-        guard let rmssd = rmssd, rmssd > 0 else { return 0 }
-        return rmssd / sdnn // RMSSD/SDNN ratio
-    }
-    
-    var stressLevel: Double {
-        // Lower values indicate less stress
-        return max(0, min(100, calculatedMetrics.stressIndex / 10))
-    }
-}
-
-struct AdvancedHRVMetrics {
-    let meanRR: Double          // Mean RR interval
-    let sdnn: Double           // Standard deviation of RR intervals
-    let rmssd: Double          // Root mean square of successive differences
-    let pnn50: Double          // Percentage of successive RR intervals > 50ms
-    let triangularIndex: Double // Triangular index
-    let stressIndex: Double    // Stress index (higher = more stress)
-    let autonomicBalance: Double // RMSSD/SDNN ratio (parasympathetic activity)
-    
-    var recoveryScore: Double {
-        // Higher values indicate better recovery
-        let baseScore = (rmssd / sdnn) * 100
-        let pnn50Bonus = min(pnn50 * 2, 20) // Bonus for high pnn50
-        let stressPenalty = max(0, stressIndex - 50) * 0.5 // Penalty for high stress
-        
-        return max(0, min(100, baseScore + pnn50Bonus - stressPenalty))
-    }
-    
-    var autonomicBalanceScore: Double {
-        // 0-100 score for autonomic balance
-        return max(0, min(100, autonomicBalance * 50))
-    }
-}
+// MARK: - Data Models (now in SharedDataModels.swift)
 
 // MARK: - Extensions
 extension Array where Element == Double {

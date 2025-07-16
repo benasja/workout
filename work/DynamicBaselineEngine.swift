@@ -26,36 +26,107 @@ final class DynamicBaselineEngine {
     
     private init() {}
     
-    private let userFixedBaselines: [String: Any] = [
-        "hrv60": 62.1,
-        "hrv14": 62.1,
-        "rhr60": 60.4,
-        "rhr14": 60.4,
-        "sleepDuration14": 7.05 * 3600, // hours to seconds
-        "bedtime14": { let comps = DateComponents(hour: 13, minute: 53); return Calendar.current.date(from: comps)?.timeIntervalSince1970 ?? 0 }(),
-        "wake14": { let comps = DateComponents(hour: 21, minute: 31); return Calendar.current.date(from: comps)?.timeIntervalSince1970 ?? 0 }(),
-        "walkingHR14": 95.0, // user-provided average walking HR
-        "respiratoryRate14": 15.0, // user-provided average respiratory rate
-        "oxygenSaturation14": 99.0, // user-provided average oxygen saturation
-    ]
-    
     func loadBaselines() {
-        // Always use user-provided fixed baselines
-        hrv60 = userFixedBaselines["hrv60"] as? Double
-        hrv14 = userFixedBaselines["hrv14"] as? Double
-        rhr60 = userFixedBaselines["rhr60"] as? Double
-        rhr14 = userFixedBaselines["rhr14"] as? Double
-        sleepDuration14 = userFixedBaselines["sleepDuration14"] as? Double
-        if let bed = userFixedBaselines["bedtime14"] as? Double { bedtime14 = Date(timeIntervalSince1970: bed) }
-        if let wake = userFixedBaselines["wake14"] as? Double { wake14 = Date(timeIntervalSince1970: wake) }
-        walkingHR14 = userFixedBaselines["walkingHR14"] as? Double
-        respiratoryRate14 = userFixedBaselines["respiratoryRate14"] as? Double
-        oxygenSaturation14 = userFixedBaselines["oxygenSaturation14"] as? Double
+        // Load from UserDefaults first, then calculate from HealthKit if missing
+        if let dict = UserDefaults.standard.dictionary(forKey: baselineKey) {
+            hrv60 = dict["hrv60"] as? Double
+            hrv14 = dict["hrv14"] as? Double
+            rhr60 = dict["rhr60"] as? Double
+            rhr14 = dict["rhr14"] as? Double
+            sleepDuration14 = dict["sleepDuration14"] as? Double
+            if let bed = dict["bedtime14"] as? Double { bedtime14 = Date(timeIntervalSince1970: bed) }
+            if let wake = dict["wake14"] as? Double { wake14 = Date(timeIntervalSince1970: wake) }
+            walkingHR14 = dict["walkingHR14"] as? Double
+            respiratoryRate14 = dict["respiratoryRate14"] as? Double
+            oxygenSaturation14 = dict["oxygenSaturation14"] as? Double
+            
+            print("📋 Loaded baselines from UserDefaults:")
+            print("   HRV 60-day: \(hrv60?.description ?? "nil")")
+            print("   RHR 60-day: \(rhr60?.description ?? "nil")")
+        } else {
+            print("⚠️ No baseline data found in UserDefaults - will calculate from HealthKit")
+        }
     }
     
     func updateAndStoreBaselines(completion: @escaping () -> Void) {
-        // Do nothing, always use fixed baselines
-        completion()
+        print("🔄 Calculating baselines from your Apple Health data...")
+        
+        let group = DispatchGroup()
+        
+        // Fetch 60-day HRV average
+        group.enter()
+        fetchRollingAverage(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), days: 60) { value in
+            self.hrv60 = value
+            print("📊 HRV 60-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 14-day HRV average
+        group.enter()
+        fetchRollingAverage(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), days: 14) { value in
+            self.hrv14 = value
+            print("📊 HRV 14-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 60-day RHR average
+        group.enter()
+        fetchRollingAverage(.restingHeartRate, unit: HKUnit(from: "count/min"), days: 60) { value in
+            self.rhr60 = value
+            print("📊 RHR 60-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 14-day RHR average
+        group.enter()
+        fetchRollingAverage(.restingHeartRate, unit: HKUnit(from: "count/min"), days: 14) { value in
+            self.rhr14 = value
+            print("📊 RHR 14-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 14-day sleep averages
+        group.enter()
+        fetchSleepAverages(days: 14) { duration, bedtime, wakeTime in
+            self.sleepDuration14 = duration
+            self.bedtime14 = bedtime
+            self.wake14 = wakeTime
+            print("📊 Sleep 14-day baselines:")
+            print("   Duration: \((duration ?? 0) / 3600) hours")
+            print("   Bedtime: \(bedtime?.description ?? "nil")")
+            print("   Wake time: \(wakeTime?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 14-day walking HR average
+        group.enter()
+        fetchRollingAverage(.walkingHeartRateAverage, unit: HKUnit(from: "count/min"), days: 14) { value in
+            self.walkingHR14 = value
+            print("📊 Walking HR 14-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 14-day respiratory rate average
+        group.enter()
+        fetchRollingAverage(.respiratoryRate, unit: HKUnit(from: "count/min"), days: 14) { value in
+            self.respiratoryRate14 = value
+            print("📊 Respiratory Rate 14-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        // Fetch 14-day oxygen saturation average
+        group.enter()
+        fetchRollingAverage(.oxygenSaturation, unit: HKUnit.percent(), days: 14) { value in
+            self.oxygenSaturation14 = value
+            print("📊 Oxygen Saturation 14-day baseline: \(value?.description ?? "nil")")
+            group.leave()
+        }
+        
+        group.notify(queue: .main) {
+            self.persistBaselines()
+            print("✅ Baseline calculation completed and persisted")
+            completion()
+        }
     }
     
     // MARK: - Rolling Averages

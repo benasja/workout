@@ -10,6 +10,9 @@ struct WorkoutLibraryView: View {
     @State private var showingHistory = false
     @State private var selectedExercise: ExerciseDefinition?
     @State private var showingExerciseProgress = false
+    @State private var hasSeededData = false
+    @State private var activeWorkout: WorkoutSession?
+    @State private var showingWorkout = false
     
     var body: some View {
         NavigationView {
@@ -149,6 +152,13 @@ struct WorkoutLibraryView: View {
                 .padding()
             }
             .navigationTitle("Train")
+            .onAppear {
+                if !hasSeededData {
+                    DataSeeder.seedExerciseLibrary(modelContext: modelContext)
+                    DataSeeder.seedSamplePrograms(modelContext: modelContext)
+                    hasSeededData = true
+                }
+            }
             .sheet(isPresented: $showingStartWorkoutSheet) {
                 StartWorkoutSheet(
                     programs: programs,
@@ -167,6 +177,11 @@ struct WorkoutLibraryView: View {
                     ExerciseProgressView(exercise: exercise)
                 }
             }
+            .fullScreenCover(isPresented: $showingWorkout) {
+                if let workout = activeWorkout {
+                    WorkoutView(workout: workout)
+                }
+            }
         }
     }
     
@@ -174,7 +189,9 @@ struct WorkoutLibraryView: View {
         let workout = WorkoutSession()
         modelContext.insert(workout)
         try? modelContext.save()
-        // Navigate to workout view
+        
+        activeWorkout = workout
+        showingWorkout = true
     }
     
     private func startProgramWorkout(_ program: Program) {
@@ -182,7 +199,9 @@ struct WorkoutLibraryView: View {
         workout.programName = program.name
         modelContext.insert(workout)
         try? modelContext.save()
-        // Navigate to workout view
+        
+        activeWorkout = workout
+        showingWorkout = true
     }
 }
 

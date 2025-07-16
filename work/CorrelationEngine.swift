@@ -1,4 +1,15 @@
 import Foundation
+import SwiftUI
+
+struct Correlation: Identifiable {
+    let id = UUID()
+    let title: String
+    let description: String
+    let strength: Double // -1.0 to 1.0
+    let insight: String
+    let icon: String
+    let color: Color
+}
 
 struct CorrelationInsight: Identifiable {
     let id = UUID()
@@ -27,11 +38,55 @@ class CorrelationEngine: ObservableObject {
     static let shared = CorrelationEngine()
     
     @Published var insights: [CorrelationInsight] = []
+    @Published var correlations: [Correlation] = []
     
     private let journalManager = JournalManager.shared
     private let healthKitManager = HealthKitManager.shared
     
     private init() {}
+    
+    /// Calculate correlations between different metrics
+    func calculateCorrelations() async {
+        // Sample correlations - in a real app, these would be calculated from actual data
+        let sampleCorrelations = [
+            Correlation(
+                title: "Sleep & Recovery",
+                description: "Better sleep leads to higher recovery scores",
+                strength: 0.78,
+                insight: "Your recovery score is 78% correlated with sleep quality. Focus on consistent sleep for better recovery.",
+                icon: "bed.double.fill",
+                color: .blue
+            ),
+            Correlation(
+                title: "HRV & Stress",
+                description: "High stress days show lower HRV",
+                strength: -0.65,
+                insight: "Stress management could improve your HRV by up to 15%. Consider meditation or breathing exercises.",
+                icon: "heart.fill",
+                color: .red
+            ),
+            Correlation(
+                title: "Exercise & Sleep",
+                description: "Regular workouts improve sleep quality",
+                strength: 0.52,
+                insight: "Days with workouts show 12% better sleep scores. Keep up your training routine!",
+                icon: "figure.run",
+                color: .green
+            ),
+            Correlation(
+                title: "Alcohol & Recovery",
+                description: "Alcohol consumption affects next-day recovery",
+                strength: -0.43,
+                insight: "Alcohol reduces recovery scores by an average of 15 points. Consider limiting intake before important training days.",
+                icon: "wineglass.fill",
+                color: .orange
+            )
+        ]
+        
+        await MainActor.run {
+            self.correlations = sampleCorrelations
+        }
+    }
     
     /// Analyzes supplement impact on health metrics
     func analyzeSupplementImpact() async -> [CorrelationInsight] {

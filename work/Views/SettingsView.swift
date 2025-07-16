@@ -17,6 +17,8 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var userProfile: [UserProfile]
