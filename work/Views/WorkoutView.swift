@@ -105,7 +105,6 @@ struct WorkoutView: View {
         .interactiveDismissDisabled()
         .onAppear {
             startTime = Date()
-            print("WorkoutView appeared with \(workout.completedExercises.count) exercises")
         }
     }
     
@@ -120,12 +119,10 @@ struct WorkoutView: View {
             workout.completedExercises.append(completedExercise)
             modelContext.insert(completedExercise)
             try? modelContext.save()
-            print("Added exercise: \(exercise.name)")
         }
     }
     
     private func finishWorkout() {
-        print("=== FINISHING WORKOUT ===")
         
         workout.duration = Date().timeIntervalSince(startTime)
         workout.isCompleted = true
@@ -140,14 +137,8 @@ struct WorkoutView: View {
             totalSets += exerciseSets.count
         }
         
-        print("✅ Workout completed:")
-        print("   Duration: \(Int(workout.duration / 60)) minutes")
-        print("   Exercises: \(workout.completedExercises.count)")
-        print("   Total sets: \(totalSets)")
-        
         do {
             try modelContext.save()
-            print("✅ Workout saved successfully")
         } catch {
             print("❌ Error saving workout: \(error)")
         }
@@ -483,10 +474,6 @@ struct AddSetView: View {
     }
     
     private func addSet() {
-        print("=== ADDING WORKOUT SET ===")
-        print("Exercise: \(completedExercise.exercise?.name ?? "Unknown")")
-        print("Weight: \(weight) kg, Reps: \(reps)")
-        
         let newSet = WorkoutSet(
             weight: weight,
             reps: reps,
@@ -499,12 +486,6 @@ struct AddSetView: View {
         
         do {
             try modelContext.save()
-            print("✅ Workout set saved successfully")
-            
-            // Verify the save worked
-            let descriptor = FetchDescriptor<WorkoutSet>()
-            let count = try modelContext.fetchCount(descriptor)
-            print("✅ Database now contains \(count) workout sets")
             
         } catch {
             print("❌ Error saving workout set: \(error)")

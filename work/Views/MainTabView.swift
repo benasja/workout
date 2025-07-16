@@ -68,55 +68,55 @@ struct MainTabView: View {
                     }
                     .navigationBarHidden(true)
                 } else {
-                    List {
-                        Section(header: Text("Settings")) {
-                            NavigationLink(destination: SettingsView()) {
-                                Label("Settings", systemImage: "gearshape.fill")
-                            }
-                        }
-                        Section(header: Text("Done")) {
-                            NavigationLink(destination: SleepDetailView().environmentObject(dateModel).environmentObject(tabSelectionModel)) {
-                                Label("Sleep", systemImage: "bed.double.fill")
-                            }
-                            NavigationLink(destination: RecoveryDetailView().environmentObject(dateModel).environmentObject(tabSelectionModel)) {
-                                Label("Recovery", systemImage: "heart.fill")
-                            }
-                            NavigationLink(destination: WeightTrackerView()) {
-                                Label("Weight Tracker", systemImage: "scalemass")
-                            }
-                        }
-                        Section(header: Text("Work in Progress")) {
-                            NavigationLink(destination: JournalView(tabSelection: $tabSelectionModel.selection)) {
-                                Label("Journal", systemImage: "book.closed.fill")
-                            }
-                            NavigationLink(destination: StepsView()) {
-                                Label("Steps", systemImage: "figure.walk")
-                            }
-                            NavigationLink(destination: SupplementsView()) {
-                                Label("Supplements", systemImage: "pills.fill")
-                            }
-                            NavigationLink(destination: WorkoutLibraryView()) {
-                                Label("Workouts", systemImage: "dumbbell.fill")
-                            }
-                            NavigationLink(destination: WorkoutHistoryView()) {
-                                Label("History", systemImage: "clock.arrow.circlepath")
-                            }
-                            NavigationLink(destination: ProgramsView()) {
-                                Label("Programs", systemImage: "list.bullet.rectangle")
-                            }
-                            NavigationLink(destination: ExerciseLibraryView()) {
-                                Label("Exercises", systemImage: "figure.strengthtraining.traditional")
-                            }
-                            NavigationLink(destination: AnalyticsView()) {
-                                Label("Analytics", systemImage: "chart.bar.xaxis")
-                            }
-                            NavigationLink(destination: InsightsView()) {
-                                Label("Insights", systemImage: "lightbulb.fill")
-                            }
+                List {
+                    Section(header: Text("Settings")) {
+                        NavigationLink(destination: SettingsView()) {
+                            Label("Settings", systemImage: "gearshape.fill")
                         }
                     }
-                    .navigationTitle("More")
-                    .listStyle(.insetGrouped)
+                    Section(header: Text("Done")) {
+                        NavigationLink(destination: SleepDetailView().environmentObject(dateModel).environmentObject(tabSelectionModel)) {
+                            Label("Sleep", systemImage: "bed.double.fill")
+                        }
+                        NavigationLink(destination: RecoveryDetailView().environmentObject(dateModel).environmentObject(tabSelectionModel)) {
+                            Label("Recovery", systemImage: "heart.fill")
+                        }
+                        NavigationLink(destination: WeightTrackerView()) {
+                            Label("Weight Tracker", systemImage: "scalemass")
+                        }
+                    }
+                    Section(header: Text("Work in Progress")) {
+                        NavigationLink(destination: JournalView(tabSelection: $tabSelectionModel.selection)) {
+                            Label("Journal", systemImage: "book.closed.fill")
+                        }
+                        NavigationLink(destination: StepsView()) {
+                            Label("Steps", systemImage: "figure.walk")
+                        }
+                        NavigationLink(destination: SupplementsView()) {
+                            Label("Supplements", systemImage: "pills.fill")
+                        }
+                        NavigationLink(destination: WorkoutLibraryView()) {
+                            Label("Workouts", systemImage: "dumbbell.fill")
+                        }
+                        NavigationLink(destination: WorkoutHistoryView()) {
+                            Label("History", systemImage: "clock.arrow.circlepath")
+                        }
+                        NavigationLink(destination: ProgramsView()) {
+                            Label("Programs", systemImage: "list.bullet.rectangle")
+                        }
+                        NavigationLink(destination: ExerciseLibraryView()) {
+                            Label("Exercises", systemImage: "figure.strengthtraining.traditional")
+                        }
+                        NavigationLink(destination: AnalyticsView()) {
+                            Label("Analytics", systemImage: "chart.bar.xaxis")
+                        }
+                        NavigationLink(destination: InsightsView()) {
+                            Label("Insights", systemImage: "lightbulb.fill")
+                        }
+                    }
+                }
+                .navigationTitle("More")
+                .listStyle(.insetGrouped)
                 }
             }
             .tabItem {

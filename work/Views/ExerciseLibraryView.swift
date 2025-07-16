@@ -469,9 +469,6 @@ struct ExerciseDetailView: View {
     // Best 1RM per day
     var best1RMPerDay: [(date: Date, value: Double)] {
         let grouped = Dictionary(grouping: setsForExercise) { Calendar.current.startOfDay(for: $0.date) }
-        for (date, sets) in grouped {
-            print("Group date: \(date), set count: \(sets.count)")
-        }
         return grouped.map { (date, sets) in
             let best = sets.map { $0.estimatedOneRepMax }.max() ?? 0
             return (date, best)

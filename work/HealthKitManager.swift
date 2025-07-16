@@ -916,4 +916,182 @@ extension Array where Element == Double {
         guard !isEmpty else { return 0 }
         return reduce(0, +) / Double(count)
     }
+    func rounded(toPlaces places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self.average * divisor).rounded() / divisor
+    }
+} 
+
+extension Double {
+    func rounded(toPlaces places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self * divisor).rounded() / divisor
+    }
+}
+
+extension HealthKitManager {
+    /// Fetches 90-day averages for HRV, RHR, and sleep duration, and prints them to the console
+    func printNinetyDayAverages() async {
+        let calendar = Calendar.current
+        let endDate = calendar.startOfDay(for: Date())
+        let startDate = calendar.date(byAdding: .day, value: -89, to: endDate) ?? endDate
+        print("\n===== 90-Day Baseline Averages =====")
+        do {
+            let hrvData = try await fetchHRVData(from: startDate, to: endDate)
+            let rhrData = try await fetchRHRData(from: startDate, to: endDate)
+            let sleepData = try await fetchSleepScores(from: startDate, to: endDate)
+            let sleepDurations: [Double] = try await withThrowingTaskGroup(of: Double?.self) { group in
+                for offset in 0..<90 {
+                    if let date = calendar.date(byAdding: .day, value: offset, to: startDate) {
+                        group.addTask {
+                            await withCheckedContinuation { cont in
+                                HealthKitManager.shared.fetchSleep(for: date) { value in
+                                    cont.resume(returning: value?.duration)
+                                }
+                            }
+                        }
+                    }
+                }
+                var durations: [Double] = []
+                for try await d in group {
+                    if let d = d { durations.append(d) }
+                }
+                return durations
+            }
+            let hrvAvg = Array(hrvData.values).average
+            let rhrAvg = Array(rhrData.values).average
+            let sleepScoreAvg = Array(sleepData.values).map { Double($0) }.average
+            let sleepDurationAvg = sleepDurations.average / 3600 // hours
+            print("HRV (ms) 90d avg: \(hrvAvg)")
+            print("RHR (bpm) 90d avg: \(rhrAvg)")
+            print("Sleep Score 90d avg: \(sleepScoreAvg)")
+            print("Sleep Duration 90d avg: \(sleepDurationAvg) hours")
+            print("====================================\n")
+        } catch {
+            print("Failed to fetch 90-day averages: \(error)")
+        }
+    }
+
+    /// Prints a formatted summary of 90-day averages for recovery and sleep metrics
+    func printNinetyDayRecoveryInfo() async {
+        let calendar = Calendar.current
+        let endDate = calendar.startOfDay(for: Date())
+        let startDate = calendar.date(byAdding: .day, value: -89, to: endDate) ?? endDate
+        print("\n===== 90-Day Recovery & Sleep Baseline Averages =====")
+        do {
+            let hrvData = try await fetchHRVData(from: startDate, to: endDate)
+            let rhrData = try await fetchRHRData(from: startDate, to: endDate)
+            let sleepScores = try await fetchSleepScores(from: startDate, to: endDate)
+            let sleepResults = await getDetailedSleepScores(from: startDate, to: endDate)
+            // Time Asleep, Time in Bed, Deep, REM, Efficiency, Avg HR (asleep)
+            var timeInBed: [Double] = []
+            var timeAsleep: [Double] = []
+            var deepSleep: [Double] = []
+            var remSleep: [Double] = []
+            var sleepEfficiency: [Double] = []
+            var avgHR: [Double] = []
+            var bedtimes: [Date] = []
+            var waketimes: [Date] = []
+            for result in sleepResults.values {
+                timeInBed.append(result.details.timeInBed)
+                timeAsleep.append(result.details.timeAsleep)
+                deepSleep.append(result.details.deepSleepDuration)
+                remSleep.append(result.details.remSleepDuration)
+                sleepEfficiency.append(result.details.sleepEfficiency * 100)
+                if let hr = result.details.averageHeartRate { avgHR.append(hr) }
+                if let bt = result.details.bedtime { bedtimes.append(bt) }
+                if let wt = result.details.wakeTime { waketimes.append(wt) }
+            }
+            let avgBedtime = bedtimes.isEmpty ? nil : bedtimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(bedtimes.count)
+            let avgWaketime = waketimes.isEmpty ? nil : waketimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(waketimes.count)
+            let bedtimeStr = avgBedtime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            let waketimeStr = avgWaketime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            print("\nYour 90-Day Baseline Averages\n")
+            print("RHR: \(Array(rhrData.values).average.rounded(toPlaces: 1)) bpm")
+            print("HRV: \(Array(hrvData.values).average.rounded(toPlaces: 1)) ms")
+            print("Sleep Score: \(Array(sleepScores.values).map { Double($0) }.average.rounded(toPlaces: 1)) / 100")
+            print("Time Asleep (Sleep Duration): \((timeAsleep.average / 3600).rounded(toPlaces: 2)) hours")
+            print("\nAverages from Daily Logs (April-July)\n")
+            print("Time in Bed: \((timeInBed.average / 3600).rounded(toPlaces: 2)) hours")
+            print("Sleep Efficiency: \(sleepEfficiency.average.rounded(toPlaces: 1))%")
+            print("Deep Sleep: \((deepSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            print("REM Sleep: \((remSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            print("Average Heart Rate (while asleep): \(avgHR.average.rounded(toPlaces: 1)) bpm")
+            print("Baseline Bedtime (set by app): \(bedtimeStr)")
+            print("Baseline Wake Time (set by app): \(waketimeStr)")
+            print("====================================\n")
+        } catch {
+            print("Failed to fetch 90-day recovery info: \(error)")
+        }
+    }
+
+    /// Fetches all available 90-day averages from Apple Health and prints only the summary in the required format.
+    func printNinetyDaySummary() async {
+        let calendar = Calendar.current
+        let endDate = calendar.startOfDay(for: Date())
+        let startDate = calendar.date(byAdding: .day, value: -89, to: endDate) ?? endDate
+        do {
+            let hrvData = try await fetchHRVData(from: startDate, to: endDate)
+            let rhrData = try await fetchRHRData(from: startDate, to: endDate)
+            let sleepScores = try await fetchSleepScores(from: startDate, to: endDate)
+            let sleepResults = await getDetailedSleepScores(from: startDate, to: endDate)
+            // Time Asleep, Time in Bed, Deep, REM, Efficiency, Avg HR (asleep), Sleep Onset
+            var timeInBed: [Double] = []
+            var timeAsleep: [Double] = []
+            var deepSleep: [Double] = []
+            var remSleep: [Double] = []
+            var sleepEfficiency: [Double] = []
+            var avgHR: [Double] = []
+            var bedtimes: [Date] = []
+            var waketimes: [Date] = []
+            var sleepOnset: [Double] = []
+            for result in sleepResults.values {
+                timeInBed.append(result.details.timeInBed)
+                timeAsleep.append(result.details.timeAsleep)
+                deepSleep.append(result.details.deepSleepDuration)
+                remSleep.append(result.details.remSleepDuration)
+                sleepEfficiency.append(result.details.sleepEfficiency * 100)
+                if let hr = result.details.averageHeartRate { avgHR.append(hr) }
+                if let bt = result.details.bedtime { bedtimes.append(bt) }
+                if let wt = result.details.wakeTime { waketimes.append(wt) }
+                sleepOnset.append(result.timeToFallAsleep)
+            }
+            let avgBedtime = bedtimes.isEmpty ? nil : bedtimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(bedtimes.count)
+            let avgWaketime = waketimes.isEmpty ? nil : waketimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(waketimes.count)
+            let bedtimeStr = avgBedtime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            let waketimeStr = avgWaketime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+
+            // Fetch 90-day Recovery and Stress scores
+            var recoveryScores: [Int] = []
+            var stressScores: [Double] = []
+            var currentDate = startDate
+            while currentDate <= endDate {
+                if let recoveryResult = try? await RecoveryScoreCalculator.shared.calculateRecoveryScore(for: currentDate) {
+                    recoveryScores.append(recoveryResult.finalScore)
+                    stressScores.append(recoveryResult.stressComponent.score)
+                }
+                currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
+            }
+
+            print("\nYour 90-Day Baseline Averages\n")
+            print("RHR: \(Array(rhrData.values).average.rounded(toPlaces: 1)) bpm")
+            print("HRV: \(Array(hrvData.values).average.rounded(toPlaces: 1)) ms")
+            print("Sleep Score: \(Array(sleepScores.values).map { Double($0) }.average.rounded(toPlaces: 1)) / 100")
+            print("Recovery Score: \((recoveryScores.map { Double($0) }.average).rounded(toPlaces: 1)) / 100")
+            print("Stress: \(stressScores.average.rounded(toPlaces: 1)) / 100")
+            print("Time Asleep (Sleep Duration): \((timeAsleep.average / 3600).rounded(toPlaces: 2)) hours")
+            print("Sleep Onset: \(sleepOnset.average.rounded(toPlaces: 1)) min")
+            print("\nAverages from Daily Logs (April-July)\n")
+            print("Time in Bed: \((timeInBed.average / 3600).rounded(toPlaces: 2)) hours")
+            print("Sleep Efficiency: \(sleepEfficiency.average.rounded(toPlaces: 1))%")
+            print("Deep Sleep: \((deepSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            print("REM Sleep: \((remSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            print("Average Heart Rate (while asleep): \(avgHR.average.rounded(toPlaces: 1)) bpm")
+            print("Baseline Bedtime (set by app): \(bedtimeStr)")
+            print("Baseline Wake Time (set by app): \(waketimeStr)")
+            print("====================================\n")
+        } catch {
+            // No output if error
+        }
+    }
 } 

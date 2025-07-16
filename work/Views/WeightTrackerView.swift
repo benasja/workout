@@ -353,7 +353,6 @@ struct WeightEntriesList: View {
         
         do {
             try modelContext.save()
-            print("✅ Deleted \(offsets.count) weight entries")
         } catch {
             print("❌ Error deleting weight entries: \(error)")
         }

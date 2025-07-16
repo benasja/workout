@@ -67,7 +67,6 @@ class PerformanceDashboardViewModel: ObservableObject {
                     sleepScore = Int(recoveryResult.sleepComponent.score)
                     directive = recoveryResult.directive
                 } catch {
-                    print("⚠️ Could not calculate recovery score: \(error)")
                     // Fallback to simple calculation if comprehensive calculation fails
                     let fallbackSleepScore: Int
                     do {
@@ -189,7 +188,6 @@ class PerformanceDashboardViewModel: ObservableObject {
                 )
                 completion(perf)
             } catch {
-                print("⚠️ Could not calculate performance for date \(date): \(error)")
                 completion(nil)
             }
         }

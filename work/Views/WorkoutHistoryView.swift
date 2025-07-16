@@ -315,7 +315,6 @@ struct EditWorkoutView: View {
         
         do {
             try modelContext.save()
-            print("✅ Workout changes saved")
         } catch {
             print("❌ Error saving workout changes: \(error)")
         }
@@ -331,7 +330,6 @@ struct EditWorkoutView: View {
         
         do {
             try modelContext.save()
-            print("✅ Exercise deleted")
         } catch {
             print("❌ Error deleting exercise: \(error)")
         }
@@ -348,7 +346,6 @@ struct EditWorkoutView: View {
         
         do {
             try modelContext.save()
-            print("✅ Workout deleted")
         } catch {
             print("❌ Error deleting workout: \(error)")
         }
@@ -450,7 +447,6 @@ struct EditExerciseView: View {
         
         do {
             try modelContext.save()
-            print("✅ Exercise changes saved")
         } catch {
             print("❌ Error saving exercise changes: \(error)")
         }
@@ -471,7 +467,6 @@ struct EditExerciseView: View {
         
         do {
             try modelContext.save()
-            print("✅ New set added")
         } catch {
             print("❌ Error adding set: \(error)")
         }
@@ -485,7 +480,6 @@ struct EditExerciseView: View {
         
         do {
             try modelContext.save()
-            print("✅ Set deleted")
         } catch {
             print("❌ Error deleting set: \(error)")
         }
@@ -502,7 +496,6 @@ struct EditExerciseView: View {
         
         do {
             try modelContext.save()
-            print("✅ Exercise deleted")
         } catch {
             print("❌ Error deleting exercise: \(error)")
         }

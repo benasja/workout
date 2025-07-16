@@ -393,7 +393,6 @@ class DataSeeder {
                 session.isCompleted = true
                 for programExercise in program.days.first?.exercises ?? [] {
                     if let exercise = programExercise.exercise {
-                        print("Seeding session for \(program.name) - \(exercise.name) on \(sessionDate)")
                         let completedExercise = CompletedExercise(exercise: exercise, targetSets: programExercise.targetSets, targetReps: programExercise.targetReps, warmupSets: programExercise.warmupSets)
                         completedExercise.workoutSession = session
                         session.completedExercises.append(completedExercise)
@@ -530,7 +529,6 @@ class DataSeeder {
         }
         
         try? context.save()
-        print("Seeded \(30) journal entries")
     }
     
     private static func generateNotes(

@@ -50,19 +50,7 @@ struct AnalyticsView: View {
                 }
             }
             .onAppear {
-                print("=== ANALYTICS DEBUG ===")
-                print("Total workouts: \(allWorkouts.count)")
-                print("Completed workouts: \(completedWorkouts.count)")
-                print("Total workout sets: \(workoutSets.count)")
-                
-                for (index, workout) in completedWorkouts.enumerated() {
-                    print("Workout \(index + 1): \(workout.completedExercises.count) exercises")
-                    for exercise in workout.completedExercises {
-                        let exerciseSets = workoutSets.filter { $0.completedExercise?.id == exercise.id }
-                        print("  - \(exercise.exercise?.name ?? "Unknown"): \(exerciseSets.count) sets")
-                    }
-                }
-                print("=== END DEBUG ===")
+                // Force refresh when triggered
             }
             .onChange(of: refreshTrigger) { _, _ in
                 // Force refresh when triggered
@@ -71,14 +59,12 @@ struct AnalyticsView: View {
     }
     
     private func refreshData() {
-        print("=== REFRESHING ANALYTICS ===")
         
         // Force save any pending changes
         do {
             try modelContext.save()
-            print("✅ Model context saved")
         } catch {
-            print("❌ Model context save failed: \(error)")
+            // print("❌ Model context save failed: \(error)")
         }
         
         // Force UI update
@@ -86,7 +72,6 @@ struct AnalyticsView: View {
             refreshTrigger.toggle()
         }
         
-        print("=== END REFRESH ===")
     }
 }
 

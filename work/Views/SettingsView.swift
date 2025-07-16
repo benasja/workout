@@ -30,6 +30,8 @@ struct SettingsView: View {
     @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
     @State private var csvImportDelegate: CSVImportDelegate? = nil
     @State private var showingDeleteAllWeightsAlert = false
+    @State private var showingNinetyDayInfoAlert = false
+    @State private var showingNinetyDayRecoveryInfoAlert = false
     
     var currentWeight: Double {
         weightEntries.first?.weight ?? 0.0
@@ -89,6 +91,13 @@ struct SettingsView: View {
                         forceReauthorization()
                     }
                     .foregroundColor(.blue)
+
+                    Button("Print 90-Day Health Summary") {
+                        Task {
+                            await HealthKitManager.shared.printNinetyDaySummary()
+                        }
+                    }
+                    .foregroundColor(.purple)
                 }
 
                 Section("Data") {
@@ -241,24 +250,18 @@ struct SettingsView: View {
     }
     
     private func testDatabase() {
-        print("=== DATABASE TEST ===")
-        
         // Test 1: Create a test weight entry
         let testEntry = WeightEntry(date: Date(), weight: 75.5, notes: "Test entry")
         modelContext.insert(testEntry)
-        print("Created test weight entry: \(testEntry.weight) kg")
         
         // Test 2: Create a test user profile
         let testProfile = UserProfile(name: "Test User", height: 180)
         modelContext.insert(testProfile)
-        print("Created test profile: \(testProfile.name)")
         
         // Test 3: Save the data
         do {
             try modelContext.save()
-            print("✅ Database save successful")
         } catch {
-            print("❌ Database save failed: \(error)")
             return
         }
         
@@ -267,29 +270,16 @@ struct SettingsView: View {
             let weightDescriptor = FetchDescriptor<WeightEntry>()
             let profileDescriptor = FetchDescriptor<UserProfile>()
             
-            let weightEntries = try modelContext.fetch(weightDescriptor)
-            let profiles = try modelContext.fetch(profileDescriptor)
+            let _ = try modelContext.fetch(weightDescriptor)
+            let _ = try modelContext.fetch(profileDescriptor)
             
-            print("✅ Database query successful")
-            print("   Weight entries: \(weightEntries.count)")
-            print("   Profiles: \(profiles.count)")
-            
-            if !weightEntries.isEmpty {
-                print("   Latest weight: \(weightEntries.first?.weight ?? 0) kg")
-            }
-            if !profiles.isEmpty {
-                print("   Profile name: \(profiles.first?.name ?? "Unknown")")
-            }
+            //
         } catch {
-            print("❌ Database query failed: \(error)")
+            //
         }
-        
-        print("=== END TEST ===")
     }
     
     private func diagnoseDatabase() {
-        print("=== DIAGNOSE DATABASE ===")
-        
         // Test each entity type individually to see which ones are accessible
         diagnoseEntity("WeightEntry") {
             let descriptor = FetchDescriptor<WeightEntry>()
@@ -338,47 +328,38 @@ struct SettingsView: View {
         
         // Test basic save/query cycle
         testBasicDatabaseOperations()
-        
-        print("=== END DIAGNOSE ===")
     }
     
     private func testBasicDatabaseOperations() {
-        print("--- Testing Basic Database Operations ---")
-        
         // Test 1: Create and immediately query
         let testEntry = WeightEntry(date: Date(), weight: 100.0, notes: "BASIC TEST")
         modelContext.insert(testEntry)
         
         do {
             try modelContext.save()
-            print("✅ Basic test entry saved")
             
             let descriptor = FetchDescriptor<WeightEntry>()
-            let entries = try modelContext.fetch(descriptor)
-            print("✅ Basic query returned \(entries.count) entries")
+            let _ = try modelContext.fetch(descriptor)
             
             // Clean up
             modelContext.delete(testEntry)
             try modelContext.save()
-            print("✅ Basic test cleaned up")
             
         } catch {
-            print("❌ Basic database test failed: \(error)")
+            //
         }
     }
     
     private func diagnoseEntity(_ name: String, _ operation: () throws -> Int) {
         do {
-            let count = try operation()
-            print("✅ \(name): \(count) records")
+            let _ = try operation()
+            //
         } catch {
-            print("❌ \(name): Error - \(error.localizedDescription)")
+            //
         }
     }
     
     private func clearAllData() {
-        print("=== CLEARING ALL DATA ===")
-        
         // Try to clear data safely, but don't crash if entities don't exist
         do {
             // Try to delete each entity type individually
@@ -393,16 +374,12 @@ struct SettingsView: View {
             try? modelContext.delete(model: UserProfile.self)
             
             try modelContext.save()
-            print("✅ All data cleared successfully")
         } catch {
-            print("❌ Error clearing data: \(error)")
-            print("⚠️ Database may be corrupted. Try 'Force Reset Database' instead.")
+            //
         }
     }
     
     private func forceResetDatabase() {
-        print("=== FORCE RESET DATABASE ===")
-        
         // Try to completely destroy the database
         do {
             // Delete all entities with error handling
@@ -417,13 +394,11 @@ struct SettingsView: View {
             try? modelContext.delete(model: UserProfile.self)
             
             try modelContext.save()
-            print("✅ Database cleared")
         } catch {
-            print("❌ Error clearing database: \(error)")
+            //
         }
         
         // Show a message to the user before exiting
-        print("⚠️ Database is corrupted. Exiting app safely...")
         
         // Show an alert to the user
         DispatchQueue.main.async {
@@ -449,14 +424,11 @@ struct SettingsView: View {
     }
     
     private func refreshViews() {
-        print("=== REFRESHING VIEWS ===")
-        
         // Force a save to ensure all pending changes are persisted
         do {
             try modelContext.save()
-            print("✅ Model context saved")
         } catch {
-            print("❌ Model context save failed: \(error)")
+            //
         }
         
         // Query all data to verify it exists
@@ -465,36 +437,17 @@ struct SettingsView: View {
             let profileDescriptor = FetchDescriptor<UserProfile>()
             let workoutDescriptor = FetchDescriptor<WorkoutSession>()
             
-            let weightEntries = try modelContext.fetch(weightDescriptor)
-            let profiles = try modelContext.fetch(profileDescriptor)
-            let workouts = try modelContext.fetch(workoutDescriptor)
+            let _ = try modelContext.fetch(weightDescriptor)
+            let _ = try modelContext.fetch(profileDescriptor)
+            let _ = try modelContext.fetch(workoutDescriptor)
             
-            print("✅ Data verification successful")
-            print("   Weight entries: \(weightEntries.count)")
-            print("   Profiles: \(profiles.count)")
-            print("   Workouts: \(workouts.count)")
-            
-            // Print details of each weight entry
-            for (index, entry) in weightEntries.enumerated() {
-                print("   Weight entry \(index + 1): \(entry.weight) kg on \(entry.date)")
-            }
+            //
         } catch {
-            print("❌ Data verification failed: \(error)")
+            //
         }
-        
-        print("=== END REFRESH ===")
     }
     
     private func nuclearReset() {
-        print("=== NUCLEAR RESET ===")
-        print("⚠️ Database is completely corrupted. Nuclear reset required.")
-        print("📱 Instructions for complete reset:")
-        print("1. Exit this app")
-        print("2. Go to iOS Simulator")
-        print("3. Device → Erase All Content and Settings")
-        print("4. Reinstall the app")
-        print("5. This will give you a completely fresh database")
-        
         // Show detailed instructions
         DispatchQueue.main.async {
             let alert = UIAlertController(
@@ -523,16 +476,13 @@ struct SettingsView: View {
         do {
             try? modelContext.delete(model: WeightEntry.self)
             try modelContext.save()
-            print("✅ All weight entries deleted")
         } catch {
-            print("❌ Error deleting all weight entries: \(error)")
+            //
         }
         refreshViews()
     }
     
     private func resetHealthBaselines() {
-        print("🔄 Resetting health baselines...")
-        
         // Reset baselines
         DynamicBaselineEngine.shared.resetBaselines()
         
@@ -542,42 +492,35 @@ struct SettingsView: View {
         // Re-request authorization and rebuild baselines
         HealthKitManager.shared.requestAuthorization { success in
             if success {
-                print("✅ Authorization granted, rebuilding baselines with personal data...")
                 DynamicBaselineEngine.shared.updateAndStoreBaselines {
-                    print("✅ Health baselines reset and rebuilt with personal data")
+                    //
                 }
             } else {
-                print("❌ Authorization denied - cannot access personal health data")
+                //
             }
         }
     }
     
     private func syncHealthData() {
-        print("🔄 Syncing health data...")
         HealthKitManager.shared.requestAuthorization { success in
             if success {
-                print("✅ Health data sync successful")
-                // Update baselines with fresh data
                 DynamicBaselineEngine.shared.updateAndStoreBaselines {
-                    print("✅ Health baselines updated with fresh data")
+                    //
                 }
             } else {
-                print("❌ Health data sync failed - authorization denied")
+                //
             }
         }
     }
     
     private func forceReauthorization() {
-        print("🔄 Force re-requesting HealthKit authorization...")
         HealthKitManager.shared.forceReauthorization { success in
             if success {
-                print("✅ HealthKit re-authorization successful")
-                // Rebuild baselines after successful authorization
                 DynamicBaselineEngine.shared.updateAndStoreBaselines {
-                    print("✅ Baselines rebuilt after re-authorization")
+                    //
                 }
             } else {
-                print("❌ HealthKit re-authorization failed")
+                //
             }
         }
     }
@@ -605,7 +548,7 @@ class CSVImportDelegate: NSObject, UIDocumentPickerDelegate {
                 importCSV(text)
             }
         } catch {
-            print("❌ Failed to read CSV: \(error)")
+            //
         }
     }
     private func importCSV(_ text: String) {
@@ -645,7 +588,8 @@ class CSVImportDelegate: NSObject, UIDocumentPickerDelegate {
             let entry = WeightEntry(date: date, weight: weight!)
             modelContext.insert(entry)
         }
-        do { try modelContext.save() } catch { print("❌ Save error: \(error)") }
+        do { try modelContext.save() } catch { //
+        }
         onImport()
     }
 }

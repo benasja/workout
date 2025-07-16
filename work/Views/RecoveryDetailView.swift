@@ -278,76 +278,119 @@ struct RecoveryDetailView: View {
         guard let current = current, let previous = previous, previous != 0 else { return nil }
         return ((current - previous) / previous) * 100
     }
+    private func feedbackLabel(for score: Double) -> String {
+        switch score {
+        case 90...:
+            return "Excellent"
+        case 80..<90:
+            return "Good"
+        case 70..<80:
+            return "Fair"
+        case 60..<70:
+            return "Poor"
+        default:
+            return "Critical"
+        }
+    }
     private func generateInsightsList(from result: RecoveryScoreResult) -> [String] {
         var insights: [String] = []
-        
-        // HRV Insights - based on the actual ratio and score
-        if let hrvValue = result.hrvComponent.currentValue, let baseline = result.hrvComponent.baseline {
-            let ratio = hrvValue / baseline
-            let percentageDiff = (ratio - 1) * 100
-            
-            if ratio >= 1.1 {
-                insights.append("Your HRV is \(Int(percentageDiff))% above baseline - excellent recovery")
-            } else if ratio >= 1.0 {
-                insights.append("Your HRV is \(Int(percentageDiff))% above baseline - good recovery")
-            } else if ratio >= 0.9 {
-                insights.append("Your HRV is \(Int(abs(percentageDiff)))% below baseline - moderate recovery")
+        // User baselines
+        let baselineHRV = 62.1
+        let baselineRHR = 60.4
+        let baselineSleep = 53.7
+        let baselineStress = 87.9
+        let baselineWalkingHR = 95.0
+        let baselineRespiratory = 15.0
+        let baselineOxygen = 99.0
+        // HRV
+        if let hrvValue = result.hrvComponent.currentValue, let _ = result.hrvComponent.baseline {
+            let diff = hrvValue - baselineHRV
+            if abs(diff) < 2 {
+                insights.append("Excellent: HRV matches your baseline (")
+            } else if abs(diff) < 5 {
+                insights.append("Good: HRV is close to your baseline (")
+            } else if abs(diff) < 10 {
+                insights.append("Fair: HRV is somewhat off baseline (")
             } else {
-                insights.append("Your HRV is \(Int(abs(percentageDiff)))% below baseline - consider rest")
-            }
-            
-            // Add context about the score
-            if result.hrvComponent.score >= 80 {
-                insights.append("HRV score indicates good readiness despite baseline comparison")
-            } else if result.hrvComponent.score < 60 {
-                insights.append("HRV score suggests reduced recovery readiness")
+                insights.append("Poor: HRV is far from your baseline (")
             }
         }
-        
-        // RHR Insights
-        if let rhrValue = result.rhrComponent.currentValue, let baseline = result.rhrComponent.baseline {
-            let ratio = baseline / rhrValue
-            let percentageDiff = (ratio - 1) * 100
-            
-            if ratio >= 1.05 {
-                insights.append("Your RHR is \(Int(percentageDiff))% below baseline - good cardiovascular recovery")
-            } else if ratio >= 1.0 {
-                insights.append("Your RHR is at baseline level - normal cardiovascular status")
-            } else if ratio >= 0.95 {
-                insights.append("Your RHR is \(Int(abs(percentageDiff)))% above baseline - may indicate stress")
+        // RHR
+        if let rhrValue = result.rhrComponent.currentValue, let _ = result.rhrComponent.baseline {
+            let diff = rhrValue - baselineRHR
+            if abs(diff) < 2 {
+                insights.append("Excellent: RHR matches your baseline (")
+            } else if abs(diff) < 5 {
+                insights.append("Good: RHR is close to your baseline (")
+            } else if abs(diff) < 10 {
+                insights.append("Fair: RHR is somewhat off baseline (")
             } else {
-                insights.append("Your RHR is \(Int(abs(percentageDiff)))% above baseline - consider stress management")
+                insights.append("Poor: RHR is far from your baseline (")
             }
         }
-        
-        // Sleep Insights
-        if result.sleepComponent.score >= 80 {
-            insights.append("Excellent sleep quality supports your recovery")
-        } else if result.sleepComponent.score >= 70 {
-            insights.append("Good sleep quality contributes to recovery")
-        } else if result.sleepComponent.score < 60 {
-            insights.append("Poor sleep quality may be limiting recovery")
-        }
-        
-        // Stress Insights
-        if result.stressComponent.score < 70 {
-            insights.append("Elevated stress indicators detected - consider stress management")
-        } else if result.stressComponent.score >= 90 {
-            insights.append("Low stress indicators - good autonomic balance")
-        }
-        
-        // Overall Recovery Insights
-        if result.finalScore >= 85 {
-            insights.append("You're primed for high-intensity training")
-        } else if result.finalScore >= 70 {
-            insights.append("Good recovery status - moderate training recommended")
-        } else if result.finalScore >= 50 {
-            insights.append("Moderate recovery - consider light training or rest")
+        // Sleep Score
+        let sleepDiff = result.sleepComponent.score - baselineSleep
+        if abs(sleepDiff) < 2 {
+            insights.append("Excellent: Sleep score matches your baseline (")
+        } else if abs(sleepDiff) < 5 {
+            insights.append("Good: Sleep score is close to your baseline (")
+        } else if abs(sleepDiff) < 10 {
+            insights.append("Fair: Sleep score is somewhat off baseline (")
         } else {
-            insights.append("Focus on rest and recovery activities today")
+            insights.append("Poor: Sleep score is far from your baseline (")
         }
-        
-        return insights.isEmpty ? ["No specific insights available for this date"] : insights
+        // Stress
+        let stressDiff = result.stressComponent.score - baselineStress
+        if abs(stressDiff) < 5 {
+            insights.append("Excellent: Stress matches your baseline (")
+        } else if abs(stressDiff) < 10 {
+            insights.append("Good: Stress is close to your baseline (")
+        } else if abs(stressDiff) < 20 {
+            insights.append("Fair: Stress is somewhat off baseline (")
+        } else {
+            insights.append("Poor: Stress is far from your baseline (")
+        }
+        // Walking HR
+        if let walkHR = result.stressComponent.currentValue {
+            let diff = walkHR - baselineWalkingHR
+            if abs(diff) < 2 {
+                insights.append("Excellent: Walking HR matches your baseline (")
+            } else if abs(diff) < 5 {
+                insights.append("Good: Walking HR is close to your baseline (")
+            } else if abs(diff) < 10 {
+                insights.append("Fair: Walking HR is somewhat off baseline (")
+            } else {
+                insights.append("Poor: Walking HR is far from your baseline (")
+            }
+        }
+        // Respiratory Rate
+        if let resp = result.stressComponent.currentValue {
+            let diff = resp - baselineRespiratory
+            if abs(diff) < 2 {
+                insights.append("Excellent: Respiratory rate matches your baseline (")
+            } else if abs(diff) < 5 {
+                insights.append("Good: Respiratory rate is close to your baseline (")
+            } else if abs(diff) < 10 {
+                insights.append("Fair: Respiratory rate is somewhat off baseline (")
+            } else {
+                insights.append("Poor: Respiratory rate is far from your baseline (")
+            }
+        }
+        // Oxygen Saturation
+        if let oxygen = result.stressComponent.currentValue {
+            let diff = oxygen - baselineOxygen
+            if abs(diff) < 1 {
+                insights.append("Excellent: Oxygen saturation matches your baseline (")
+            } else if abs(diff) < 2 {
+                insights.append("Good: Oxygen saturation is close to your baseline (")
+            } else if abs(diff) < 5 {
+                insights.append("Fair: Oxygen saturation is somewhat off baseline (")
+            } else {
+                insights.append("Poor: Oxygen saturation is far from your baseline (")
+            }
+        }
+        // Add more metrics as needed
+        return insights
     }
 }
 

@@ -18,6 +18,13 @@ final class DailyJournal {
     var rhr: Double?
     var sleepDuration: TimeInterval?
     
+    enum Wellness: String, Codable, CaseIterable {
+        case excellent, good, fair, poor
+    }
+    var wellness: Wellness? = nil
+    var alcohol: Bool = false
+    var illness: Bool = false
+    
     init(date: Date = Date(), consumedAlcohol: Bool = false, caffeineAfter2PM: Bool = false, ateLate: Bool = false, highStressDay: Bool = false, tookMagnesium: Bool = false, tookAshwagandha: Bool = false, notes: String? = nil) {
         self.id = UUID()
         self.date = date

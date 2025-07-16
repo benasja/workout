@@ -264,57 +264,19 @@ struct SleepDetailView: View {
     }
     private func generateInsightsList(from result: SleepScoreResult) -> [String] {
         var insights: [String] = []
-        let hoursAsleep = result.timeAsleep / 3600
-        let formattedTime = formatTimeInHoursAndMinutes(hoursAsleep)
-        if hoursAsleep >= 7.0 && hoursAsleep <= 9.0 {
-            insights.append("Optimal sleep duration of \(formattedTime)")
-        } else if hoursAsleep < 7.0 {
-            insights.append("Sleep duration of \(formattedTime) may be insufficient")
-        } else {
-            insights.append("Sleep duration of \(formattedTime) is longer than typical")
-        }
-        let efficiency = result.sleepEfficiency * 100
-        if efficiency >= 90 {
-            insights.append("Excellent sleep efficiency of \(Int(efficiency))%")
-        } else if efficiency >= 80 {
-            insights.append("Good sleep efficiency of \(Int(efficiency))%")
-        } else {
-            insights.append("Sleep efficiency of \(Int(efficiency))% could be improved")
-        }
-        let deepPercentage = result.deepSleepPercentage * 100
-        if deepPercentage >= 13 && deepPercentage <= 23 {
-            insights.append("Optimal deep sleep of \(String(format: "%.1f", deepPercentage))%")
-        } else if deepPercentage < 13 {
-            insights.append("Deep sleep of \(String(format: "%.1f", deepPercentage))% is below optimal range")
-        } else {
-            insights.append("Deep sleep of \(String(format: "%.1f", deepPercentage))% is above typical range")
-        }
-        let remPercentage = result.remSleepPercentage * 100
-        if remPercentage >= 20 && remPercentage <= 25 {
-            insights.append("Optimal REM sleep of \(String(format: "%.1f", remPercentage))%")
-        } else if remPercentage < 20 {
-            insights.append("REM sleep of \(String(format: "%.1f", remPercentage))% is below optimal range")
-        } else {
-            insights.append("REM sleep of \(String(format: "%.1f", remPercentage))% is above typical range")
-        }
-        let fallAsleepTime = result.timeToFallAsleep
-        if fallAsleepTime <= 15 {
-            insights.append("Quick sleep onset of \(Int(fallAsleepTime)) minutes")
-        } else if fallAsleepTime <= 30 {
-            insights.append("Normal sleep onset of \(Int(fallAsleepTime)) minutes")
-        } else {
-            insights.append("Sleep onset took \(Int(fallAsleepTime)) minutes - consider sleep hygiene")
-        }
-        if result.finalScore >= 85 {
-            insights.append("Exceptional sleep quality - your body is well-rested")
-        } else if result.finalScore >= 70 {
-            insights.append("Good sleep quality - maintain your current routine")
-        } else if result.finalScore >= 50 {
-            insights.append("Fair sleep quality - consider improving sleep habits")
-        } else {
-            insights.append("Poor sleep quality - focus on sleep hygiene and schedule")
-        }
-        return insights.isEmpty ? ["No specific insights available for this date"] : insights
+        // Use subscores and feedbackLabel for all metrics
+        let durationScore = calculateDurationScore(from: result)
+        insights.append("\(feedbackLabel(for: durationScore)): Sleep duration")
+        let efficiencyScore = result.efficiencyComponent
+        insights.append("\(feedbackLabel(for: efficiencyScore)): Sleep efficiency")
+        let deepScore = calculateDeepSleepScore(from: result)
+        insights.append("\(feedbackLabel(for: deepScore)): Deep sleep")
+        let remScore = calculateREMSleepScore(from: result)
+        insights.append("\(feedbackLabel(for: remScore)): REM sleep")
+        let onsetScore = calculateOnsetScore(from: result)
+        insights.append("\(feedbackLabel(for: onsetScore)): Sleep onset")
+        // Add more metrics as needed
+        return insights
     }
     
     // MARK: - Score Calculation Helpers
@@ -367,6 +329,21 @@ struct SleepDetailView: View {
         let maxDeviation = (maxValue - min) / 2
         let normalizedDeviation = deviation / maxDeviation
         return 100 - (normalizedDeviation * normalizedDeviation * 40)
+    }
+    
+    private func feedbackLabel(for score: Double) -> String {
+        switch score {
+        case 90...:
+            return "Excellent"
+        case 80..<90:
+            return "Good"
+        case 70..<80:
+            return "Fair"
+        case 60..<70:
+            return "Poor"
+        default:
+            return "Critical"
+        }
     }
 }
 

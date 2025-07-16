@@ -34,46 +34,15 @@ class RecoveryScoreCalculator {
     /// Calculates the comprehensive Recovery Score for a given date using the FINAL CALIBRATED algorithm
     /// Total_Recovery_Score = (HRV_Component * 0.50) + (RHR_Component * 0.25) + (Sleep_Component * 0.15) + (Stress_Component * 0.10)
     func calculateRecoveryScore(for date: Date) async throws -> RecoveryScoreResult {
-        print("🔄 Calculating FINAL CALIBRATED Recovery Score for \(date)")
         
         // Use the same date logic as SleepScoreCalculator - date is the wake date
         let sleepDate = date
-        print("🔄 Sleep data will be fetched for wake date: \(sleepDate)")
         
         // Fetch all required health data for the date
         let metrics = try await fetchHealthMetrics(for: date, sleepDate: sleepDate)
         
-        print("🔍 Recovery Score Input Data:")
-        print("   HRV: \(metrics.hrv ?? 0)")
-        print("   RHR: \(metrics.rhr ?? 0)")
-        print("   Sleep Score: \(metrics.sleepScore ?? 0)")
-        print("   Walking HR: \(metrics.walkingHeartRate ?? 0)")
-        print("   Respiratory Rate: \(metrics.respiratoryRate ?? 0)")
-        print("   Oxygen Saturation: \(metrics.oxygenSaturation ?? 0)")
-        
-        // Enhanced HRV Analysis
-        if let enhancedHRV = metrics.enhancedHRV {
-            print("🔍 Enhanced HRV Analysis:")
-            print("   SDNN: \(enhancedHRV.sdnn)ms")
-            print("   RMSSD: \(enhancedHRV.rmssd ?? 0)ms")
-            print("   Beat-to-beat samples: \(enhancedHRV.heartRateSamples.count)")
-            print("   Recovery Indicator: \(enhancedHRV.recoveryIndicator)")
-            print("   Stress Level: \(enhancedHRV.stressLevel)")
-            print("   Advanced Metrics:")
-            print("     pNN50: \(enhancedHRV.calculatedMetrics.pnn50)%")
-            print("     Autonomic Balance: \(enhancedHRV.calculatedMetrics.autonomicBalance)")
-            print("     Recovery Score: \(enhancedHRV.calculatedMetrics.recoveryScore)")
-        }
-        
         // Get baseline data
         baselineEngine.loadBaselines()
-        
-        print("🔍 Baseline Data:")
-        print("   HRV 60-day: \(baselineEngine.hrv60?.description ?? "nil")")
-        print("   RHR 60-day: \(baselineEngine.rhr60?.description ?? "nil")")
-        print("   Walking HR 14-day: \(baselineEngine.walkingHR14?.description ?? "nil")")
-        print("   Respiratory Rate 14-day: \(baselineEngine.respiratoryRate14?.description ?? "nil")")
-        print("   Oxygen Saturation 14-day: \(baselineEngine.oxygenSaturation14?.description ?? "nil")")
         
         // Calculate each component using the FINAL CALIBRATED algorithm
         let hrvComponent = calculateHRVComponent(
@@ -118,13 +87,6 @@ class RecoveryScoreCalculator {
             sleepComponent: sleepComponent,
             stressComponent: stressComponent
         )
-        
-        print("✅ FINAL CALIBRATED Recovery Score calculated: \(finalScore)")
-        print("   HRV: \(String(format: "%.1f", hrvComponent.score)) (weight: 50%)")
-        print("   RHR: \(String(format: "%.1f", rhrComponent.score)) (weight: 25%)")
-        print("   Sleep: \(String(format: "%.1f", sleepComponent.score)) (weight: 15%)")
-        print("   Stress: \(String(format: "%.1f", stressComponent.score)) (weight: 10%)")
-        print("   Total Score: \(String(format: "%.1f", totalRecoveryScore))")
         
         return RecoveryScoreResult(
             finalScore: finalScore,
@@ -297,6 +259,9 @@ class RecoveryScoreCalculator {
     /// Stress Component (10% Weight)
     /// Measures deviation from the norm using WalkingHeartRateAverage, RespiratoryRate, and OxygenSaturation
     /// More sensitive scoring that better reflects stress levels
+    // User-provided fixed baselines for stress metrics
+    private let userFixedStressBaselines: (walkingHR: Double, respiratoryRate: Double, oxygenSaturation: Double, stress: Double) = (0, 0, 0, 87.9)
+
     private func calculateStressComponent(
         walkingHR: Double?,
         respiratoryRate: Double?,
@@ -307,64 +272,58 @@ class RecoveryScoreCalculator {
     ) -> RecoveryScoreResult.RecoveryComponent {
         var deviations: [Double] = []
         var availableMetrics: [String] = []
-        
-        // Calculate respiratory rate deviation with higher sensitivity
-        if let respRate = respiratoryRate, let baselineResp = baselineRespiratoryRate, baselineResp > 0 {
-            let deviation = abs((respRate - baselineResp) / baselineResp) * 100
-            // Apply higher penalty for respiratory rate changes
+
+        // Use user-provided fixed baselines if available
+        let fixedWalkingHR = userFixedStressBaselines.walkingHR
+        let fixedRespiratoryRate = userFixedStressBaselines.respiratoryRate
+        let fixedOxygenSaturation = userFixedStressBaselines.oxygenSaturation
+        let fixedStress = userFixedStressBaselines.stress
+
+        // Calculate respiratory rate deviation
+        if let respRate = respiratoryRate, fixedRespiratoryRate > 0 {
+            let deviation = abs((respRate - fixedRespiratoryRate) / fixedRespiratoryRate) * 100
             deviations.append(deviation * 1.5)
             availableMetrics.append("Respiratory Rate")
         }
-        
-        // Calculate oxygen saturation deviation with higher sensitivity
-        if let oxSat = oxygenSaturation, let baselineOx = baselineOxygenSaturation, baselineOx > 0 {
-            let deviation = abs((oxSat - baselineOx) / baselineOx) * 100
-            // Apply higher penalty for oxygen saturation changes
+        // Calculate oxygen saturation deviation
+        if let oxSat = oxygenSaturation, fixedOxygenSaturation > 0 {
+            let deviation = abs((oxSat - fixedOxygenSaturation) / fixedOxygenSaturation) * 100
             deviations.append(deviation * 2.0)
             availableMetrics.append("Oxygen Saturation")
         }
-        
-        // Calculate walking heart rate deviation with higher sensitivity
-        if let walkHR = walkingHR, let baselineWalk = baselineWalkingHR, baselineWalk > 0 {
-            let deviation = abs((walkHR - baselineWalk) / baselineWalk) * 100
-            // Apply higher penalty for walking HR changes
+        // Calculate walking heart rate deviation
+        if let walkHR = walkingHR, fixedWalkingHR > 0 {
+            let deviation = abs((walkHR - fixedWalkingHR) / fixedWalkingHR) * 100
             deviations.append(deviation * 1.2)
             availableMetrics.append("Walking Heart Rate")
         }
-        
-        guard !deviations.isEmpty else {
+
+        // If no metrics, use fixed stress value
+        if deviations.isEmpty {
             return RecoveryScoreResult.RecoveryComponent(
-                score: 50.0, // Neutral score when no stress metrics available
+                score: fixedStress,
                 weight: 0.10,
-                contribution: 5.0,
+                contribution: fixedStress * 0.10,
                 baseline: nil,
                 currentValue: nil,
-                description: "Stress metrics unavailable"
+                description: "User fixed stress baseline"
             )
         }
-        
+
         // Calculate weighted average deviation
         let averageDeviation = deviations.reduce(0, +) / Double(deviations.count)
-        
-        // More sensitive stress scoring: exponential penalty for deviations
         let stressScore: Double
         if averageDeviation <= 5.0 {
-            // Low stress
             stressScore = 100 - (averageDeviation * 2.0)
         } else if averageDeviation <= 15.0 {
-            // Moderate stress
             stressScore = 90 - ((averageDeviation - 5.0) * 3.0)
         } else {
-            // High stress - exponential penalty
             let excessDeviation = averageDeviation - 15.0
             stressScore = max(0, 75 - (excessDeviation * excessDeviation * 0.5))
         }
-        
         let clampedStressScore = clamp(stressScore, min: 0, max: 100)
         let contribution = clampedStressScore * 0.10
-        
-        let description = "Stress level based on \(availableMetrics.joined(separator: ", ")) - \(String(format: "%.1f", averageDeviation))% deviation from baseline"
-        
+        let description = "Stress level based on user baseline - \(String(format: "%.1f", averageDeviation))% deviation from baseline"
         return RecoveryScoreResult.RecoveryComponent(
             score: clampedStressScore,
             weight: 0.10,
@@ -384,7 +343,6 @@ class RecoveryScoreCalculator {
     private func fetchHealthMetrics(for date: Date, sleepDate: Date) async throws -> (hrv: Double?, rhr: Double?, sleepScore: Int?, walkingHeartRate: Double?, respiratoryRate: Double?, oxygenSaturation: Double?, enhancedHRV: EnhancedHRVData?) {
         // Check authorization first
         guard HealthKitManager.shared.checkAuthorizationStatus() else {
-            print("❌ HealthKit authorization not granted - cannot fetch health metrics")
             throw RecoveryScoreError.healthKitNotAuthorized
         }
         
@@ -413,30 +371,9 @@ class RecoveryScoreCalculator {
             group.enter()
             Task {
                 do {
-                    print("🔍 Attempting to calculate sleep score for recovery...")
-                    print("   Sleep Date (wake date): \(sleepDate)")
-                    print("   Sleep Date components: \(Calendar.current.dateComponents([.year, .month, .day], from: sleepDate))")
-                    
                     let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: sleepDate)
                     sleepScore = sleepResult.finalScore
-                    print("✅ Sleep score calculated successfully: \(sleepScore ?? 0)")
-                    print("   Sleep details: \(sleepResult.timeInBed / 3600)h in bed, \(sleepResult.timeAsleep / 3600)h asleep")
-                    print("   Sleep score breakdown: Restoration \(sleepResult.qualityComponent), Efficiency \(sleepResult.efficiencyComponent), Consistency \(sleepResult.timingComponent)")
                 } catch {
-                    print("⚠️ Could not calculate sleep score for recovery: \(error)")
-                    print("   Error details: \(error.localizedDescription)")
-                    if let sleepError = error as? SleepScoreError {
-                        switch sleepError {
-                        case .noSleepData:
-                            print("   No sleep data available for this date")
-                        case .healthKitNotAvailable:
-                            print("   HealthKit not available")
-                        case .noHeartRateData:
-                            print("   No heart rate data available")
-                        case .insufficientData:
-                            print("   Insufficient data to calculate sleep score")
-                        }
-                    }
                     // Don't set a random value - keep it nil so the sleep component can handle missing data
                     sleepScore = nil
                 }

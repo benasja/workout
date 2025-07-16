@@ -26,61 +26,36 @@ final class DynamicBaselineEngine {
     
     private init() {}
     
-    // MARK: - Update and Store Baselines
+    private let userFixedBaselines: [String: Any] = [
+        "hrv60": 62.1,
+        "hrv14": 62.1,
+        "rhr60": 60.4,
+        "rhr14": 60.4,
+        "sleepDuration14": 7.05 * 3600, // hours to seconds
+        "bedtime14": { let comps = DateComponents(hour: 13, minute: 53); return Calendar.current.date(from: comps)?.timeIntervalSince1970 ?? 0 }(),
+        "wake14": { let comps = DateComponents(hour: 21, minute: 31); return Calendar.current.date(from: comps)?.timeIntervalSince1970 ?? 0 }(),
+        "walkingHR14": 95.0, // user-provided average walking HR
+        "respiratoryRate14": 15.0, // user-provided average respiratory rate
+        "oxygenSaturation14": 99.0, // user-provided average oxygen saturation
+    ]
+    
+    func loadBaselines() {
+        // Always use user-provided fixed baselines
+        hrv60 = userFixedBaselines["hrv60"] as? Double
+        hrv14 = userFixedBaselines["hrv14"] as? Double
+        rhr60 = userFixedBaselines["rhr60"] as? Double
+        rhr14 = userFixedBaselines["rhr14"] as? Double
+        sleepDuration14 = userFixedBaselines["sleepDuration14"] as? Double
+        if let bed = userFixedBaselines["bedtime14"] as? Double { bedtime14 = Date(timeIntervalSince1970: bed) }
+        if let wake = userFixedBaselines["wake14"] as? Double { wake14 = Date(timeIntervalSince1970: wake) }
+        walkingHR14 = userFixedBaselines["walkingHR14"] as? Double
+        respiratoryRate14 = userFixedBaselines["respiratoryRate14"] as? Double
+        oxygenSaturation14 = userFixedBaselines["oxygenSaturation14"] as? Double
+    }
+    
     func updateAndStoreBaselines(completion: @escaping () -> Void) {
-        let group = DispatchGroup()
-        
-        group.enter()
-        fetchRollingAverage(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), days: 60) { avg in
-            self.hrv60 = avg
-            group.leave()
-        }
-        group.enter()
-        fetchRollingAverage(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), days: 14) { avg in
-            self.hrv14 = avg
-            group.leave()
-        }
-        group.enter()
-        fetchRollingAverage(.restingHeartRate, unit: HKUnit(from: "count/min"), days: 60) { avg in
-            self.rhr60 = avg
-            group.leave()
-        }
-        group.enter()
-        fetchRollingAverage(.restingHeartRate, unit: HKUnit(from: "count/min"), days: 14) { avg in
-            self.rhr14 = avg
-            group.leave()
-        }
-        group.enter()
-        fetchSleepAverages(days: 14) { avgDuration, avgBed, avgWake in
-            self.sleepDuration14 = avgDuration
-            self.bedtime14 = avgBed
-            self.wake14 = avgWake
-            group.leave()
-        }
-        
-        // New baselines for Recovery Score
-        group.enter()
-        fetchRollingAverage(.walkingHeartRateAverage, unit: HKUnit(from: "count/min"), days: 14) { avg in
-            self.walkingHR14 = avg
-            group.leave()
-        }
-        group.enter()
-        fetchRollingAverage(.respiratoryRate, unit: HKUnit(from: "count/min"), days: 14) { avg in
-            self.respiratoryRate14 = avg
-            group.leave()
-        }
-        
-        // Oxygen Saturation baseline for Recovery Score
-        group.enter()
-        fetchRollingAverage(.oxygenSaturation, unit: HKUnit.percent(), days: 14) { avg in
-            self.oxygenSaturation14 = avg
-            group.leave()
-        }
-        
-        group.notify(queue: .main) {
-            self.persistBaselines()
-            completion()
-        }
+        // Do nothing, always use fixed baselines
+        completion()
     }
     
     // MARK: - Rolling Averages
@@ -197,20 +172,6 @@ final class DynamicBaselineEngine {
         print("   Walking HR 14-day: \(walkingHR14?.description ?? "nil")")
         print("   Respiratory Rate 14-day: \(respiratoryRate14?.description ?? "nil")")
         print("   Oxygen Saturation 14-day: \(oxygenSaturation14?.description ?? "nil")")
-    }
-    
-    func loadBaselines() {
-        guard let dict = UserDefaults.standard.dictionary(forKey: baselineKey) else { return }
-        hrv60 = dict["hrv60"] as? Double
-        hrv14 = dict["hrv14"] as? Double
-        rhr60 = dict["rhr60"] as? Double
-        rhr14 = dict["rhr14"] as? Double
-        sleepDuration14 = dict["sleepDuration14"] as? Double
-        if let bed = dict["bedtime14"] as? Double { bedtime14 = Date(timeIntervalSince1970: bed) }
-        if let wake = dict["wake14"] as? Double { wake14 = Date(timeIntervalSince1970: wake) }
-        walkingHR14 = dict["walkingHR14"] as? Double
-        respiratoryRate14 = dict["respiratoryRate14"] as? Double
-        oxygenSaturation14 = dict["oxygenSaturation14"] as? Double
     }
     
     func resetBaselines() {

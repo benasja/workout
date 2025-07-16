@@ -313,32 +313,6 @@ final class SleepScoreCalculator {
                     return
                 }
                 
-                // Debug: Show sample details
-                print("🌙 Sleep sample details:")
-                for (index, sample) in sleepSamples.enumerated() {
-                    let value = HKCategoryValueSleepAnalysis(rawValue: sample.value)
-                    let stageName: String
-                    switch value {
-                    case .asleepDeep:
-                        stageName = "Deep Sleep"
-                    case .asleepREM:
-                        stageName = "REM Sleep"
-                    case .asleepCore:
-                        stageName = "Core Sleep"
-                    case .asleepUnspecified:
-                        stageName = "Sleep (Unspecified)"
-                    case .inBed:
-                        stageName = "In Bed"
-                    case .awake:
-                        stageName = "Awake"
-                    case .none:
-                        stageName = "Unknown"
-                    @unknown default:
-                        stageName = "Unknown"
-                    }
-                    print("   Sample \(index): \(stageName) from \(sample.startDate) to \(sample.endDate)")
-                }
-                
                 // Group sleep samples by session (continuous periods)
                 let sleepSessions = self.groupSleepSamplesIntoSessions(sleepSamples)
                 print("🌙 Found \(sleepSessions.count) sleep sessions")
