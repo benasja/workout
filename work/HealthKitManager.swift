@@ -20,7 +20,8 @@ final class HealthKitManager {
         HKObjectType.workoutType(),
         HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
         HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage)!,
-        HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!
+        HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!,
+        HKObjectType.quantityType(forIdentifier: .bodyMass)!
     ]
     
     // Helper function to safely get HealthKit types
@@ -531,6 +532,56 @@ final class HealthKitManager {
     
     func fetchLatestRHR(completion: @escaping (Double?) -> Void) {
         fetchLatestQuantity(.restingHeartRate, unit: HKUnit(from: "count/min"), completion: completion)
+    }
+    
+    // MARK: - Weight Data Fetching
+    
+    /// Fetches the latest weight entry from HealthKit
+    func fetchLatestWeight(completion: @escaping (Double?) -> Void) {
+        fetchLatestQuantity(.bodyMass, unit: HKUnit.gramUnit(with: .kilo), completion: completion)
+    }
+    
+    /// Fetches all weight entries from HealthKit for a date range
+    func fetchWeightEntries(from startDate: Date, to endDate: Date, completion: @escaping ([WeightData]) -> Void) {
+        guard let weightType = HKObjectType.quantityType(forIdentifier: .bodyMass) else {
+            print("❌ Body mass type not available")
+            completion([])
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        
+        let query = HKSampleQuery(sampleType: weightType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            if let error = error {
+                print("❌ Error fetching weight entries: \(error.localizedDescription)")
+                completion([])
+                return
+            }
+            
+            let weightSamples = (samples as? [HKQuantitySample]) ?? []
+            let weightData = weightSamples.map { sample in
+                WeightData(
+                    date: sample.endDate,
+                    weight: sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo)),
+                    source: sample.sourceRevision.source.name
+                )
+            }
+            
+            print("✅ Fetched \(weightData.count) weight entries from HealthKit")
+            completion(weightData)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    /// Fetches recent weight entries (last 90 days)
+    func fetchRecentWeightEntries(completion: @escaping ([WeightData]) -> Void) {
+        let calendar = Calendar.current
+        let endDate = Date()
+        let startDate = calendar.date(byAdding: .day, value: -90, to: endDate) ?? endDate
+        
+        fetchWeightEntries(from: startDate, to: endDate, completion: completion)
     }
     
     func fetchLatestRespiratoryRate(completion: @escaping (Double?) -> Void) {

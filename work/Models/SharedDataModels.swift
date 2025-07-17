@@ -47,6 +47,14 @@ struct AdvancedHRVMetrics {
 
 // MARK: - Sleep Score Error Types are defined in SleepScoreCalculator.swift
 
+// MARK: - Weight Data Models
+
+struct WeightData {
+    let date: Date
+    let weight: Double // in kg
+    let source: String
+}
+
 // MARK: - Sleep Session Helper
 
 struct SleepSession {

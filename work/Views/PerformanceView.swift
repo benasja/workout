@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 class PerformanceDateModel: ObservableObject {
     @Published var selectedDate: Date = Calendar.current.startOfDay(for: Date())
@@ -74,6 +75,9 @@ struct PerformanceView: View {
                         
                         // Quick Actions
                         QuickActionsView()
+                        
+                        // Journal Summary
+                        JournalSummaryView(selectedDate: dateModel.selectedDate)
                         
                         // Today's Insights
                         if let recovery = recoveryScore, let sleep = sleepScore {
@@ -587,6 +591,230 @@ struct InsightRow: View {
                 .fixedSize(horizontal: false, vertical: true)
             
             Spacer()
+        }
+    }
+}
+
+struct JournalSummaryView: View {
+    let selectedDate: Date
+    @Query private var journalEntries: [DailyJournal]
+    
+    init(selectedDate: Date) {
+        self.selectedDate = selectedDate
+        self._journalEntries = Query(sort: \DailyJournal.date, order: .reverse)
+    }
+    
+    private var currentEntry: DailyJournal? {
+        let calendar = Calendar.current
+        return journalEntries.first { calendar.isDate($0.date, inSameDayAs: selectedDate) }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Image(systemName: "book.closed.fill")
+                    .foregroundColor(.blue)
+                    .font(.title2)
+                Text("Journal Summary")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                Spacer()
+                NavigationLink(destination: JournalView(tabSelection: .constant(0))) {
+                    Text("View All")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.08))
+                        .cornerRadius(8)
+                }
+            }
+            if let entry = currentEntry {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Tags Summary
+                    if !entry.tags.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Today's Tags:")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], spacing: 8) {
+                                ForEach(entry.tags.prefix(6), id: \.self) { tagName in
+                                    HStack(spacing: 4) {
+                                        if let tag = getJournalTag(for: tagName) {
+                                            Image(systemName: tag.icon)
+                                                .font(.caption2)
+                                                .foregroundColor(tag.color)
+                                            Text(tag.displayName)
+                                                .font(.caption2)
+                                                .fontWeight(.medium)
+                                        } else {
+                                            Text(tagName)
+                                                .font(.caption2)
+                                                .fontWeight(.medium)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(tagBackground(for: tagName))
+                                    .cornerRadius(10)
+                                }
+                            }
+                            if entry.tags.count > 6 {
+                                Text("+ \(entry.tags.count - 6) more")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    // Notes Preview
+                    if let notes = entry.notes, !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Notes:")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                            Text(notes)
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                                .lineLimit(3)
+                                .padding(10)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(10)
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 10) {
+                    Text("No journal entry for this day")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    NavigationLink(destination: JournalView(tabSelection: .constant(0))) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                            Text("Add Entry")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.12))
+                        .cornerRadius(10)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(18)
+        .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
+    }
+    
+    private func getJournalTag(for tagName: String) -> JournalTag? {
+        return JournalTag.allCases.first { $0.displayName == tagName }
+    }
+    private func tagBackground(for tagName: String) -> Color {
+        if let tag = getJournalTag(for: tagName) {
+            return tag.color.opacity(0.13)
+        }
+        return Color(.systemGray5)
+    }
+}
+
+// Define JournalTag here for the summary view
+enum JournalTag: String, CaseIterable, Hashable {
+    case coffee = "coffee"
+    case alcohol = "alcohol"
+    case caffeine = "caffeine"
+    case lateEating = "late_eating"
+    case stress = "stress"
+    case exercise = "exercise"
+    case meditation = "meditation"
+    case goodSleep = "good_sleep"
+    case poorSleep = "poor_sleep"
+    case illness = "illness"
+    case travel = "travel"
+    case work = "work"
+    case social = "social"
+    case supplements = "supplements"
+    case hydration = "hydration"
+    case mood = "mood"
+    case energy = "energy"
+    case focus = "focus"
+    case recovery = "recovery"
+    
+    var displayName: String {
+        switch self {
+        case .coffee: return "Coffee"
+        case .alcohol: return "Alcohol"
+        case .caffeine: return "Late Caffeine"
+        case .lateEating: return "Late Eating"
+        case .stress: return "High Stress"
+        case .exercise: return "Exercise"
+        case .meditation: return "Meditation"
+        case .goodSleep: return "Good Sleep"
+        case .poorSleep: return "Poor Sleep"
+        case .illness: return "Illness"
+        case .travel: return "Travel"
+        case .work: return "Work Stress"
+        case .social: return "Social"
+        case .supplements: return "Supplements"
+        case .hydration: return "Good Hydration"
+        case .mood: return "Good Mood"
+        case .energy: return "High Energy"
+        case .focus: return "Good Focus"
+        case .recovery: return "Recovery Day"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .coffee: return "cup.and.saucer.fill"
+        case .alcohol: return "wineglass"
+        case .caffeine: return "cup.and.saucer"
+        case .lateEating: return "clock.badge.exclamationmark"
+        case .stress: return "exclamationmark.triangle"
+        case .exercise: return "figure.run"
+        case .meditation: return "leaf"
+        case .goodSleep: return "bed.double"
+        case .poorSleep: return "bed.double.fill"
+        case .illness: return "thermometer"
+        case .travel: return "airplane"
+        case .work: return "briefcase"
+        case .social: return "person.2"
+        case .supplements: return "pills.fill"
+        case .hydration: return "drop.fill"
+        case .mood: return "face.smiling"
+        case .energy: return "bolt.fill"
+        case .focus: return "target"
+        case .recovery: return "heart.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .coffee: return .brown
+        case .alcohol: return .red
+        case .caffeine: return .orange
+        case .lateEating: return .orange
+        case .stress: return .red
+        case .exercise: return .green
+        case .meditation: return .mint
+        case .goodSleep: return .blue
+        case .poorSleep: return .purple
+        case .illness: return .red
+        case .travel: return .cyan
+        case .work: return .gray
+        case .social: return .pink
+        case .supplements: return .blue
+        case .hydration: return .cyan
+        case .mood: return .yellow
+        case .energy: return .orange
+        case .focus: return .indigo
+        case .recovery: return .green
         }
     }
 }

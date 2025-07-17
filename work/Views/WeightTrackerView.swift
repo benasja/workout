@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct WeightTrackerView: View {
     @Environment(\.modelContext) private var modelContext
@@ -14,20 +15,77 @@ struct WeightTrackerView: View {
     
     @State private var showingAddEntry = false
     @State private var manualWeightEntries: [WeightEntry] = []
+    @State private var healthKitWeightData: [WeightData] = []
     @State private var isLoading = false
+    @State private var isSyncing = false
     @State private var dateRange: ClosedRange<Date>? = nil
     @State var editingEntry: WeightEntry? = nil
+    @State private var lastSyncDate: Date?
+    
+    // Combined weight entries from both manual and HealthKit
+    private var allWeightEntries: [WeightEntry] {
+        var combined = weightEntries
+        
+        // Convert HealthKit data to WeightEntry format for display
+        let healthKitEntries = healthKitWeightData.map { data in
+            WeightEntry(date: data.date, weight: data.weight, notes: "From \(data.source)")
+        }
+        
+        // Remove duplicates (prefer manual entries over HealthKit for same date)
+        let calendar = Calendar.current
+        let manualDates = Set(combined.map { calendar.startOfDay(for: $0.date) })
+        
+        let uniqueHealthKitEntries = healthKitEntries.filter { entry in
+            !manualDates.contains(calendar.startOfDay(for: entry.date))
+        }
+        
+        combined.append(contentsOf: uniqueHealthKitEntries)
+        return combined.sorted { $0.date > $1.date }
+    }
     
     var body: some View {
         NavigationView {
             ScrollView {
                 LazyVStack(spacing: AppSpacing.xl) {
-                    if (weightEntries.isEmpty && manualWeightEntries.isEmpty) {
+                    // Sync Status Banner
+                    if isSyncing {
+                        ModernCard {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Syncing with Apple Health...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .padding(.horizontal)
+                    } else if let syncDate = lastSyncDate {
+                        ModernCard {
+                            HStack {
+                                Image(systemName: "heart.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                                Text("Last synced: \(syncDate, style: .relative) ago")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("\(healthKitWeightData.count) from Health")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    if (allWeightEntries.isEmpty) {
                         EmptyWeightView {
                             showingAddEntry = true
                         }
                     } else {
-                        let sortedEntries = weightEntries.sorted { $0.date < $1.date }
+                        let sortedEntries = allWeightEntries.sorted { $0.date < $1.date }
                         let minDate = sortedEntries.first?.date ?? Date()
                         let maxDate = sortedEntries.last?.date ?? Date()
                         let range = dateRange ?? minDate...maxDate
@@ -36,7 +94,7 @@ struct WeightTrackerView: View {
                         if minDate < maxDate {
                             DateRangePickers(minDate: minDate, maxDate: maxDate, dateRange: $dateRange)
                         }
-                        let uniqueEntries = Dictionary(grouping: weightEntries) { entry in
+                        let uniqueEntries = Dictionary(grouping: allWeightEntries) { entry in
                             let comps = Calendar.current.dateComponents([.year, .month, .day], from: entry.date)
                             return Calendar.current.date(from: comps) ?? entry.date
                         }
@@ -47,12 +105,43 @@ struct WeightTrackerView: View {
                         VStack(spacing: 12) {
                             ForEach(uniqueEntries, id: \.id) { entry in
                                 Button(action: { editingEntry = entry }) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(entry.date, formatter: dateFormatter)
-                                            .font(.headline)
-                                        Text("\(entry.weight, specifier: "%.1f") kg")
-                                            .font(.title2)
-                                            .fontWeight(.bold)
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack {
+                                                Text(entry.date, formatter: dateFormatter)
+                                                    .font(.headline)
+                                                Spacer()
+                                                // Source indicator
+                                                if let notes = entry.notes, notes.contains("From") || notes.contains("Synced from") {
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "heart.fill")
+                                                            .font(.caption2)
+                                                            .foregroundColor(.red)
+                                                        Text("Health")
+                                                            .font(.caption2)
+                                                            .foregroundColor(.secondary)
+                                                    }
+                                                } else {
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "pencil")
+                                                            .font(.caption2)
+                                                            .foregroundColor(.blue)
+                                                        Text("Manual")
+                                                            .font(.caption2)
+                                                            .foregroundColor(.secondary)
+                                                    }
+                                                }
+                                            }
+                                            Text("\(entry.weight, specifier: "%.1f") kg")
+                                                .font(.title2)
+                                                .fontWeight(.bold)
+                                            if let notes = entry.notes, !notes.isEmpty {
+                                                Text(notes)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                        }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding()
@@ -81,6 +170,30 @@ struct WeightTrackerView: View {
             .navigationTitle("Weight Tracker")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        Button(action: { exportData() }) {
+                            Label("Export Data", systemImage: "square.and.arrow.up")
+                        }
+                        Button(action: { importData() }) {
+                            Label("Import Data", systemImage: "square.and.arrow.down")
+                        }
+                        Divider()
+                        Button(action: { addSampleData() }) {
+                            Label("Add Sample Data", systemImage: "plus.rectangle.on.rectangle")
+                        }
+                        Button(action: { debugWeightData() }) {
+                            Label("Debug Data", systemImage: "ladybug")
+                        }
+                        Divider()
+                        Button(action: { syncWithHealthKit() }) {
+                            Label("Sync with Apple Health", systemImage: "heart.fill")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingAddEntry = true }) {
                         Image(systemName: "plus")
@@ -95,6 +208,10 @@ struct WeightTrackerView: View {
             }
             .onAppear {
                 refreshData()
+                // Automatically sync with HealthKit on first load
+                if lastSyncDate == nil {
+                    syncWithHealthKit()
+                }
             }
         }
     }
@@ -103,8 +220,15 @@ struct WeightTrackerView: View {
         isLoading = true
         do {
             try modelContext.save()
-        } catch {}
+        } catch {
+            print("❌ Error saving model context: \(error)")
+        }
         loadWeightEntries()
+        
+        // Debug: Print weight entries count
+        print("🔍 Weight entries count: \(weightEntries.count)")
+        print("🔍 Manual weight entries count: \(manualWeightEntries.count)")
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isLoading = false
         }
@@ -116,6 +240,165 @@ struct WeightTrackerView: View {
             let entries = try modelContext.fetch(descriptor)
             manualWeightEntries = entries
         } catch {}
+    }
+    
+    private func exportData() {
+        // Export weight entries as CSV and present share sheet
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        var csv = "date,weight\n"
+        for entry in weightEntries.reversed() { // oldest first
+            let dateStr = dateFormatter.string(from: entry.date)
+            let weightStr = String(format: "%.2f", entry.weight)
+            csv += "\(dateStr),\(weightStr)\n"
+        }
+        guard let data = csv.data(using: .utf8) else { return }
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("weight_entries.csv")
+        do {
+            try data.write(to: tempURL)
+            let av = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let root = scene.windows.first?.rootViewController {
+                root.present(av, animated: true)
+            }
+        } catch {
+            print("❌ Failed to write CSV: \(error)")
+        }
+    }
+    
+    private func importData() {
+        // Present document picker for CSV import
+        let delegate = WeightCSVImportDelegate(modelContext: modelContext, onImport: {
+            refreshData()
+        })
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.commaSeparatedText])
+        picker.allowsMultipleSelection = false
+        picker.delegate = delegate
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let root = scene.windows.first?.rootViewController {
+            root.present(picker, animated: true)
+        }
+    }
+    
+    private func addSampleData() {
+        let calendar = Calendar.current
+        let today = Date()
+        
+        // Create sample weight entries for the past 30 days
+        let sampleWeights = [75.2, 75.0, 74.8, 75.1, 74.9, 75.3, 75.0, 74.7, 74.9, 75.2,
+                           75.1, 74.8, 75.0, 74.6, 74.9, 75.1, 74.8, 75.2, 75.0, 74.7,
+                           74.9, 75.3, 75.1, 74.8, 75.0, 74.9, 75.2, 75.0, 74.8, 75.1]
+        
+        for (index, weight) in sampleWeights.enumerated() {
+            if let date = calendar.date(byAdding: .day, value: -index, to: today) {
+                let entry = WeightEntry(date: date, weight: weight, notes: index == 0 ? "Current weight" : nil)
+                modelContext.insert(entry)
+            }
+        }
+        
+        do {
+            try modelContext.save()
+            print("✅ Added \(sampleWeights.count) sample weight entries")
+            refreshData()
+        } catch {
+            print("❌ Failed to save sample weight entries: \(error)")
+        }
+    }
+    
+    private func debugWeightData() {
+        print("🔍 === Weight Data Debug ===")
+        print("🔍 Total weight entries: \(weightEntries.count)")
+        print("🔍 Manual weight entries: \(manualWeightEntries.count)")
+        
+        if !weightEntries.isEmpty {
+            let sortedEntries = weightEntries.sorted { $0.date < $1.date }
+            print("🔍 Date range: \(sortedEntries.first?.date ?? Date()) to \(sortedEntries.last?.date ?? Date())")
+            print("🔍 Weight range: \(sortedEntries.map { $0.weight }.min() ?? 0) to \(sortedEntries.map { $0.weight }.max() ?? 0)")
+            
+            print("🔍 Recent entries:")
+            for entry in weightEntries.prefix(5) {
+                print("   - \(entry.date): \(entry.weight)kg")
+            }
+        } else {
+            print("🔍 No weight entries found")
+            
+            // Try to fetch directly from model context
+            do {
+                let descriptor = FetchDescriptor<WeightEntry>()
+                let allEntries = try modelContext.fetch(descriptor)
+                print("🔍 Direct fetch found \(allEntries.count) entries")
+            } catch {
+                print("🔍 Direct fetch failed: \(error)")
+            }
+        }
+        print("🔍 === End Debug ===")
+    }
+    
+    private func syncWithHealthKit() {
+        guard !isSyncing else { return }
+        
+        isSyncing = true
+        print("🔄 Starting HealthKit weight sync...")
+        
+        // First, request authorization
+        HealthKitManager.shared.requestAuthorization { [self] success in
+            guard success else {
+                print("❌ HealthKit authorization failed")
+                DispatchQueue.main.async {
+                    self.isSyncing = false
+                }
+                return
+            }
+            
+            // Fetch recent weight entries from HealthKit
+            HealthKitManager.shared.fetchRecentWeightEntries { [self] weightData in
+                DispatchQueue.main.async {
+                    self.healthKitWeightData = weightData
+                    self.lastSyncDate = Date()
+                    self.isSyncing = false
+                    
+                    print("✅ HealthKit sync completed: \(weightData.count) entries")
+                    
+                    // Optionally convert HealthKit data to local entries
+                    self.convertHealthKitDataToLocalEntries(weightData)
+                }
+            }
+        }
+    }
+    
+    private func convertHealthKitDataToLocalEntries(_ weightData: [WeightData]) {
+        let calendar = Calendar.current
+        var addedCount = 0
+        
+        // Get existing manual entry dates to avoid duplicates
+        let existingDates = Set(weightEntries.map { calendar.startOfDay(for: $0.date) })
+        
+        for data in weightData {
+            let entryDate = calendar.startOfDay(for: data.date)
+            
+            // Only add if we don't already have a manual entry for this date
+            if !existingDates.contains(entryDate) {
+                let entry = WeightEntry(
+                    date: data.date,
+                    weight: data.weight,
+                    notes: "Synced from \(data.source)"
+                )
+                modelContext.insert(entry)
+                addedCount += 1
+            }
+        }
+        
+        if addedCount > 0 {
+            do {
+                try modelContext.save()
+                print("✅ Added \(addedCount) weight entries from HealthKit")
+                refreshData()
+            } catch {
+                print("❌ Failed to save HealthKit weight entries: \(error)")
+            }
+        } else {
+            print("ℹ️ No new weight entries to add from HealthKit")
+        }
     }
 }
 
@@ -514,6 +797,96 @@ struct EditWeightEntryView: View {
 
     private var isValidWeight: Bool {
         Double(weightText.replacingOccurrences(of: ",", with: ".")) ?? 0 > 0
+    }
+}
+
+// MARK: - CSV Import Delegate
+
+class WeightCSVImportDelegate: NSObject, UIDocumentPickerDelegate {
+    let modelContext: ModelContext
+    let onImport: () -> Void
+    
+    init(modelContext: ModelContext, onImport: @escaping () -> Void) {
+        self.modelContext = modelContext
+        self.onImport = onImport
+    }
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        
+        // Start accessing security-scoped resource
+        let shouldStop = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStop { url.stopAccessingSecurityScopedResource() }
+        }
+        
+        do {
+            let data = try Data(contentsOf: url)
+            if let text = String(data: data, encoding: .utf8) {
+                importCSV(text)
+            }
+        } catch {
+            print("❌ Failed to read CSV file: \(error)")
+        }
+    }
+    
+    private func importCSV(_ text: String) {
+        let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        guard lines.count > 0 else { return }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
+        let numberFormatterComma = NumberFormatter()
+        numberFormatterComma.decimalSeparator = ","
+        let numberFormatterDot = NumberFormatter()
+        numberFormatterDot.decimalSeparator = "."
+
+        // Skip header if present
+        let dataLines = lines.first?.lowercased().contains("date") == true ? lines.dropFirst() : lines[...]
+        
+        var importedCount = 0
+        for line in dataLines {
+            let fields = line.components(separatedBy: ",")
+            guard fields.count >= 2 else { continue }
+            
+            let dateString = fields[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            var weightString = fields[1...].joined(separator: ",")
+            weightString = weightString.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Remove quotes if present
+            if weightString.hasPrefix("\"") && weightString.hasSuffix("\"") {
+                weightString = String(weightString.dropFirst().dropLast())
+            }
+            
+            guard let date = dateFormatter.date(from: dateString) else { continue }
+            
+            let weight: Double?
+            if let w = numberFormatterComma.number(from: weightString)?.doubleValue {
+                weight = w
+            } else if let w = numberFormatterDot.number(from: weightString)?.doubleValue {
+                weight = w
+            } else if let w = Double(weightString) {
+                weight = w
+            } else {
+                continue
+            }
+            
+            guard let validWeight = weight, validWeight > 0 else { continue }
+            
+            let entry = WeightEntry(date: date, weight: validWeight)
+            modelContext.insert(entry)
+            importedCount += 1
+        }
+        
+        do {
+            try modelContext.save()
+            print("✅ Successfully imported \(importedCount) weight entries")
+        } catch {
+            print("❌ Failed to save imported weight entries: \(error)")
+        }
+        
+        onImport()
     }
 }
 

@@ -19,6 +19,165 @@ class DataSeeder {
         }
         
         let exercises = [
+            // Warm-up
+            ExerciseDefinition(
+                name: "Jumping Jacks",
+                instructions: "Stand upright with your legs together, arms at your sides. Jump up, spreading your legs shoulder-width apart and raising your arms overhead. Return to start and repeat.",
+                primaryMuscleGroup: "Full Body",
+                secondaryMuscleGroups: ["Legs", "Shoulders", "Cardio"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Bodyweight Squats",
+                instructions: "Stand with feet shoulder-width apart. Lower your body by bending your knees and hips, keeping your chest up. Return to standing.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Arm Circles & Leg Swings",
+                instructions: "For arm circles: extend arms to sides and make small to large circles. For leg swings: swing each leg forward/back and side-to-side.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Legs", "Mobility"],
+                equipment: "Bodyweight"
+            ),
+
+            // A
+            ExerciseDefinition(
+                name: "Goblet Squat with Triceps Extensions",
+                instructions: "Hold a dumbbell at your chest for a squat, then perform a triceps extension at the top of each rep.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Triceps", "Glutes", "Core"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Deficit Push Ups with Bent Over DB Rows",
+                instructions: "Perform push-ups with hands elevated, then immediately do bent over dumbbell rows.",
+                primaryMuscleGroup: "Chest",
+                secondaryMuscleGroups: ["Back", "Triceps", "Shoulders"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Shrugs",
+                instructions: "Hold dumbbells or a barbell at your sides. Lift your shoulders straight up toward your ears, hold briefly, then lower back down.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Traps"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Plank",
+                instructions: "Hold a push-up position with your body in a straight line from head to heels. Keep your core tight and breathe steadily.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Shoulders"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Leg Raises",
+                instructions: "Lie on your back, legs straight. Lift your legs up to 90 degrees, then lower them slowly without touching the ground.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Hip Flexors"],
+                equipment: "Bodyweight"
+            ),
+
+            // B
+            ExerciseDefinition(
+                name: "Dumbbell Romanian Deadlifts",
+                instructions: "Hold dumbbells in front of your thighs. Hinge at your hips to lower the weights down your legs, keeping your back straight.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Back", "Glutes", "Hamstrings"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Push-ups",
+                instructions: "Start in a plank position with hands slightly wider than shoulders. Lower your body until your chest nearly touches the ground, then push back up.",
+                primaryMuscleGroup: "Chest",
+                secondaryMuscleGroups: ["Triceps", "Shoulders", "Core"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Dumbbell Bicep Curls",
+                instructions: "Hold dumbbells at your sides, palms facing forward. Curl the weights up to your shoulders, then lower back down.",
+                primaryMuscleGroup: "Biceps",
+                secondaryMuscleGroups: ["Forearms"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Dumbbell Shoulder Press",
+                instructions: "Sit or stand with dumbbells at shoulder height. Press the weights overhead until arms are fully extended, then lower back down.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Triceps"],
+                equipment: "Dumbbell"
+            ),
+
+            // C
+            ExerciseDefinition(
+                name: "Dumbbell Lunges with Band Pull-Aparts",
+                instructions: "Hold dumbbells at your sides and perform lunges. Between sets, use a resistance band to do pull-aparts for upper back activation.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Back", "Glutes", "Shoulders"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Single-Arm Dumbbell Rows with Glute Bridges",
+                instructions: "Perform single-arm rows with a dumbbell, then superset with glute bridges for lower body activation.",
+                primaryMuscleGroup: "Back",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Lateral Raises with Dumbbell Bicep Curls",
+                instructions: "Perform lateral raises for shoulders, then immediately do bicep curls with dumbbells.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Biceps"],
+                equipment: "Dumbbell"
+            ),
+
+            // Cooldown
+            ExerciseDefinition(
+                name: "Hip Flexor Lunge",
+                instructions: "Step one foot forward into a lunge, keeping your back leg straight and stretching the hip flexor.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Hip Flexors"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Doorway Chest Stretch",
+                instructions: "Stand in a doorway, place your arms on the frame, and gently lean forward to stretch your chest.",
+                primaryMuscleGroup: "Chest",
+                secondaryMuscleGroups: ["Shoulders"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Hamstring Stretch",
+                instructions: "Sit on the ground with one leg extended. Reach toward your toes to stretch your hamstring.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Hamstrings"],
+                equipment: "Bodyweight"
+            ),
+
+            // Core finisher
+            ExerciseDefinition(
+                name: "Leg Raises (Core Finisher)",
+                instructions: "Lie on your back, legs straight. Lift your legs up to 90 degrees, then lower them slowly without touching the ground.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Hip Flexors"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Dumbbell Woodchoppers",
+                instructions: "Hold a dumbbell with both hands. Rotate your torso to bring the weight from high to low across your body, engaging your core.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Obliques", "Shoulders"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Side Plank Twists",
+                instructions: "Start in a side plank. Rotate your torso and reach your top arm under your body, then return to start.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Obliques", "Shoulders"],
+                equipment: "Bodyweight"
+            ),
+            
             // Chest Exercises
             ExerciseDefinition(
                 name: "Bench Press",
@@ -229,6 +388,251 @@ class DataSeeder {
                 primaryMuscleGroup: "Core",
                 secondaryMuscleGroups: ["Legs", "Chest"],
                 equipment: "Bodyweight"
+            ),
+            
+            // Additional Shoulder Exercises
+            ExerciseDefinition(
+                name: "Shrugs",
+                instructions: "Hold dumbbells or a barbell at your sides. Lift your shoulders straight up toward your ears, hold briefly, then lower back down.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Traps"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Upright Rows",
+                instructions: "Hold a barbell with a narrow grip. Pull the bar up along your body to chest level, keeping elbows higher than wrists.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Traps", "Biceps"],
+                equipment: "Barbell"
+            ),
+            ExerciseDefinition(
+                name: "Arnold Press",
+                instructions: "Start with dumbbells at shoulder level, palms facing you. Press up while rotating palms forward, then reverse the motion.",
+                primaryMuscleGroup: "Shoulders",
+                secondaryMuscleGroups: ["Triceps"],
+                equipment: "Dumbbell"
+            ),
+            
+            // Additional Core Exercises
+            ExerciseDefinition(
+                name: "Leg Raises",
+                instructions: "Lie on your back with hands at your sides. Keep legs straight and lift them up to 90 degrees, then lower back down slowly.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Hip Flexors"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Hanging Leg Raises",
+                instructions: "Hang from a pull-up bar. Keep legs straight and lift them up to 90 degrees, then lower back down with control.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Hip Flexors", "Forearms"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Mountain Climbers",
+                instructions: "Start in a plank position. Alternate bringing knees to chest in a running motion while maintaining plank position.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Shoulders", "Legs"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Dead Bug",
+                instructions: "Lie on your back with arms up and knees bent at 90 degrees. Lower opposite arm and leg, then return to start.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: [],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Bird Dog",
+                instructions: "Start on hands and knees. Extend opposite arm and leg, hold, then return to start. Alternate sides.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Back", "Glutes"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Side Plank",
+                instructions: "Lie on your side, prop yourself up on your elbow. Keep body straight from head to feet, hold position.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Shoulders"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Bicycle Crunches",
+                instructions: "Lie on your back, hands behind head. Bring opposite elbow to knee in a cycling motion.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: [],
+                equipment: "Bodyweight"
+            ),
+            
+            // Additional Leg Exercises
+            ExerciseDefinition(
+                name: "Bulgarian Split Squats",
+                instructions: "Stand 2 feet in front of a bench, place rear foot on bench. Lower into a lunge position, then push back up.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Walking Lunges",
+                instructions: "Step forward into a lunge, then bring rear foot forward into the next lunge. Continue walking forward.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Jump Squats",
+                instructions: "Perform a squat, then explode up into a jump. Land softly and immediately go into the next squat.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Single Leg Deadlift",
+                instructions: "Stand on one leg, hinge at hip to lower torso while lifting rear leg. Return to standing position.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core", "Back"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Wall Sit",
+                instructions: "Lean back against a wall with feet shoulder-width apart. Slide down until thighs are parallel to floor, hold position.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Step Ups",
+                instructions: "Step up onto a bench or platform with one foot, then step down. Alternate legs or complete sets on each leg.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            
+            // Additional Back Exercises
+            ExerciseDefinition(
+                name: "T-Bar Rows",
+                instructions: "Straddle a T-bar, bend at waist. Pull the bar up to your chest, squeezing shoulder blades together.",
+                primaryMuscleGroup: "Back",
+                secondaryMuscleGroups: ["Biceps"],
+                equipment: "Barbell"
+            ),
+            ExerciseDefinition(
+                name: "Seated Cable Rows",
+                instructions: "Sit at cable machine, pull handle to your torso while keeping back straight and squeezing shoulder blades.",
+                primaryMuscleGroup: "Back",
+                secondaryMuscleGroups: ["Biceps"],
+                equipment: "Cable"
+            ),
+            ExerciseDefinition(
+                name: "Reverse Flyes",
+                instructions: "Bend forward with dumbbells, arms slightly bent. Lift weights out to sides, squeezing shoulder blades.",
+                primaryMuscleGroup: "Back",
+                secondaryMuscleGroups: ["Shoulders"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Superman",
+                instructions: "Lie face down, extend arms forward. Lift chest and legs off ground simultaneously, hold, then lower.",
+                primaryMuscleGroup: "Back",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            
+            // Additional Chest Exercises
+            ExerciseDefinition(
+                name: "Decline Bench Press",
+                instructions: "Lie on a decline bench with feet secured. Press barbell from chest to full arm extension.",
+                primaryMuscleGroup: "Chest",
+                secondaryMuscleGroups: ["Triceps", "Shoulders"],
+                equipment: "Barbell"
+            ),
+            ExerciseDefinition(
+                name: "Chest Dips",
+                instructions: "Support yourself on parallel bars, lean forward slightly. Lower body by bending elbows, then push back up.",
+                primaryMuscleGroup: "Chest",
+                secondaryMuscleGroups: ["Triceps", "Shoulders"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Cable Crossovers",
+                instructions: "Stand between cable machines, pull handles down and across your body in an arc motion.",
+                primaryMuscleGroup: "Chest",
+                secondaryMuscleGroups: ["Shoulders"],
+                equipment: "Cable"
+            ),
+            ExerciseDefinition(
+                name: "Diamond Push-Ups",
+                instructions: "Perform push-ups with hands close together forming a diamond shape with thumbs and index fingers.",
+                primaryMuscleGroup: "Triceps",
+                secondaryMuscleGroups: ["Chest", "Shoulders"],
+                equipment: "Bodyweight"
+            ),
+            
+            // Additional Arm Exercises
+            ExerciseDefinition(
+                name: "Concentration Curls",
+                instructions: "Sit on bench, rest elbow on inner thigh. Curl dumbbell up while keeping upper arm stationary.",
+                primaryMuscleGroup: "Biceps",
+                secondaryMuscleGroups: ["Forearms"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Cable Curls",
+                instructions: "Stand at cable machine with straight bar attachment. Curl the bar up while keeping elbows at sides.",
+                primaryMuscleGroup: "Biceps",
+                secondaryMuscleGroups: ["Forearms"],
+                equipment: "Cable"
+            ),
+            ExerciseDefinition(
+                name: "Overhead Tricep Extension",
+                instructions: "Hold dumbbell overhead with both hands. Lower weight behind head by bending elbows, then extend back up.",
+                primaryMuscleGroup: "Triceps",
+                secondaryMuscleGroups: [],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Close Grip Bench Press",
+                instructions: "Lie on bench with hands closer than shoulder width. Press barbell focusing on tricep engagement.",
+                primaryMuscleGroup: "Triceps",
+                secondaryMuscleGroups: ["Chest", "Shoulders"],
+                equipment: "Barbell"
+            ),
+            
+            // Functional/Athletic Exercises
+            ExerciseDefinition(
+                name: "Turkish Get-Up",
+                instructions: "Lie down holding weight overhead. Stand up while keeping weight overhead, then reverse the movement.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Shoulders", "Legs"],
+                equipment: "Kettlebell"
+            ),
+            ExerciseDefinition(
+                name: "Farmer's Walk",
+                instructions: "Hold heavy weights at your sides and walk forward maintaining good posture and core engagement.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Forearms", "Traps", "Legs"],
+                equipment: "Dumbbell"
+            ),
+            ExerciseDefinition(
+                name: "Box Jumps",
+                instructions: "Stand in front of a box. Jump up onto the box, land softly, then step or jump back down.",
+                primaryMuscleGroup: "Legs",
+                secondaryMuscleGroups: ["Glutes", "Core"],
+                equipment: "Bodyweight"
+            ),
+            ExerciseDefinition(
+                name: "Battle Ropes",
+                instructions: "Hold rope ends, create waves by alternating arm movements. Maintain athletic stance throughout.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Shoulders", "Arms"],
+                equipment: "Other"
+            ),
+            ExerciseDefinition(
+                name: "Medicine Ball Slams",
+                instructions: "Hold medicine ball overhead, slam it down with full force while engaging core. Pick up and repeat.",
+                primaryMuscleGroup: "Core",
+                secondaryMuscleGroups: ["Shoulders", "Back"],
+                equipment: "Medicine Ball"
             )
         ]
         
