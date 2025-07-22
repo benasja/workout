@@ -95,6 +95,11 @@ struct PerformanceView: View {
         .navigationBarHidden(true)
         .onAppear {
             fetchScores()
+            
+            // Sync latest sleep data to server when opening Today view
+            Task {
+                await HealthKitManager.shared.checkAndSyncSleepDataIfNeeded()
+            }
         }
         .onChange(of: dateModel.selectedDate) { _, _ in
             fetchScores()

@@ -61,6 +61,18 @@ struct MainTabView: View {
             }
             .tag(2)
             
+            // Environment Tab
+            NavigationStack {
+                EnvironmentView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
+            }
+            .tabItem {
+                Image(systemName: "leaf.fill")
+                Text("Environment")
+            }
+            .tag(3)
+            
             // Workouts Tab
             NavigationStack {
                 WorkoutLibraryView()
@@ -69,7 +81,7 @@ struct MainTabView: View {
                 Image(systemName: "dumbbell.fill")
                 Text("Train")
             }
-            .tag(3)
+            .tag(4)
             
             // More Tab
             NavigationStack {
@@ -81,12 +93,17 @@ struct MainTabView: View {
                 Image(systemName: "ellipsis.circle.fill")
                 Text("More")
             }
-            .tag(4)
+            .tag(5)
         }
         .accentColor(AppColors.primary)
         .preferredColorScheme(colorScheme)
         .onAppear {
             checkHealthKitAuthorization()
+            
+            // Sync latest sleep data to server on app launch
+            Task {
+                await HealthKitManager.shared.checkAndSyncSleepDataIfNeeded()
+            }
         }
         .alert("HealthKit Required", isPresented: $showingHealthKitAlert) {
             Button("Grant Access") {
@@ -187,6 +204,11 @@ struct MoreView: View {
                 
                 NavigationLink(destination: CorrelationView()) {
                     Label("Correlations", systemImage: "arrow.triangle.branch")
+                        .foregroundColor(.primary)
+                }
+                
+                NavigationLink(destination: SleepLabView()) {
+                    Label("Sleep Lab", systemImage: "moon.stars")
                         .foregroundColor(.primary)
                 }
             }

@@ -1015,6 +1015,104 @@ extension HealthKitManager {
             print("Failed to fetch 90-day recovery info: \(error)")
         }
     }
+    
+    // MARK: - Sleep Data Synchronization
+    
+    /// Syncs the latest sleep data to the backend server
+    /// This function fetches the most recently completed night's sleep data and sends it to the Sleep Lab
+    func syncLatestSleepDataToServer() async {
+        print("🔄 Starting sleep data sync to server...")
+        
+        // Check HealthKit authorization first
+        guard checkAuthorizationStatus() else {
+            print("❌ HealthKit not authorized - cannot sync sleep data")
+            return
+        }
+        
+        // Get yesterday's date (the most recent completed sleep session)
+        let calendar = Calendar.current
+        let today = Date()
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        
+        do {
+            // Fetch the detailed sleep score for yesterday
+            let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: yesterday)
+            
+            // Create SleepData object from the result
+            let sleepData = try SleepData(from: sleepResult, date: yesterday)
+            
+            print("📊 Sleep data prepared for sync:")
+            print("   Date: \(sleepData.session_date)")
+            print("   Sleep Score: \(sleepData.score)")
+            print("   Time Asleep: \(String(format: "%.0f", sleepData.time_asleep_minutes)) minutes")
+            print("   Deep Sleep: \(String(format: "%.0f", sleepData.deep_sleep_minutes)) minutes")
+            print("   REM Sleep: \(String(format: "%.0f", sleepData.rem_sleep_minutes)) minutes")
+            
+            // Send to server
+            try await APIService.shared.postSleepData(sleepData: sleepData)
+            
+            print("✅ Sleep data sync completed successfully")
+            
+            // Store last sync timestamp
+            UserDefaults.standard.set(Date(), forKey: "lastSleepDataSync")
+            
+        } catch let error as SleepScoreError {
+            print("❌ Failed to calculate sleep score for sync: \(error.localizedDescription)")
+        } catch let error as APIError {
+            print("❌ Failed to sync sleep data to server: \(error.localizedDescription)")
+        } catch {
+            print("❌ Unexpected error during sleep data sync: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Syncs sleep data for a specific date to the server
+    /// - Parameter date: The date to sync sleep data for
+    func syncSleepDataToServer(for date: Date) async {
+        print("🔄 Starting sleep data sync for \(date) to server...")
+        
+        guard checkAuthorizationStatus() else {
+            print("❌ HealthKit not authorized - cannot sync sleep data")
+            return
+        }
+        
+        do {
+            let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: date)
+            let sleepData = try SleepData(from: sleepResult, date: date)
+            
+            print("📊 Sleep data for \(date) prepared for sync:")
+            print("   Sleep Score: \(sleepData.score)")
+            print("   Time Asleep: \(String(format: "%.0f", sleepData.time_asleep_minutes)) minutes")
+            
+            try await APIService.shared.postSleepData(sleepData: sleepData)
+            
+            print("✅ Sleep data sync for \(date) completed successfully")
+            
+        } catch {
+            print("❌ Failed to sync sleep data for \(date): \(error.localizedDescription)")
+        }
+    }
+    
+    /// Checks if sleep data sync is needed and performs it
+    /// This can be called on app launch to ensure recent data is synced
+    func checkAndSyncSleepDataIfNeeded() async {
+        let lastSyncDate = UserDefaults.standard.object(forKey: "lastSleepDataSync") as? Date
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        // If we haven't synced today, sync yesterday's data
+        if let lastSync = lastSyncDate {
+            let lastSyncDay = calendar.startOfDay(for: lastSync)
+            if lastSyncDay < today {
+                print("🔄 Sleep data sync needed - last sync was \(lastSync)")
+                await syncLatestSleepDataToServer()
+            } else {
+                print("✅ Sleep data already synced today")
+            }
+        } else {
+            print("🔄 No previous sync found - performing initial sync")
+            await syncLatestSleepDataToServer()
+        }
+    }
 
     /// Fetches all available 90-day averages from Apple Health and prints only the summary in the required format.
     func printNinetyDaySummary() async {

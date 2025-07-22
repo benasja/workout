@@ -44,10 +44,10 @@ struct workApp: App {
             WorkoutSet.self,
             ExerciseDefinition.self,
             Program.self,
-            ProgramDay.self,
-            ProgramExercise.self,
             WeightEntry.self,
-            DailyJournal.self
+            DailyJournal.self,
+            Supplement.self,
+            SupplementLog.self
         ], isAutosaveEnabled: true, isUndoEnabled: false)
     }
     
