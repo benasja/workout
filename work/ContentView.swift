@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        StepsView()
+        MainTabView()
     }
 }
 
@@ -23,6 +23,7 @@ struct ContentView: View {
             ExerciseDefinition.self,
             Program.self,
             ProgramDay.self,
-            ProgramExercise.self
+            ProgramExercise.self,
+            DailyJournal.self
         ])
 }

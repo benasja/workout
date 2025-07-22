@@ -141,7 +141,7 @@ struct MoreView: View {
                         .foregroundColor(.primary)
                 }
                 
-                NavigationLink(destination: JournalView(tabSelection: $tabSelectionModel.selection)) {
+                NavigationLink(destination: JournalView()) {
                     Label("Journal", systemImage: "book.closed.fill")
                         .foregroundColor(.primary)
                 }

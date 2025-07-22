@@ -2,7 +2,6 @@ import SwiftUI
 
 struct InsightsView: View {
     @StateObject private var correlationEngine = CorrelationEngine.shared
-    @StateObject private var journalManager = JournalManager.shared
     @State private var isLoading = false
     @State private var showingEmptyState = false
     
