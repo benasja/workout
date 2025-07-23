@@ -9,15 +9,38 @@ import SwiftUI
 import SwiftData
 import HealthKit
 
+// Create the container outside the struct
+private let sharedContainer: ModelContainer = {
+    do {
+        return try ModelContainer(for:
+            UserProfile.self,
+            WorkoutSession.self,
+            CompletedExercise.self,
+            WorkoutSet.self,
+            ExerciseDefinition.self,
+            Program.self,
+            WeightEntry.self,
+            DailyJournal.self,
+            Supplement.self,
+            SupplementLog.self,
+            DailySupplementRecord.self
+        )
+    } catch {
+        fatalError("Failed to initialize ModelContainer: \(error)")
+    }
+}()
+
 @main
 struct workApp: App {
+    @StateObject private var dataManager = DataManager(modelContext: sharedContainer.mainContext)
     @State private var hasSeededData = false
     @State private var shouldResetDatabase = false
     @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
-    
+
     var body: some Scene {
         WindowGroup {
             MainTabView()
+                .environmentObject(dataManager)
                 .onAppear {
                     print("App launched")
                     if shouldResetDatabase {
@@ -37,18 +60,8 @@ struct workApp: App {
                     AppearanceMode(rawValue: appearanceMode) == .dark ? .dark : nil
                 )
         }
-        .modelContainer(for: [
-            UserProfile.self,
-            WorkoutSession.self,
-            CompletedExercise.self,
-            WorkoutSet.self,
-            ExerciseDefinition.self,
-            Program.self,
-            WeightEntry.self,
-            DailyJournal.self,
-            Supplement.self,
-            SupplementLog.self
-        ], isAutosaveEnabled: true, isUndoEnabled: false)
+        // The single, shared container is provided to the entire view hierarchy.
+        .modelContainer(sharedContainer)
     }
     
     private func seedDataIfNeeded() {

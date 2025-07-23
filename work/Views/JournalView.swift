@@ -11,18 +11,12 @@ import Foundation
 import UIKit
 
 struct JournalView: View {
-    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var dataManager: DataManager
     @State private var selectedDate = Date()
-    @State private var selectedTags: Set<JournalTag> = []
+    @State private var selectedTags: Set<String> = []
     @State private var notes: String = ""
-    @State private var currentEntry: DailyJournal? = nil
-    @State private var isLoading = false
     
-    private var availableTags: [JournalTag] = [
-        .coffee, .alcohol, .caffeine, .lateEating, .stress, .exercise, .meditation,
-        .goodSleep, .poorSleep, .illness, .travel, .work, .social, .supplements,
-        .hydration, .mood, .energy, .focus, .recovery
-    ]
+    private var availableTags: [JournalTag] = JournalTag.allCases
     
     var body: some View {
         NavigationView {
@@ -51,9 +45,9 @@ struct JournalView: View {
                                 ForEach(availableTags, id: \.self) { tag in
                                     ModernTagToggleView(
                                         tag: tag,
-                                        isSelected: selectedTags.contains(tag)
+                                        isSelected: selectedTags.contains(tag.rawValue)
                                     ) {
-                                        toggleTagAndSave(tag)
+                                        toggleTagAndSave(tag.rawValue)
                                     }
                                 }
                             }
@@ -77,32 +71,34 @@ struct JournalView: View {
             .onAppear {
                 loadEntryForDate()
             }
-            .onChange(of: selectedDate) { _, _ in
+            .onChange(of: selectedDate) {
                 loadEntryForDate()
+            }
+            .onChange(of: dataManager.currentJournalEntry) {
+                updateUI(from: dataManager.currentJournalEntry)
             }
         }
     }
     
     private func loadEntryForDate() {
-        isLoading = true
-        if let entry = JournalManager.shared.fetchEntry(for: selectedDate, context: modelContext) {
-            currentEntry = entry
-            // Restore UI state from selectedTags
-            selectedTags = Set(entry.selectedTags.compactMap { JournalTag(rawValue: $0) })
+        dataManager.fetchJournalEntry(for: selectedDate)
+    }
+    
+    private func updateUI(from entry: DailyJournal?) {
+        if let entry = entry {
+            selectedTags = Set(entry.selectedTags)
             notes = entry.notes ?? ""
         } else {
-            currentEntry = nil
             selectedTags = []
             notes = ""
         }
-        isLoading = false
     }
     
-    private func toggleTagAndSave(_ tag: JournalTag) {
-        if selectedTags.contains(tag) {
-            selectedTags.remove(tag)
+    private func toggleTagAndSave(_ tagRawValue: String) {
+        if selectedTags.contains(tagRawValue) {
+            selectedTags.remove(tagRawValue)
         } else {
-            selectedTags.insert(tag)
+            selectedTags.insert(tagRawValue)
         }
         // Haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -111,8 +107,7 @@ struct JournalView: View {
     }
     
     private func autoSave() {
-        JournalManager.shared.saveEntry(for: selectedDate, tags: selectedTags, notes: notes, context: modelContext)
-        // No reload here; UI state is already up to date
+        dataManager.saveJournalEntry(for: selectedDate, tags: selectedTags, notes: notes)
     }
 }
 
@@ -194,7 +189,32 @@ struct TagToggleView: View {
     }
 }
 
+private struct JournalView_Preview_Container: View {
+    let result: Result<ModelContainer, Error>
+
+    init() {
+        do {
+            let config = ModelConfiguration(isStoredInMemoryOnly: true)
+            let container = try ModelContainer(for: DailyJournal.self, configurations: config)
+            self.result = .success(container)
+        } catch {
+            self.result = .failure(error)
+        }
+    }
+
+    var body: some View {
+        switch result {
+        case .success(let container):
+            let dataManager = DataManager(modelContext: container.mainContext)
+            JournalView()
+                .modelContainer(container)
+                .environmentObject(dataManager)
+        case .failure(let error):
+            Text("Failed to create container: \(error.localizedDescription)")
+        }
+    }
+}
+
 #Preview {
-    JournalView()
-        .modelContainer(for: [DailyJournal.self])
+    JournalView_Preview_Container()
 }

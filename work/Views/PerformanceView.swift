@@ -458,31 +458,36 @@ struct QuickActionsView: View {
                 .font(.title3)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
-            
             HStack(spacing: 16) {
                 NavigationLink(destination: WorkoutLibraryView()) {
                     QuickActionCard(
-                        title: "Start Workout",
+                        title: "Workout",
                         icon: "dumbbell.fill",
                         color: .orange
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
-                
                 NavigationLink(destination: JournalView()) {
                     QuickActionCard(
-                        title: "Add Journal",
+                        title: "Journal",
                         icon: "book.closed.fill",
                         color: .blue
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
-                
                 NavigationLink(destination: WeightTrackerView()) {
                     QuickActionCard(
-                        title: "Log Weight",
+                        title: "Weight",
                         icon: "scalemass",
                         color: .green
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                NavigationLink(destination: SupplementsView()) {
+                    QuickActionCard(
+                        title: "Vitamins",
+                        icon: "pills.fill",
+                        color: .purple
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
