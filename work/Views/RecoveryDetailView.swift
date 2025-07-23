@@ -62,24 +62,54 @@ struct RecoveryDetailView: View {
                         .background(AppColors.secondaryBackground)
                         .cornerRadius(16)
                         
-                        // Recovery Insights Card
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Recovery Insights")
+                        // Recovery Insights Card (Three-Layer Model)
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Headline
+                            Text(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).headline)
                                 .font(.headline)
-                                .fontWeight(.semibold)
                                 .foregroundColor(.primary)
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(generateInsightsList(from: recoveryResult), id: \.self) { insight in
+
+                            // Component Breakdown
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).componentBreakdown) { component in
                                     HStack(alignment: .top, spacing: 8) {
-                                        Text("•")
-                                            .font(.headline)
-                                            .foregroundColor(.green)
-                                        Text(insight)
-                                            .font(.subheadline)
-                                            .foregroundColor(.gray)
+                                        Image(systemName: "circle.fill")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(color(for: component.status))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack {
+                                                Text(component.metricName)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.primary)
+                                                Spacer()
+                                                Text(component.userValue)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            if !component.optimalRange.isEmpty {
+                                                Text(component.optimalRange)
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Text(component.analysis)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
                                 }
                             }
+
+                            // Recommendation Box
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "bolt.fill")
+                                    .foregroundColor(.yellow)
+                                Text(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).recommendation)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding()
+                            .background(AppColors.tertiaryBackground)
+                            .cornerRadius(12)
                         }
                         .padding(16)
                         .background(AppColors.secondaryBackground)
@@ -235,15 +265,16 @@ struct RecoveryDetailView: View {
         .cornerRadius(16)
     }
     
-    private func generateInsightsList(from result: RecoveryScoreResult) -> [String] {
-        var insights: [String] = []
-        
-        // Use component descriptions from the centralized view model
-        for component in healthStats.recoveryComponents {
-            insights.append(component.description)
+    // MARK: - Helper Colour Mapper
+    private func color(for status: InsightStatus) -> Color {
+        switch status {
+        case .optimal, .good:
+            return .green
+        case .fair:
+            return .orange
+        case .poor:
+            return .red
         }
-        
-        return insights
     }
 }
 

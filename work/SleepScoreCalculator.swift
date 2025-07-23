@@ -216,29 +216,28 @@ final class SleepScoreCalculator {
             baselineWakeTime: baselineData.wakeTime
         )
         
-        // FINAL CALIBRATION: New weights
-        let componentScore = 
-            (restorationComponent * 0.50) +
-            (efficiencyComponent * 0.25) +
-            (consistencyComponent * 0.25)
-        
-        // Apply the new continuous Duration Multiplier
-        let hoursAsleep = sleepData.timeAsleep / 3600
-        let durationMultiplier = calculateDurationMultiplier(hoursAsleep: hoursAsleep)
-        let totalSleepScore = componentScore * durationMultiplier
-        
-        // Apply final clamping to ensure score is between 0 and 100
-        let finalScore = Int(round(clamp(totalSleepScore, min: 0, max: 100)))
-        
-        // Debug: Print component values
-        print("🔍 RE-CALIBRATED Sleep Score Debug:")
-        print("   Restoration Component: \(restorationComponent)")
-        print("   Efficiency Component: \(efficiencyComponent)")
-        print("   Consistency Component: \(consistencyComponent)")
-        print("   Component Score: \(componentScore)")
-        print("   Hours Asleep: \(hoursAsleep)")
-        print("   Duration Multiplier: \(durationMultiplier)")
-        print("   Total Score: \(totalSleepScore)")
+        // =============================
+        // PERSONALIZED PERFORMANCE SLEEP SCORE V3.0
+        // =============================
+        let performanceScore = calculatePerformanceScore(
+            timeAsleepInSeconds: sleepData.timeAsleep,
+            deepSleepInSeconds: sleepData.deepSleepDuration,
+            remSleepInSeconds: sleepData.remSleepDuration,
+            timeInBedInSeconds: sleepData.timeInBed,
+            actualBedtime: sleepData.bedtime ?? sleepDate,
+            targetBedtime: baselineData.bedtime ?? sleepData.bedtime ?? sleepDate // Fallback to baseline bedtime if available, else actual
+        )
+
+        let finalScore = performanceScore // Replace previous scoring model
+
+        // =============================
+        // Debug: Print V3.0 Performance Score breakdown
+        print("🌙 Performance Sleep Score V3.0 Debug:")
+        print("   Duration Points: \(getDurationPoints(for: sleepData.timeAsleep))")
+        print("   Deep Sleep Points: \(getDeepSleepPoints(for: sleepData.deepSleepDuration))")
+        print("   REM Points: \(getREMPoints(for: sleepData.remSleepDuration))")
+        print("   Efficiency Points: \(getEfficiencyPoints(timeAsleep: sleepData.timeAsleep, timeInBed: sleepData.timeInBed))")
+        print("   Onset Consistency Points: \(getOnsetConsistencyPoints(actualBedtime: sleepData.bedtime ?? sleepDate, targetBedtime: baselineData.bedtime ?? sleepData.bedtime ?? sleepDate))")
         print("   Final Score: \(finalScore)")
         print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
         print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
@@ -738,6 +737,100 @@ final class SleepScoreCalculator {
         print("   Consistency Score: \(consistencyScore)")
         
         return consistencyScore
+    }
+    
+    // MARK: - Performance Sleep Score V3.0 Helpers
+
+    private func calculatePerformanceScore(
+        timeAsleepInSeconds: Double,
+        deepSleepInSeconds: Double,
+        remSleepInSeconds: Double,
+        timeInBedInSeconds: Double,
+        actualBedtime: Date,
+        targetBedtime: Date
+    ) -> Int {
+        let durationPts = getDurationPoints(for: timeAsleepInSeconds)
+        let deepPts = getDeepSleepPoints(for: deepSleepInSeconds)
+        let remPts = getREMPoints(for: remSleepInSeconds)
+        let efficiencyPts = getEfficiencyPoints(timeAsleep: timeAsleepInSeconds, timeInBed: timeInBedInSeconds)
+        let onsetPts = getOnsetConsistencyPoints(actualBedtime: actualBedtime, targetBedtime: targetBedtime)
+        let total = durationPts + deepPts + remPts + efficiencyPts + onsetPts
+        return max(0, min(100, total))
+    }
+
+    private func getDurationPoints(for timeAsleepInSeconds: Double) -> Int {
+        let minutes = timeAsleepInSeconds / 60
+        switch minutes {
+        case let m where m > 480: return 30
+        case 470...480: return 29
+        case 460..<470: return 28
+        case 450..<460: return 27
+        case 440..<450: return 26
+        case 430..<440: return 25
+        case 420..<430: return 25
+        case 410..<420: return 24
+        case 400..<410: return 22
+        case 390..<400: return 20
+        case 380..<390: return 18
+        case 370..<380: return 16
+        case 360..<370: return 15
+        case 330..<360: return 10
+        case 300..<330: return 5
+        default: return 0
+        }
+    }
+
+    private func getDeepSleepPoints(for deepSleepInSeconds: Double) -> Int {
+        let minutes = deepSleepInSeconds / 60
+        switch minutes {
+        case let m where m >= 105: return 25
+        case 90..<105: return 22
+        case 75..<90: return 18
+        case 60..<75: return 14
+        case 45..<60: return 8
+        default: return 0
+        }
+    }
+
+    private func getREMPoints(for remSleepInSeconds: Double) -> Int {
+        let minutes = remSleepInSeconds / 60
+        switch minutes {
+        case let m where m >= 105: return 20
+        case 90..<105: return 17
+        case 75..<90: return 14
+        case 60..<75: return 10
+        case 0..<60:
+            // Graduated 0-5 points linearly from 0 to 60 min
+            return Int((minutes / 60.0) * 5.0)
+        default:
+            return 0
+        }
+    }
+
+    private func getEfficiencyPoints(timeAsleep: Double, timeInBed: Double) -> Int {
+        guard timeInBed > 0 else { return 0 }
+        let efficiency = (timeAsleep / timeInBed) * 100
+        switch efficiency {
+        case let e where e >= 95: return 15
+        case 92.5..<95: return 12
+        case 90..<92.5: return 10
+        case 85..<90: return 5
+        default: return 0
+        }
+    }
+
+    private func getOnsetConsistencyPoints(actualBedtime: Date, targetBedtime: Date) -> Int {
+        let calendar = Calendar.current
+        let componentsActual = calendar.dateComponents([.hour, .minute], from: actualBedtime)
+        let componentsTarget = calendar.dateComponents([.hour, .minute], from: targetBedtime)
+        guard let actualDate = calendar.date(from: componentsActual), let targetDate = calendar.date(from: componentsTarget) else { return 0 }
+        let diff = abs(actualDate.timeIntervalSince(targetDate))
+        switch diff {
+        case 0..<(15*60): return 10
+        case (15*60)..<(30*60): return 7
+        case (30*60)..<(45*60): return 4
+        default: return 0
+        }
     }
     
     // MARK: - Helper Functions
