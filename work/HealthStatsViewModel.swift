@@ -430,6 +430,10 @@ final class HealthStatsViewModel: ObservableObject {
     }
     
     private func calculateREMSleepScore(from result: SleepScoreResult) -> Double {
+        let remMinutes = result.remSleep / 60
+        if remMinutes >= 120 {
+            return 100
+        }
         let remPercentage = result.remSleepPercentage * 100
         return normalizeScore(remPercentage, min: 20, maxValue: 25)
     }

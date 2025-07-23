@@ -184,21 +184,6 @@ struct MoreView: View {
             }
             
             Section("Analytics") {
-                NavigationLink(destination: AnalyticsView()) {
-                    Label("Analytics", systemImage: "chart.bar.xaxis")
-                        .foregroundColor(.primary)
-                }
-                
-                NavigationLink(destination: InsightsView()) {
-                    Label("Insights", systemImage: "lightbulb.fill")
-                        .foregroundColor(.primary)
-                }
-                
-                NavigationLink(destination: CorrelationView()) {
-                    Label("Correlations", systemImage: "arrow.triangle.branch")
-                        .foregroundColor(.primary)
-                }
-                
                 NavigationLink(destination: SleepLabView()) {
                     Label("Sleep Lab", systemImage: "moon.stars")
                         .foregroundColor(.primary)

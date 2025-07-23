@@ -124,13 +124,24 @@ struct SleepAnalysisEngine {
         )
 
         // REM Sleep
-        let remComp = makeComponent(
-            name: "REM Sleep",
-            userValue: formatTime(remSleep),
-            optimal: "\(formatTime(remLower))–\(formatTime(remUpper))",
-            value: remSleep,
-            range: remLower...remUpper
-        )
+        let remComp: ComponentInsight
+        if remSleep >= 120 * 60 { // 120 minutes in seconds
+            remComp = ComponentInsight(
+                metricName: "REM Sleep",
+                userValue: formatTime(remSleep),
+                optimalRange: "2h+",
+                analysis: "Excellent REM sleep duration (2h+)",
+                status: .optimal
+            )
+        } else {
+            remComp = makeComponent(
+                name: "REM Sleep",
+                userValue: formatTime(remSleep),
+                optimal: "\(formatTime(remLower))–\(formatTime(remUpper))",
+                value: remSleep,
+                range: remLower...remUpper
+            )
+        }
 
         // Efficiency (%) – compare using fractional values
         let efficiencyComp = makeComponent(
