@@ -9,28 +9,9 @@ struct SleepScoreBreakdown {
     static let onsetMax: Double = 10
 }
 
-// MARK: - Time Formatting Utility
-func formatTimeInHoursAndMinutes(_ hours: Double) -> String {
-    let totalMinutes = Int(hours * 60)
-    let hoursPart = totalMinutes / 60
-    let minutesPart = totalMinutes % 60
-    
-    if hoursPart > 0 && minutesPart > 0 {
-        return "\(hoursPart)h \(minutesPart)min"
-    } else if hoursPart > 0 {
-        return "\(hoursPart)h"
-    } else {
-        return "\(minutesPart)min"
-    }
-}
-
 struct SleepDetailView: View {
     @EnvironmentObject var dateModel: PerformanceDateModel
-    @State private var sleepResult: SleepScoreResult?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var biomarkerData: [String: (value: Double, change: Double?, trend: [Double])] = [:]
-    @State private var loadingWorkItem: DispatchWorkItem? = nil
+    @StateObject private var healthStats = HealthStatsViewModel()
     
     var selectedDate: Date { dateModel.selectedDate }
     
@@ -38,17 +19,18 @@ struct SleepDetailView: View {
         ScrollView {
             VStack(spacing: 16) {
                 DateSliderView(selectedDate: $dateModel.selectedDate)
-                if isLoading {
+                
+                if healthStats.isLoading {
                     loadingOverlay
-                } else if let error = errorMessage {
+                } else if let error = healthStats.errorMessage {
                     errorOverlay(error)
-                } else if let result = sleepResult {
+                } else if let sleepResult = healthStats.sleepResult {
                     // Main Score Card
                     VStack(spacing: 8) {
                         Text("Sleep Score")
                             .font(.subheadline)
                             .foregroundColor(.gray)
-                        Text("\(result.finalScore)")
+                        Text("\(sleepResult.finalScore)")
                             .font(.system(size: 48, weight: .bold, design: .rounded))
                             .foregroundColor(.blue)
                     }
@@ -57,7 +39,7 @@ struct SleepDetailView: View {
                     .background(AppColors.secondaryBackground)
                     .cornerRadius(16)
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Sleep Score: \(result.finalScore)")
+                    .accessibilityLabel("Sleep Score: \(sleepResult.finalScore)")
                     
                     // How It Was Calculated Card
                     VStack(alignment: .leading, spacing: 12) {
@@ -66,53 +48,12 @@ struct SleepDetailView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
                         VStack(spacing: 8) {
-                            ScoreBreakdownRow(
-                                component: "Sleep Duration",
-                                score: calculateDurationScore(from: result),
-                                maxScore: SleepScoreBreakdown.durationMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "Sleep Efficiency",
-                                score: result.efficiencyComponent,
-                                maxScore: SleepScoreBreakdown.efficiencyMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "Deep Sleep",
-                                score: calculateDeepSleepScore(from: result),
-                                maxScore: SleepScoreBreakdown.deepMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "REM Sleep",
-                                score: calculateREMSleepScore(from: result),
-                                maxScore: SleepScoreBreakdown.remMax
-                            )
-                            ScoreBreakdownRow(
-                                component: "Sleep Onset",
-                                score: calculateOnsetScore(from: result),
-                                maxScore: SleepScoreBreakdown.onsetMax
-                            )
-                        }
-                    }
-                    .padding(16)
-                    .background(AppColors.secondaryBackground)
-                    .cornerRadius(16)
-                    
-                    // Sleep Insights Card
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Sleep Insights")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(generateInsightsList(from: result), id: \.self) { insight in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text("•")
-                                        .font(.headline)
-                                        .foregroundColor(.blue)
-                                    Text(insight)
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                }
+                            ForEach(healthStats.sleepComponents) { component in
+                                ScoreBreakdownRow(
+                                    component: component.name,
+                                    score: component.score,
+                                    maxScore: component.maxScore
+                                )
                             }
                         }
                     }
@@ -120,47 +61,61 @@ struct SleepDetailView: View {
                     .background(AppColors.secondaryBackground)
                     .cornerRadius(16)
                     
-                    // Sleep Metrics Grid
+                    // Sleep Insights Card (Three-Layer Model)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Headline
+                        Text(SleepAnalysisEngine.generateInsights(from: sleepResult).headline)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+
+                        // Component Breakdown
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(SleepAnalysisEngine.generateInsights(from: sleepResult).componentBreakdown) { component in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: "circle.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(color(for: component.status))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack {
+                                            Text(component.metricName)
+                                                .font(.subheadline)
+                                                .foregroundColor(.primary)
+                                            Spacer()
+                                            Text(component.userValue)
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Text(component.analysis)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Actionable Recommendation
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "lightbulb.fill")
+                                .foregroundColor(.yellow)
+                            Text(SleepAnalysisEngine.generateInsights(from: sleepResult).recommendation)
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                        }
+                        .padding()
+                        .background(AppColors.tertiaryBackground)
+                        .cornerRadius(12)
+                    }
+                    .padding(16)
+                    .background(AppColors.secondaryBackground)
+                    .cornerRadius(16)
+                    
+                    // Sleep Metrics Grid - Using Professional BiomarkerTrendCard
                     LazyVGrid(columns: [
                         GridItem(.flexible()),
                         GridItem(.flexible())
                     ], spacing: 12) {
-                        SleepMetricCard(
-                            title: "Time in Bed",
-                            value: result.timeInBed / 3600,
-                            unit: "h",
-                            color: .blue
-                        )
-                        SleepMetricCard(
-                            title: "Time Asleep",
-                            value: result.timeAsleep / 3600,
-                            unit: "h",
-                            color: .green
-                        )
-                        SleepMetricCard(
-                            title: "Time in REM",
-                            value: result.remSleep / 3600,
-                            unit: "h",
-                            color: .purple
-                        )
-                        SleepMetricCard(
-                            title: "Time in Deep",
-                            value: result.deepSleep / 3600,
-                            unit: "h",
-                            color: .indigo
-                        )
-                        SleepMetricCard(
-                            title: "Sleep Efficiency",
-                            value: result.sleepEfficiency * 100,
-                            unit: "%",
-                            color: .orange
-                        )
-                        SleepMetricCard(
-                            title: "Time to Fall Asleep",
-                            value: result.timeToFallAsleep,
-                            unit: "min",
-                            color: .red
-                        )
+                        sleepBiomarkerCards
                     }
                 } else {
                     EmptyStateView(
@@ -178,218 +133,146 @@ struct SleepDetailView: View {
         .navigationTitle("Sleep")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
-            loadSleepData()
+            Task {
+                await healthStats.loadData(for: selectedDate)
+            }
         }
-        .onChange(of: selectedDate) { _, _ in
-            loadSleepData()
+        .onChange(of: selectedDate) { _, newDate in
+            Task {
+                await healthStats.loadData(for: newDate)
+            }
+        }
+    }
+    
+    // MARK: - Professional Sleep Biomarker Cards
+    
+    @ViewBuilder
+    private var sleepBiomarkerCards: some View {
+        let sleepTrends = healthStats.getSleepBiomarkerTrends()
+        
+        if let timeInBedData = sleepTrends["timeInBed"] {
+            BiomarkerTrendCard(
+                title: "Time in Bed",
+                value: timeInBedData.currentValue,
+                unit: timeInBedData.unit,
+                percentageChange: timeInBedData.percentageChange,
+                trendData: timeInBedData.trend,
+                color: timeInBedData.color
+            )
+        }
+        
+        if let timeAsleepData = sleepTrends["timeAsleep"] {
+            BiomarkerTrendCard(
+                title: "Time Asleep",
+                value: timeAsleepData.currentValue,
+                unit: timeAsleepData.unit,
+                percentageChange: timeAsleepData.percentageChange,
+                trendData: timeAsleepData.trend,
+                color: timeAsleepData.color
+            )
+        }
+        
+        if let remSleepData = sleepTrends["remSleep"] {
+            BiomarkerTrendCard(
+                title: "Time in REM",
+                value: remSleepData.currentValue,
+                unit: remSleepData.unit,
+                percentageChange: remSleepData.percentageChange,
+                trendData: remSleepData.trend,
+                color: remSleepData.color
+            )
+        }
+        
+        if let deepSleepData = sleepTrends["deepSleep"] {
+            BiomarkerTrendCard(
+                title: "Time in Deep",
+                value: deepSleepData.currentValue,
+                unit: deepSleepData.unit,
+                percentageChange: deepSleepData.percentageChange,
+                trendData: deepSleepData.trend,
+                color: deepSleepData.color
+            )
+        }
+        
+        if let efficiencyData = sleepTrends["efficiency"] {
+            BiomarkerTrendCard(
+                title: "Sleep Efficiency",
+                value: efficiencyData.currentValue,
+                unit: efficiencyData.unit,
+                percentageChange: efficiencyData.percentageChange,
+                trendData: efficiencyData.trend,
+                color: efficiencyData.color
+            )
+        }
+        
+        if let fallAsleepData = sleepTrends["fallAsleep"] {
+            BiomarkerTrendCard(
+                title: "Time to Fall Asleep",
+                value: fallAsleepData.currentValue,
+                unit: fallAsleepData.unit,
+                percentageChange: fallAsleepData.percentageChange,
+                trendData: fallAsleepData.trend,
+                color: fallAsleepData.color
+            )
         }
     }
     
     // MARK: - Helper Methods
     
     private var loadingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
-            ProgressView("Loading...")
+        VStack(spacing: 16) {
+            ProgressView("Loading sleep data...")
                 .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
                 .foregroundColor(.primary)
-                .padding()
-                .background(AppColors.secondaryBackground)
-                .cornerRadius(12)
-        }
-    }
-    private func errorOverlay(_ error: String) -> some View {
-        ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
-            VStack {
-                Text(error)
-                    .foregroundColor(.red)
-                    .padding()
-                Button("Retry") { loadSleepData() }
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+            
+            if healthStats.isCalculatingBaseline {
+                Text("Calculating historical baseline...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
-    }
-    
-    private func loadSleepData() {
-        isLoading = false
-        errorMessage = nil
-        loadingWorkItem?.cancel()
-        let workItem = DispatchWorkItem {
-            self.isLoading = true
-        }
-        loadingWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
-        Task {
-            do {
-                let result = try await SleepScoreCalculator.shared.calculateSleepScore(for: selectedDate)
-                await loadBiomarkerData(for: selectedDate)
-                await MainActor.run {
-                    self.loadingWorkItem?.cancel()
-                    self.sleepResult = result
-                    self.isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.loadingWorkItem?.cancel()
-                    self.errorMessage = error.localizedDescription
-                    self.isLoading = false
-                }
-            }
-        }
-    }
-    private func loadBiomarkerData(for date: Date) async {
-        let timeInBedTrend = generateSampleTrend(baseValue: 8.0, variation: 0.5)
-        let timeAsleepTrend = generateSampleTrend(baseValue: 7.5, variation: 0.3)
-        let remSleepTrend = generateSampleTrend(baseValue: 1.8, variation: 0.2)
-        let deepSleepTrend = generateSampleTrend(baseValue: 1.2, variation: 0.2)
-        let efficiencyTrend = generateSampleTrend(baseValue: 90.0, variation: 5.0)
-        let fallAsleepTrend = generateSampleTrend(baseValue: 15.0, variation: 5.0)
-        await MainActor.run {
-            biomarkerData["timeInBed"] = (value: timeInBedTrend.last ?? 8.0, change: nil, trend: timeInBedTrend)
-            biomarkerData["timeAsleep"] = (value: timeAsleepTrend.last ?? 7.5, change: nil, trend: timeAsleepTrend)
-            biomarkerData["remSleep"] = (value: remSleepTrend.last ?? 1.8, change: nil, trend: remSleepTrend)
-            biomarkerData["deepSleep"] = (value: deepSleepTrend.last ?? 1.2, change: nil, trend: deepSleepTrend)
-            biomarkerData["efficiency"] = (value: efficiencyTrend.last ?? 90.0, change: nil, trend: efficiencyTrend)
-            biomarkerData["fallAsleep"] = (value: fallAsleepTrend.last ?? 15.0, change: nil, trend: fallAsleepTrend)
-        }
-    }
-    private func generateSampleTrend(baseValue: Double, variation: Double) -> [Double] {
-        return (0..<7).map { _ in
-            baseValue + Double.random(in: -variation...variation)
-        }
-    }
-    private func generateInsightsList(from result: SleepScoreResult) -> [String] {
-        var insights: [String] = []
-        // Use subscores and feedbackLabel for all metrics
-        let durationScore = calculateDurationScore(from: result)
-        insights.append("\(feedbackLabel(for: durationScore)): Sleep duration")
-        let efficiencyScore = result.efficiencyComponent
-        insights.append("\(feedbackLabel(for: efficiencyScore)): Sleep efficiency")
-        let deepScore = calculateDeepSleepScore(from: result)
-        insights.append("\(feedbackLabel(for: deepScore)): Deep sleep")
-        let remScore = calculateREMSleepScore(from: result)
-        insights.append("\(feedbackLabel(for: remScore)): REM sleep")
-        let onsetScore = calculateOnsetScore(from: result)
-        insights.append("\(feedbackLabel(for: onsetScore)): Sleep onset")
-        // Add more metrics as needed
-        return insights
-    }
-    
-    // MARK: - Score Calculation Helpers
-    
-    private func calculateDurationScore(from result: SleepScoreResult) -> Double {
-        let hoursAsleep = result.timeAsleep / 3600
-        let optimal = 8.0
-        let deviation = abs(hoursAsleep - optimal)
-        return 100 * Foundation.exp(-0.5 * Foundation.pow(deviation / 1.5, 2))
-    }
-    
-    private func calculateDeepSleepScore(from result: SleepScoreResult) -> Double {
-        let deepPercentage = result.deepSleepPercentage * 100
-        return normalizeScore(deepPercentage, min: 13, maxValue: 23)
-    }
-    
-    private func calculateREMSleepScore(from result: SleepScoreResult) -> Double {
-        let remPercentage = result.remSleepPercentage * 100
-        return normalizeScore(remPercentage, min: 20, maxValue: 25)
-    }
-    
-    private func calculateOnsetScore(from result: SleepScoreResult) -> Double {
-        let fallAsleepTime = result.timeToFallAsleep
-        // Use a smooth exponential decay curve instead of discrete steps
-        if fallAsleepTime <= 10 {
-            return 100
-        } else if fallAsleepTime <= 60 {
-            // Smooth curve from 100 to 0 over 50 minutes
-            let normalizedTime = (fallAsleepTime - 10) / 50.0
-            return 100 * Foundation.exp(-2.0 * normalizedTime)
-        } else {
-            return max(0, 100 * Foundation.exp(-2.0 * (60 - 10) / 50.0) - (fallAsleepTime - 60) * 0.5)
-        }
-    }
-    
-    private func normalizeScore(_ value: Double, min: Double, maxValue: Double) -> Double {
-        if value < min {
-            // Smooth curve for values below minimum
-            return 60 * (value / min) * (value / min)
-        }
-        if value > maxValue {
-            // Smooth curve for values above maximum
-            let excess = value - maxValue
-            let penalty = excess * 3.0
-            return max(60, 100 - penalty)
-        }
-        // Smooth curve within optimal range
-        let optimal = (min + maxValue) / 2
-        let deviation = abs(value - optimal)
-        let maxDeviation = (maxValue - min) / 2
-        let normalizedDeviation = deviation / maxDeviation
-        return 100 - (normalizedDeviation * normalizedDeviation * 40)
-    }
-    
-    private func feedbackLabel(for score: Double) -> String {
-        switch score {
-        case 90...:
-            return "Excellent"
-        case 80..<90:
-            return "Good"
-        case 70..<80:
-            return "Fair"
-        case 60..<70:
-            return "Poor"
-        default:
-            return "Critical"
-        }
-    }
-}
-
-// MARK: - Supporting Views
-
-struct SleepMetricCard: View {
-    let title: String
-    let value: Double
-    let unit: String
-    let color: Color
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.gray)
-            HStack(alignment: .bottom, spacing: 2) {
-                if unit == "h" {
-                    Text(formatTimeInHoursAndMinutes(value))
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                } else if unit == "%" {
-                    Text("\(Int(value))")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                    Text(unit)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                } else {
-                    Text("\(Int(value))")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                    Text(unit)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding()
         .background(AppColors.secondaryBackground)
         .cornerRadius(12)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(unit == "h" ? formatTimeInHoursAndMinutes(value) : "\(Int(value)) \(unit)")")
+    }
+    
+    private func errorOverlay(_ error: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundColor(.orange)
+            
+            Text("Unable to load sleep data")
+                .font(.headline)
+                .fontWeight(.semibold)
+            
+            Text(error)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Try Again") {
+                Task {
+                    await healthStats.refresh()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Insight Status Colour Helper
+    private func color(for status: InsightStatus) -> Color {
+        switch status {
+        case .optimal, .good:
+            return .green
+        case .fair:
+            return .orange
+        case .poor:
+            return .red
+        }
     }
 }
 

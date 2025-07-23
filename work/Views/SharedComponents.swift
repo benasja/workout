@@ -8,6 +8,30 @@
 import SwiftUI
 import Charts
 
+// MARK: - TimeInterval Extension for Consistent Formatting
+extension TimeInterval {
+    /// Formats duration as "6h 50m" for consistent display across the app
+    func formattedAsHoursAndMinutes() -> String {
+        let totalMinutes = Int(self) / 60
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        
+        if hours > 0 && minutes > 0 {
+            return "\(hours)h \(minutes)m"
+        } else if hours > 0 {
+            return "\(hours)h"
+        } else {
+            return "\(minutes)m"
+        }
+    }
+    
+    /// Formats duration as hours with one decimal place (e.g., "7.5h") - for backwards compatibility
+    func formattedAsDecimalHours() -> String {
+        let hours = self / 3600
+        return String(format: "%.1fh", hours)
+    }
+}
+
 extension Color {
     static let cardBackground = AppColors.secondaryBackground
     static let cardSelected = AppColors.tertiaryBackground
@@ -372,6 +396,24 @@ struct BiomarkerTrendCard: View {
     let trendData: [Double]
     let color: Color
     
+    // Trend arrow logic
+    private var trendIcon: Image {
+        guard trendData.count >= 2 else { return Image(systemName: "arrow.right") }
+        let last = trendData[trendData.count - 1]
+        let prev = trendData[trendData.count - 2]
+        if last > prev { return Image(systemName: "arrow.up.right") }
+        if last < prev { return Image(systemName: "arrow.down.right") }
+        return Image(systemName: "arrow.right")
+    }
+    private var trendColor: Color {
+        guard trendData.count >= 2 else { return .gray }
+        let last = trendData[trendData.count - 1]
+        let prev = trendData[trendData.count - 2]
+        if last > prev { return .green }
+        if last < prev { return .red }
+        return .gray
+    }
+    
     init(
         title: String,
         value: Double,
@@ -398,78 +440,85 @@ struct BiomarkerTrendCard: View {
             HStack {
                 // Main value
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .bottom, spacing: 4) {
-                        if unit == "ms" || unit == "bpm" {
-                            // HRV and RHR should be displayed as integers
+                    HStack(alignment: .bottom, spacing: 2) {
+                        if unit == "h" {
+                            let timeInterval = value * 3600 // Convert hours back to seconds
+                            Text(timeInterval.formattedAsHoursAndMinutes())
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                        } else if unit == "ms" || unit == "bpm" {
                             Text("\(Int(value))")
                                 .font(.title2)
                                 .fontWeight(.bold)
+                                .foregroundColor(.primary)
                         } else if unit == "%" {
-                            // Percentages should be displayed as integers
                             Text("\(Int(value))")
                                 .font(.title2)
                                 .fontWeight(.bold)
+                                .foregroundColor(.primary)
                         } else {
-                            // Other values can have decimals
                             Text("\(String(format: "%.1f", value))")
                                 .font(.title2)
                                 .fontWeight(.bold)
+                                .foregroundColor(.primary)
                         }
-                        
-                        Text(unit)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        if unit != "h" {
+                            Text(unit)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        // Trend arrow
+                        trendIcon
+                            .font(.title3)
+                            .foregroundColor(trendColor)
+                            .padding(.leading, 2)
                     }
                 }
-                
                 Spacer()
-                
-                // Percentage change
-                if let change = percentageChange {
-                    HStack(spacing: 2) {
-                        Image(systemName: change >= 0 ? "arrow.up" : "arrow.down")
-                            .font(.caption)
-                        
-                        Text("\(abs(Int(change)))%")
-                            .font(.caption)
-                            .fontWeight(.semibold)
+                // Trend chart
+                if !trendData.isEmpty {
+                    if #available(iOS 16.0, *) {
+                        Chart {
+                            ForEach(Array(trendData.enumerated()), id: \.offset) { index, dataPoint in
+                                LineMark(
+                                    x: .value("Day", index),
+                                    y: .value("Value", dataPoint)
+                                )
+                                .foregroundStyle(color)
+                                .lineStyle(StrokeStyle(lineWidth: 2))
+                            }
+                        }
+                        .frame(height: 40)
+                        .chartYScale(domain: .automatic(includesZero: false))
+                        .chartXAxis(.hidden)
+                        .chartYAxis(.hidden)
+                    } else {
+                        SimpleTrendView(data: trendData, color: color)
+                            .frame(height: 40)
                     }
-                    .foregroundColor(change >= 0 ? .green : .red)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 40)
+                        .overlay(
+                            Text("No trend data")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        )
                 }
             }
-            
-            // Mini trend chart
-            if !trendData.isEmpty {
-                if #available(iOS 16.0, *) {
-                    Chart {
-                        ForEach(Array(trendData.enumerated()), id: \.offset) { index, dataPoint in
-                            LineMark(
-                                x: .value("Day", index),
-                                y: .value("Value", dataPoint)
-                            )
-                            .foregroundStyle(color)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                        }
-                    }
-                    .frame(height: 40)
-                    .chartYScale(domain: .automatic(includesZero: false))
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
-                } else {
-                    // Fallback for iOS 15 and earlier
-                    SimpleTrendView(data: trendData, color: color)
-                        .frame(height: 40)
+            // Bottom trend arrow and percentage
+            if let change = percentageChange {
+                HStack(spacing: 4) {
+                    Image(systemName: change >= 0 ? "arrow.up" : "arrow.down")
+                        .font(.caption2)
+                        .foregroundColor(change >= 0 ? .green : .red)
+                    Text("\(String(format: "%.1f", abs(change)))%")
+                        .font(.caption2)
+                        .foregroundColor(change >= 0 ? .green : .red)
                 }
-            } else {
-                // Placeholder when no trend data
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: 40)
-                    .overlay(
-                        Text("No trend data")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    )
+                .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -477,7 +526,18 @@ struct BiomarkerTrendCard: View {
         .background(AppColors.secondaryBackground)
         .cornerRadius(12)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(unit == "ms" || unit == "bpm" || unit == "%" ? "\(Int(value))" : String(format: "%.1f", value)) \(unit)")
+        .accessibilityLabel("\(title): \(accessibilityValueString())")
+    }
+    
+    private func accessibilityValueString() -> String {
+        if unit == "h" {
+            let timeInterval = value * 3600
+            return timeInterval.formattedAsHoursAndMinutes()
+        } else if unit == "ms" || unit == "bpm" || unit == "%" {
+            return "\(Int(value)) \(unit)"
+        } else {
+            return "\(String(format: "%.1f", value)) \(unit)"
+        }
     }
 }
 

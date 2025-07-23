@@ -194,7 +194,7 @@ final class SleepScoreCalculator {
         print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
         print("   Sleep Efficiency: \((sleepData.timeAsleep / sleepData.timeInBed) * 100)%")
         
-        // Calculate components using the FINAL CALIBRATED algorithm
+        // Calculate components using the NEW RE-CALIBRATED algorithm
         let restorationComponent = calculateRestorationComponent(
             timeAsleep: sleepData.timeAsleep,
             deepSleepDuration: sleepData.deepSleepDuration,
@@ -216,13 +216,13 @@ final class SleepScoreCalculator {
             baselineWakeTime: baselineData.wakeTime
         )
         
-        // Calculate final score using the FINAL CALIBRATED formula
+        // FINAL CALIBRATION: New weights
         let componentScore = 
-            (restorationComponent * 0.45) +
-            (efficiencyComponent * 0.30) +
+            (restorationComponent * 0.50) +
+            (efficiencyComponent * 0.25) +
             (consistencyComponent * 0.25)
         
-        // Apply the Duration Multiplier (The Gatekeeper)
+        // Apply the new continuous Duration Multiplier
         let hoursAsleep = sleepData.timeAsleep / 3600
         let durationMultiplier = calculateDurationMultiplier(hoursAsleep: hoursAsleep)
         let totalSleepScore = componentScore * durationMultiplier
@@ -231,7 +231,7 @@ final class SleepScoreCalculator {
         let finalScore = Int(round(clamp(totalSleepScore, min: 0, max: 100)))
         
         // Debug: Print component values
-        print("🔍 FINAL CALIBRATED Sleep Score Debug:")
+        print("🔍 RE-CALIBRATED Sleep Score Debug:")
         print("   Restoration Component: \(restorationComponent)")
         print("   Efficiency Component: \(efficiencyComponent)")
         print("   Consistency Component: \(consistencyComponent)")
@@ -559,27 +559,33 @@ final class SleepScoreCalculator {
     
     // MARK: - Recalibrated Component Calculations
     
-    /// Duration Multiplier (The Gatekeeper)
-    /// Problem: A 6h 53m sleep should never result in a 90+ score.
-    /// Solution: This new multiplier acts as a hard cap on your potential score based purely on sleep duration.
+    /// Duration Multiplier (The Gatekeeper) - RE-CALIBRATED VERSION
+    /// This new multiplier acts as a hard cap on your potential score based purely on sleep duration.
+    /// For the user's example (6.5h sleep), this should result in a score in the 70-78 range.
     private func calculateDurationMultiplier(hoursAsleep: Double) -> Double {
         if hoursAsleep < 6.0 {
-            // Harsh penalty for very short sleep
-            return 0.65
-        } else if hoursAsleep < 7.0 {
-            // Maps the range [6.0, 7.0) to a multiplier of [0.65, 0.90)
-            return 0.65 + (hoursAsleep - 6.0) * 0.25
+            // A steep but linear penalty for sleep under 6 hours.
+            // Maps the range [5.0, 6.0) to a multiplier of [0.60, 0.80)
+            // An hour of sleep in this range is worth 20 points on the multiplier.
+            let progress = (hoursAsleep - 5.0) / 1.0 // Progress through the 1-hour window
+            return 0.60 + (progress * 0.20)
+        } else if hoursAsleep < 7.5 {
+            // A gentler linear ramp up to the optimal score.
+            // Maps the range [6.0, 7.5) to a multiplier of [0.80, 1.0)
+            // An hour and a half of sleep in this range is worth 20 points.
+            let progress = (hoursAsleep - 6.0) / 1.5 // Progress through the 1.5-hour window
+            return 0.80 + (progress * 0.20)
         } else if hoursAsleep <= 9.0 {
-            // Optimal duration range
+            // The optimal plateau. Any duration in this range gets the full score.
             return 1.0
-        } else { // hoursAsleep > 9.0
-            // Gradual penalty for potential oversleeping/sickness
-            return max(0.8, 1.0 - (hoursAsleep - 9.0) * 0.1)
+        } else {
+            // A slight, gradual penalty for potential oversleeping/sickness.
+            return max(0.9, 1.0 - (hoursAsleep - 9.0) * 0.1)
         }
     }
     
     /// Restoration Component (45% Weight) - The Core of Sleep Quality
-    /// Combines Deep Sleep Score, REM Sleep Score, and Sleeping HR Dip Score
+    /// RE-CALIBRATED: More forgiving for deep sleep values just below minimum threshold
     private func calculateRestorationComponent(
         timeAsleep: TimeInterval,
         deepSleepDuration: TimeInterval,
@@ -590,9 +596,9 @@ final class SleepScoreCalculator {
     ) -> Double {
         guard timeAsleep > 0 else { return 0 }
         
-        // Deep Sleep Score (40% of restoration component)
+        // Deep Sleep Score (40% of restoration component) - MORE FORGIVING
         let deepSleepPercentage = deepSleepDuration / timeAsleep
-        let deepScore = normalizeDeepSleepPercentage(deepSleepPercentage)
+        let deepScore = normalizeDeepSleepPercentageRecalibrated(deepSleepPercentage)
         
         // REM Sleep Score (40% of restoration component)
         let remSleepPercentage = remSleepDuration / timeAsleep
@@ -603,13 +609,13 @@ final class SleepScoreCalculator {
         if let avgHR = averageHeartRate, let rhr = dailyRestingHeartRate {
             hrDipScore = calculateHeartRateDipScore(averageHeartRate: avgHR, dailyRestingHeartRate: rhr)
         } else {
-            hrDipScore = 50.0 // Neutral score when heart rate data is missing
+            hrDipScore = 75.0 // Higher neutral score when heart rate data is missing
         }
         
         // Calculate weighted average
         let restorationScore = (deepScore * 0.40) + (remScore * 0.40) + (hrDipScore * 0.20)
         
-        print("🔍 FINAL CALIBRATED Restoration Component Debug:")
+        print("🔍 RE-CALIBRATED Restoration Component Debug:")
         print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepScore)")
         print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remScore)")
         print("   HR Dip: \(hrDipScore)")
@@ -618,17 +624,24 @@ final class SleepScoreCalculator {
         return restorationScore
     }
     
-    /// Normalizes Deep Sleep percentage against ideal 13-23% range
-    private func normalizeDeepSleepPercentage(_ percentage: Double) -> Double {
+    /// RE-CALIBRATED: Normalizes Deep Sleep percentage - MORE FORGIVING for values just below minimum
+    private func normalizeDeepSleepPercentageRecalibrated(_ percentage: Double) -> Double {
         let idealMin = 0.13 // 13%
         let idealMax = 0.23 // 23%
         
         if percentage >= idealMin && percentage <= idealMax {
             return 100.0 // Perfect score for ideal range
         } else if percentage < idealMin {
-            // Below ideal: linear decrease from 100 to 0
-            let ratio = percentage / idealMin
-            return clamp(ratio * 100, min: 0, max: 100)
+            // MORE FORGIVING: Smoother curve for values below ideal
+            // Give more credit for values close to the minimum (like 10-12%)
+            if percentage >= 0.10 { // 10% or above gets significant credit
+                let ratio = percentage / idealMin
+                return 60 + (ratio * 40) // Maps 10% -> 91, 12% -> 97
+            } else {
+                // Still penalize very low values
+                let ratio = percentage / 0.10
+                return clamp(ratio * 60, min: 0, max: 60)
+            }
         } else {
             // Above ideal: linear decrease from 100 to 0
             let excess = percentage - idealMax
@@ -661,7 +674,7 @@ final class SleepScoreCalculator {
     /// Calculates Heart Rate Dip Score
     /// Formula: 1 - (Average_Sleeping_HR / Daily_RHR)
     private func calculateHeartRateDipScore(averageHeartRate: Double, dailyRestingHeartRate: Double) -> Double {
-        guard dailyRestingHeartRate > 0 else { return 50.0 } // Neutral score if no RHR data
+        guard dailyRestingHeartRate > 0 else { return 75.0 } // Higher neutral score if no RHR data
         
         let hrDip = 1.0 - (averageHeartRate / dailyRestingHeartRate)
         
@@ -690,7 +703,7 @@ final class SleepScoreCalculator {
         let sleepEfficiency = timeAsleep / timeInBed
         let efficiencyScore = sleepEfficiency * 100
         
-        print("🔍 FINAL CALIBRATED Efficiency Component Debug:")
+        print("🔍 RE-CALIBRATED Efficiency Component Debug:")
         print("   Time in Bed: \(timeInBed / 3600) hours")
         print("   Time Asleep: \(timeAsleep / 3600) hours")
         print("   Sleep Efficiency: \(sleepEfficiency * 100)%")
@@ -709,16 +722,16 @@ final class SleepScoreCalculator {
         baselineWakeTime: Date?
     ) -> Double {
         guard let bedtime = bedtime, let baselineBedtime = baselineBedtime else {
-            return 50.0 // Neutral score when baseline data is missing
+            return 75.0 // Higher neutral score when baseline data is missing
         }
         
         // Calculate deviation in minutes
         let totalDeviationInMinutes = abs(bedtime.timeIntervalSince(baselineBedtime)) / 60.0
         
-        // Apply the FINAL CALIBRATED scoring formula
+        // Apply the RE-CALIBRATED scoring formula
         let consistencyScore = 100 * Foundation.exp(-0.005 * totalDeviationInMinutes)
         
-        print("🔍 FINAL CALIBRATED Consistency Component Debug:")
+        print("🔍 RE-CALIBRATED Consistency Component Debug:")
         print("   Bedtime: \(bedtime)")
         print("   Baseline Bedtime: \(baselineBedtime)")
         print("   Total Deviation: \(totalDeviationInMinutes) minutes")

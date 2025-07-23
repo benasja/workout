@@ -74,13 +74,35 @@ struct SleepAnalysisView: View {
     }
 }
 
+// Helper to calculate trend percentage
+fileprivate func calculateTrend<T: BinaryFloatingPoint>(_ values: [T?]) -> Double? {
+    let valid = values.compactMap { $0 }
+    guard valid.count >= 2 else { return nil }
+    let last = valid[valid.count - 1]
+    let prev = valid[valid.count - 2]
+    guard prev != 0 else { return nil }
+    return Double((last - prev) / prev * 100)
+}
+
 struct SleepChartView: View {
     let history: [DailyPerformance]
     var body: some View {
+        let durations = history.compactMap { $0.sleepDuration.map { $0 / 3600 } }
+        let trend = calculateTrend(durations)
         ModernCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Sleep Duration (h:mm)")
-                    .font(.headline)
+                HStack(spacing: 6) {
+                    Text("Sleep Duration (h:mm)")
+                        .font(.headline)
+                    if let trend = trend {
+                        Image(systemName: trend >= 0 ? "arrow.up" : "arrow.down")
+                            .font(.caption2)
+                            .foregroundColor(trend >= 0 ? .green : .red)
+                        Text("\(String(format: "%.1f", abs(trend)))%")
+                            .font(.caption2)
+                            .foregroundColor(trend >= 0 ? .green : .red)
+                    }
+                }
                 if history.isEmpty {
                     Text("No sleep data available.")
                         .foregroundColor(.secondary)
@@ -116,10 +138,22 @@ struct SleepChartView: View {
 struct SleepScoreTrendView: View {
     let history: [DailyPerformance]
     var body: some View {
+        let scores = history.map { Double($0.sleepScore) }
+        let trend = calculateTrend(scores)
         ModernCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Sleep Score Trend")
-                    .font(.headline)
+                HStack(spacing: 6) {
+                    Text("Sleep Score Trend")
+                        .font(.headline)
+                    if let trend = trend {
+                        Image(systemName: trend >= 0 ? "arrow.up" : "arrow.down")
+                            .font(.caption2)
+                            .foregroundColor(trend >= 0 ? .green : .red)
+                        Text("\(String(format: "%.1f", abs(trend)))%")
+                            .font(.caption2)
+                            .foregroundColor(trend >= 0 ? .green : .red)
+                    }
+                }
                 if history.isEmpty {
                     Text("No sleep score data available.")
                         .foregroundColor(.secondary)

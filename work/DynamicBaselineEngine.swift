@@ -1,6 +1,33 @@
 import Foundation
 import HealthKit
 
+// MARK: - BaselineMetrics Structure
+struct BaselineMetrics {
+    let hrv: Double?
+    let rhr: Double?
+    let sleepDuration: Double?
+    let bedtime: Date?
+    let wakeTime: Date?
+    let walkingHeartRate: Double?
+    let respiratoryRate: Double?
+    let oxygenSaturation: Double?
+    let calculatedAt: Date
+    let period: Int // number of days used for calculation
+    
+    init(hrv: Double? = nil, rhr: Double? = nil, sleepDuration: Double? = nil, bedtime: Date? = nil, wakeTime: Date? = nil, walkingHeartRate: Double? = nil, respiratoryRate: Double? = nil, oxygenSaturation: Double? = nil, period: Int, calculatedAt: Date = Date()) {
+        self.hrv = hrv
+        self.rhr = rhr
+        self.sleepDuration = sleepDuration
+        self.bedtime = bedtime
+        self.wakeTime = wakeTime
+        self.walkingHeartRate = walkingHeartRate
+        self.respiratoryRate = respiratoryRate
+        self.oxygenSaturation = oxygenSaturation
+        self.period = period
+        self.calculatedAt = calculatedAt
+    }
+}
+
 final class DynamicBaselineEngine {
     static let shared = DynamicBaselineEngine()
     private let healthStore = HKHealthStore()
@@ -258,5 +285,207 @@ final class DynamicBaselineEngine {
         walkingHR14 = nil
         respiratoryRate14 = nil
         oxygenSaturation14 = nil
+    }
+    
+    // MARK: - Historical Baselining for Single Source of Truth
+    
+    /// Calculates baseline metrics for a specific historical date using data from the specified number of days
+    /// before that date. This ensures historically accurate, non-changing baseline values for score calculations.
+    /// 
+    /// - Parameters:
+    ///   - date: The reference date for which to calculate the baseline
+    ///   - days: Number of days to look back from the reference date (e.g., 60 for HRV/RHR baseline)
+    /// - Returns: BaselineMetrics object containing all calculated baseline values
+    func calculateBaseline(for date: Date, days: Int) async -> BaselineMetrics {
+        print("📊 Calculating \(days)-day baseline for date: \(date)")
+        
+        let calendar = Calendar.current
+        // Calculate the range ending the day BEFORE the reference date
+        let endDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: date)) ?? date
+        let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) ?? endDate
+        
+        print("   Baseline period: \(startDate) to \(endDate)")
+        
+        // Use a dispatch group to fetch all metrics in parallel
+        return await withTaskGroup(of: Void.self, returning: BaselineMetrics.self) { group in
+            var hrv: Double?
+            var rhr: Double?
+            var sleepDuration: Double?
+            var bedtime: Date?
+            var wakeTime: Date?
+            var walkingHR: Double?
+            var respiratoryRate: Double?
+            var oxygenSaturation: Double?
+            
+            // Fetch HRV baseline
+            group.addTask {
+                hrv = await withCheckedContinuation { continuation in
+                    self.fetchRollingAverageForPeriod(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), startDate: startDate, endDate: endDate) { value in
+                        continuation.resume(returning: value)
+                    }
+                }
+            }
+            
+            // Fetch RHR baseline
+            group.addTask {
+                rhr = await withCheckedContinuation { continuation in
+                    self.fetchRollingAverageForPeriod(.restingHeartRate, unit: HKUnit(from: "count/min"), startDate: startDate, endDate: endDate) { value in
+                        continuation.resume(returning: value)
+                    }
+                }
+            }
+            
+            // Fetch Sleep baseline
+            group.addTask {
+                let sleepBaseline = await withCheckedContinuation { continuation in
+                    self.fetchSleepAveragesForPeriod(startDate: startDate, endDate: endDate) { duration, bedtimeAvg, wakeTimeAvg in
+                        continuation.resume(returning: (duration, bedtimeAvg, wakeTimeAvg))
+                    }
+                }
+                sleepDuration = sleepBaseline.0
+                bedtime = sleepBaseline.1
+                wakeTime = sleepBaseline.2
+            }
+            
+            // Fetch Walking HR baseline
+            group.addTask {
+                walkingHR = await withCheckedContinuation { continuation in
+                    self.fetchRollingAverageForPeriod(.walkingHeartRateAverage, unit: HKUnit(from: "count/min"), startDate: startDate, endDate: endDate) { value in
+                        continuation.resume(returning: value)
+                    }
+                }
+            }
+            
+            // Fetch Respiratory Rate baseline
+            group.addTask {
+                respiratoryRate = await withCheckedContinuation { continuation in
+                    self.fetchRollingAverageForPeriod(.respiratoryRate, unit: HKUnit(from: "count/min"), startDate: startDate, endDate: endDate) { value in
+                        continuation.resume(returning: value)
+                    }
+                }
+            }
+            
+            // Fetch Oxygen Saturation baseline
+            group.addTask {
+                oxygenSaturation = await withCheckedContinuation { continuation in
+                    self.fetchRollingAverageForPeriod(.oxygenSaturation, unit: HKUnit.percent(), startDate: startDate, endDate: endDate) { value in
+                        continuation.resume(returning: value)
+                    }
+                }
+            }
+            
+            // Wait for all tasks to complete
+            for await _ in group { }
+            
+            let baseline = BaselineMetrics(
+                hrv: hrv,
+                rhr: rhr,
+                sleepDuration: sleepDuration,
+                bedtime: bedtime,
+                wakeTime: wakeTime,
+                walkingHeartRate: walkingHR,
+                respiratoryRate: respiratoryRate,
+                oxygenSaturation: oxygenSaturation,
+                period: days
+            )
+            
+            print("✅ Baseline calculation completed for \(date):")
+            print("   HRV: \(hrv?.description ?? "nil") ms")
+            print("   RHR: \(rhr?.description ?? "nil") bpm")
+            print("   Sleep Duration: \((sleepDuration ?? 0) / 3600) hours")
+            print("   Walking HR: \(walkingHR?.description ?? "nil") bpm")
+            print("   Respiratory Rate: \(respiratoryRate?.description ?? "nil") rpm")
+            print("   Oxygen Saturation: \(oxygenSaturation?.description ?? "nil")%")
+            
+            return baseline
+        }
+    }
+    
+    // MARK: - Supporting Methods for Historical Baselines
+    
+    /// Fetches rolling average for a specific date range (used by calculateBaseline)
+    private func fetchRollingAverageForPeriod(_ id: HKQuantityTypeIdentifier, unit: HKUnit, startDate: Date, endDate: Date, completion: @escaping (Double?) -> Void) {
+        guard let type = HKObjectType.quantityType(forIdentifier: id) else { 
+            completion(nil)
+            return 
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: unit) } ?? []
+            let avg = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(avg)
+        }
+        healthStore.execute(query)
+    }
+    
+    /// Fetches sleep averages for a specific date range (used by calculateBaseline)
+    private func fetchSleepAveragesForPeriod(startDate: Date, endDate: Date, completion: @escaping (Double?, Date?, Date?) -> Void) {
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { 
+            completion(nil, nil, nil)
+            return 
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let sleeps = (samples as? [HKCategorySample]) ?? []
+            let grouped = Dictionary(grouping: sleeps) { Calendar.current.startOfDay(for: $0.startDate) }
+            
+            let durations = grouped.values.map { daySamples in
+                daySamples.filter { sample in
+                    let value = HKCategoryValueSleepAnalysis(rawValue: sample.value)
+                    return value == .asleepUnspecified || value == .asleepDeep || value == .asleepREM || value == .asleepCore
+                }.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+            }
+            let avgDuration = durations.isEmpty ? nil : durations.reduce(0, +) / Double(durations.count)
+            
+            // Calculate average time of day for bedtime and wake time
+            let bedtimes = grouped.values.compactMap { $0.min(by: { $0.startDate < $1.startDate })?.startDate }
+            let wakes = grouped.values.compactMap { $0.max(by: { $0.endDate < $1.endDate })?.endDate }
+            
+            let calendar = Calendar.current
+            let referenceDate = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+            
+            // Calculate average bedtime (time of day)
+            let avgBedtime: Date?
+            if !bedtimes.isEmpty {
+                let bedtimeMinutes = bedtimes.map { date in
+                    let components = calendar.dateComponents([.hour, .minute], from: date)
+                    return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+                }
+                let avgBedtimeMinutes = bedtimeMinutes.reduce(0, +) / bedtimeMinutes.count
+                let avgBedtimeHour = avgBedtimeMinutes / 60
+                let avgBedtimeMinute = avgBedtimeMinutes % 60
+                
+                var components = calendar.dateComponents([.year, .month, .day], from: referenceDate)
+                components.hour = avgBedtimeHour
+                components.minute = avgBedtimeMinute
+                avgBedtime = calendar.date(from: components)
+            } else {
+                avgBedtime = nil
+            }
+            
+            // Calculate average wake time (time of day)
+            let avgWakeTime: Date?
+            if !wakes.isEmpty {
+                let wakeMinutes = wakes.map { date in
+                    let components = calendar.dateComponents([.hour, .minute], from: date)
+                    return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+                }
+                let avgWakeMinutes = wakeMinutes.reduce(0, +) / wakeMinutes.count
+                let avgWakeHour = avgWakeMinutes / 60
+                let avgWakeMinute = avgWakeMinutes % 60
+                
+                var components = calendar.dateComponents([.year, .month, .day], from: referenceDate)
+                components.hour = avgWakeHour
+                components.minute = avgWakeMinute
+                avgWakeTime = calendar.date(from: components)
+            } else {
+                avgWakeTime = nil
+            }
+            
+            completion(avgDuration, avgBedtime, avgWakeTime)
+        }
+        healthStore.execute(query)
     }
 } 

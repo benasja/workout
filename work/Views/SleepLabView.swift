@@ -4,7 +4,6 @@ import SwiftUI
 // This is the single, correct definition for your data models.
 // Ensure these structs are not defined anywhere else in your project.
 
-
 struct CorrelationData: Codable, Identifiable {
     // Use the unique session_date as the ID
     var id: String { session_date }
@@ -16,15 +15,39 @@ struct CorrelationData: Codable, Identifiable {
     var displayDate: String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
-        if let date = formatter.date(from: session_date) {
-            if Calendar.current.isDateInToday(date) {
-                return "Today"
-            } else if Calendar.current.isDateInYesterday(date) {
-                return "Yesterday"
-            }
-            return date.formatted(.dateTime.month().day())
+        
+        guard let date = formatter.date(from: session_date) else {
+            return session_date
         }
-        return session_date
+        
+        let calendar = Calendar.current
+        
+        // Check if it's today
+        if calendar.isDateInToday(date) {
+            return "Today"
+        }
+        
+        // Check if it's yesterday
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        }
+        
+        // Check if it's within the last week
+        let daysBetween = calendar.dateComponents([.day], from: date, to: Date()).day ?? 0
+        if daysBetween <= 7 {
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "EEEE" // Day of week
+            return dayFormatter.string(from: date)
+        }
+        
+        // For older dates, show month and day
+        return date.formatted(.dateTime.month().day())
+    }
+    
+    var actualDate: Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return formatter.date(from: session_date)
     }
 }
 
@@ -34,12 +57,12 @@ struct EnvironmentalAverages: Codable {
     let avg_air_quality: Double? // Optional to handle null from server
 }
 
-
 // MARK: - Main View
 struct SleepLabView: View {
     @State private var correlationData: [CorrelationData] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @StateObject private var healthStats = HealthStatsViewModel()
 
     var body: some View {
         NavigationView {
@@ -85,20 +108,32 @@ struct SleepLabView: View {
                     .font(.title2.bold())
                     .padding(.horizontal)
                 
-                Text("Comparing your sleep quality with the environmental data recorded by your bedside sensor.")
+                Text("Comparing your sleep quality with the environmental data recorded by your bedside sensor. Real sleep scores calculated using your Apple Health data.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
                     .padding(.bottom, 10)
 
-                // Correctly sort by date string (descending) and pass data
+                // Sort by actual date (most recent first) and pass data
                 LazyVStack(spacing: 16) {
-                    ForEach(correlationData.sorted(by: { $0.session_date > $1.session_date })) { data in
-                        SleepCorrelationCard(data: data)
+                    ForEach(sortedCorrelationData) { data in
+                        SleepCorrelationCard(data: data, healthStats: healthStats)
                     }
                 }
             }
             .padding(.vertical)
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var sortedCorrelationData: [CorrelationData] {
+        return correlationData.sorted { first, second in
+            guard let firstDate = first.actualDate, let secondDate = second.actualDate else {
+                // Fallback to string comparison if date parsing fails
+                return first.session_date > second.session_date
+            }
+            return firstDate > secondDate // Most recent first
         }
     }
     
@@ -168,12 +203,16 @@ struct SleepLabView: View {
     }
 }
 
-// MARK: - Reusable Card View
+// MARK: - Reusable Card View with Real Sleep Score Integration
 struct SleepCorrelationCard: View {
     let data: CorrelationData
+    let healthStats: HealthStatsViewModel
+    @State private var realSleepScore: Int?
+    @State private var isLoadingScore = false
     
     private var sleepScoreColor: Color {
-        switch data.sleep_score {
+        let score = realSleepScore ?? data.sleep_score
+        switch score {
         case 85...100: return .green
         case 70..<85: return .blue
         case 50..<70: return .orange
@@ -194,7 +233,7 @@ struct SleepCorrelationCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Header with date and sleep score
+            // Header with date and real sleep score
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(data.displayDate)
@@ -223,13 +262,29 @@ struct SleepCorrelationCard: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(data.sleep_score)%")
-                        .font(.title.bold())
-                        .foregroundColor(sleepScoreColor)
-                    
-                    Text("Sleep Score")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if isLoadingScore {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Text("\(realSleepScore ?? data.sleep_score)%")
+                            .font(.title.bold())
+                            .foregroundColor(sleepScoreColor)
+                        
+                        HStack(spacing: 4) {
+                            if realSleepScore != nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.green)
+                                Text("Real Score")
+                                    .font(.caption2)
+                                    .foregroundColor(.green)
+                            } else {
+                                Text("Sleep Score")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
                 }
             }
             
@@ -294,6 +349,54 @@ struct SleepCorrelationCard: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .onAppear {
+            Task {
+                await loadRealSleepScore()
+            }
+        }
+    }
+    
+    // MARK: - Real Sleep Score Loading
+    private func loadRealSleepScore() async {
+        guard let date = parseSessionDate(data.session_date) else { 
+            print("⚠️ SleepLabView: Could not parse date \(data.session_date)")
+            return 
+        }
+        
+        // Don't load real score for future dates
+        if date > Date() {
+            return
+        }
+        
+        await MainActor.run {
+            isLoadingScore = true
+        }
+        
+        do {
+            // Load real sleep score using HealthStatsViewModel
+            await healthStats.loadData(for: date)
+            
+            await MainActor.run {
+                if let sleepResult = healthStats.sleepResult {
+                    realSleepScore = sleepResult.finalScore
+                    print("✅ SleepLabView: Loaded real sleep score \(sleepResult.finalScore) for \(data.session_date) (was \(data.sleep_score))")
+                } else {
+                    print("⚠️ SleepLabView: Could not load real sleep score for \(data.session_date), using server value \(data.sleep_score)")
+                }
+                isLoadingScore = false
+            }
+        } catch {
+            print("❌ SleepLabView: Error loading real sleep score for \(data.session_date): \(error)")
+            await MainActor.run {
+                isLoadingScore = false
+            }
+        }
+    }
+    
+    private func parseSessionDate(_ dateString: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return formatter.date(from: dateString)
     }
 }
 
