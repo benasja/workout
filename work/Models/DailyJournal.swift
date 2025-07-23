@@ -33,6 +33,9 @@ final class DailyJournal {
     var middaySupplements: String = ""
     var eveningSupplements: String = ""
     
+    // NEW: Persist all selected tags
+    var selectedTags: [String] = []
+    
     enum Wellness: String, Codable, CaseIterable {
         case excellent, good, fair, poor
     }
@@ -40,7 +43,7 @@ final class DailyJournal {
     var alcohol: Bool = false
     var illness: Bool = false
     
-    init(date: Date = Date(), consumedAlcohol: Bool = false, caffeineAfter2PM: Bool = false, ateLate: Bool = false, highStressDay: Bool = false, tookMagnesium: Bool = false, tookAshwagandha: Bool = false, notes: String? = nil) {
+    init(date: Date = Date(), consumedAlcohol: Bool = false, caffeineAfter2PM: Bool = false, ateLate: Bool = false, highStressDay: Bool = false, tookMagnesium: Bool = false, tookAshwagandha: Bool = false, notes: String? = nil, selectedTags: [String] = []) {
         self.id = UUID()
         self.date = date
         self.consumedAlcohol = consumedAlcohol
@@ -50,6 +53,7 @@ final class DailyJournal {
         self.tookMagnesium = tookMagnesium
         self.tookAshwagandha = tookAshwagandha
         self.notes = notes
+        self.selectedTags = selectedTags
     }
     
     var tags: [String] {

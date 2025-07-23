@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import HealthKit
+import Charts
+// Add this import for shared components
+import Foundation
 
 struct EnhancedPerformanceView: View {
     @EnvironmentObject var dateModel: PerformanceDateModel

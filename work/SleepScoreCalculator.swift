@@ -795,12 +795,12 @@ final class SleepScoreCalculator {
     private func getREMPoints(for remSleepInSeconds: Double) -> Int {
         let minutes = remSleepInSeconds / 60
         switch minutes {
-        case let m where m >= 105: return 20
+        case let m where m >= 120: return 22 // Bonus for 2h+
+        case 105..<120: return 20
         case 90..<105: return 17
         case 75..<90: return 14
         case 60..<75: return 10
         case 0..<60:
-            // Graduated 0-5 points linearly from 0 to 60 min
             return Int((minutes / 60.0) * 5.0)
         default:
             return 0
@@ -950,9 +950,12 @@ final class SleepScoreCalculator {
         }
         
         // REM sleep findings
+        let remMinutes = details.remSleepDuration / 60
         let remPercentage = details.remSleepPercentage * 100
         let remPercentageStr = "\(Double(round(10 * remPercentage) / 10))"
-        if remPercentage >= 20 && remPercentage <= 25 {
+        if remMinutes >= 120 {
+            findings.append("Excellent REM sleep duration (\(Int(remMinutes)) min)")
+        } else if remPercentage >= 20 && remPercentage <= 25 {
             findings.append("REM sleep within optimal range (\(remPercentageStr)%)")
         } else if remPercentage < 20 {
             findings.append("REM sleep below optimal (\(remPercentageStr)%)")

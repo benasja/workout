@@ -571,10 +571,66 @@ struct ScoreDisplayCard: View {
     }
 }
 
+// MARK: - Metric Card (Shared)
+struct MetricCard: View {
+    let title: String
+    let value: Double?
+    let unit: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.caption)
+                    .foregroundColor(color)
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if let value = value {
+                    Text("\(String(format: "%.0f", value))")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                } else {
+                    Text("--")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.secondary)
+                }
+                Text("\(title) (\(unit))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(12)
+    }
+}
 
-
-
-
+// MARK: - Insight Row (Shared)
+struct InsightRow: View {
+    let icon: String
+    let text: String
+    let color: Color
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundColor(color)
+                .frame(width: 16)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+    }
+}
 
 
 // MARK: - Error View
