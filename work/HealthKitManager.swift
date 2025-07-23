@@ -147,7 +147,13 @@ final class HealthKitManager {
         }
         
         print("🔐 Requesting HealthKit authorization...")
-        healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
+        // Allow writing body mass so the app can save weight samples back to Apple Health
+        var shareTypes: Set<HKSampleType> = []
+        if let bodyMassType = HKObjectType.quantityType(forIdentifier: .bodyMass) {
+            shareTypes.insert(bodyMassType)
+        }
+
+        healthStore.requestAuthorization(toShare: shareTypes, read: readTypes) { success, error in
             if let error = error {
                 print("❌ HealthKit authorization error: \(error.localizedDescription)")
             }
@@ -582,6 +588,67 @@ final class HealthKitManager {
         let startDate = calendar.date(byAdding: .day, value: -90, to: endDate) ?? endDate
         
         fetchWeightEntries(from: startDate, to: endDate, completion: completion)
+    }
+
+    // MARK: - Full History Weight Fetch & Save
+
+    /// Fetches the user's entire recorded weight history from Apple Health.
+    /// The results array is sorted with the newest entry first.
+    /// - Parameter completion: Callback delivering `[WeightData]` on the main queue.
+    func fetchAllWeightEntries(completion: @escaping ([WeightData]) -> Void) {
+        guard let weightType = HKObjectType.quantityType(forIdentifier: .bodyMass) else {
+            print("❌ Body mass type not available")
+            DispatchQueue.main.async { completion([]) }
+            return
+        }
+
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(sampleType: weightType, predicate: nil, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            if let error = error {
+                print("❌ Error fetching all weight entries: \(error.localizedDescription)")
+                DispatchQueue.main.async { completion([]) }
+                return
+            }
+
+            let weightSamples = (samples as? [HKQuantitySample]) ?? []
+            let data = weightSamples.map { sample in
+                WeightData(
+                    date: sample.endDate,
+                    weight: sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo)),
+                    source: sample.sourceRevision.source.name
+                )
+            }
+
+            print("✅ Fetched \(data.count) total weight entries from HealthKit")
+            DispatchQueue.main.async { completion(data) }
+        }
+
+        healthStore.execute(query)
+    }
+
+    /// Saves a weight measurement to Apple Health.
+    /// - Parameters:
+    ///   - weight: Weight in kilograms.
+    ///   - date: Timestamp for the sample (defaults to now).
+    ///   - completion: Returns success flag and optional error.
+    func saveWeightEntry(weight: Double, date: Date = Date(), completion: @escaping (Bool, Error?) -> Void) {
+        guard let weightType = HKObjectType.quantityType(forIdentifier: .bodyMass) else {
+            let err = NSError(domain: "HealthKitManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Body mass type not available"])
+            DispatchQueue.main.async { completion(false, err) }
+            return
+        }
+
+        let quantity = HKQuantity(unit: HKUnit.gramUnit(with: .kilo), doubleValue: weight)
+        let sample = HKQuantitySample(type: weightType, quantity: quantity, start: date, end: date)
+
+        healthStore.save(sample) { success, error in
+            if let error = error {
+                print("❌ Failed to save weight sample: \(error.localizedDescription)")
+            } else {
+                print("✅ Saved weight (\(weight) kg) to HealthKit at \(date)")
+            }
+            DispatchQueue.main.async { completion(success, error) }
+        }
     }
     
     func fetchLatestRespiratoryRate(completion: @escaping (Double?) -> Void) {

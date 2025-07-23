@@ -19,6 +19,8 @@ struct WeightTrackerView: View {
     @State private var isLoading = false
     @State private var isSyncing = false
     @State private var dateRange: ClosedRange<Date>? = nil
+    // Prevents multiple full-history fetches which can cause loops/crashes
+    @State private var hasFetchedHealthKit = false
     @State var editingEntry: WeightEntry? = nil
     @State private var lastSyncDate: Date?
     
@@ -166,33 +168,14 @@ struct WeightTrackerView: View {
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, AppSpacing.md)
             }
+            .refreshable {
+                syncWithHealthKit()
+            }
             .background(AppColors.background)
             .navigationTitle("Weight Tracker")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
-                        Button(action: { exportData() }) {
-                            Label("Export Data", systemImage: "square.and.arrow.up")
-                        }
-                        Button(action: { importData() }) {
-                            Label("Import Data", systemImage: "square.and.arrow.down")
-                        }
-                        Divider()
-                        Button(action: { addSampleData() }) {
-                            Label("Add Sample Data", systemImage: "plus.rectangle.on.rectangle")
-                        }
-                        Button(action: { debugWeightData() }) {
-                            Label("Debug Data", systemImage: "ladybug")
-                        }
-                        Divider()
-                        Button(action: { syncWithHealthKit() }) {
-                            Label("Sync with Apple Health", systemImage: "heart.fill")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
+                // Removed leading toolbar menu for cleaner UI
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingAddEntry = true }) {
@@ -208,10 +191,15 @@ struct WeightTrackerView: View {
             }
             .onAppear {
                 refreshData()
-                // Automatically sync with HealthKit on first load
-                if lastSyncDate == nil {
+                // Trigger a single HealthKit sync on the first appearance only
+                if !hasFetchedHealthKit {
+                    hasFetchedHealthKit = true
                     syncWithHealthKit()
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .healthKitWeightDidChange)) { _ in
+                // A new weight was added via HealthKit save call; refresh lightweight arrays.
+                refreshHealthKitEntries()
             }
         }
     }
@@ -224,6 +212,7 @@ struct WeightTrackerView: View {
             print("❌ Error saving model context: \(error)")
         }
         loadWeightEntries()
+        // Removed automatic refreshHealthKitEntries to avoid repeated large fetches
         
         // Debug: Print weight entries count
         print("🔍 Weight entries count: \(weightEntries.count)")
@@ -350,22 +339,32 @@ struct WeightTrackerView: View {
                 return
             }
             
-            // Fetch recent weight entries from HealthKit
-            HealthKitManager.shared.fetchRecentWeightEntries { [self] weightData in
+            // Fetch the user's entire weight history from HealthKit
+            HealthKitManager.shared.fetchAllWeightEntries { [self] weightData in
                 DispatchQueue.main.async {
                     self.healthKitWeightData = weightData
                     self.lastSyncDate = Date()
                     self.isSyncing = false
-                    
+ 
                     print("✅ HealthKit sync completed: \(weightData.count) entries")
-                    
-                    // Optionally convert HealthKit data to local entries
-                    self.convertHealthKitDataToLocalEntries(weightData)
+                    // Note: We intentionally do NOT store all HealthKit samples into local database anymore to avoid performance issues.
+                    // Skip converting every HealthKit sample into local storage to keep memory/performance in check.
                 }
             }
         }
     }
-    
+
+    // MARK: - Fetch latest HealthKit weight data on demand
+    private func refreshHealthKitEntries() {
+        // Optional manual refresh if needed (not called automatically anymore)
+        HealthKitManager.shared.fetchAllWeightEntries { data in
+            DispatchQueue.main.async {
+                self.healthKitWeightData = data
+                self.lastSyncDate = Date()
+            }
+        }
+    }
+
     private func convertHealthKitDataToLocalEntries(_ weightData: [WeightData]) {
         let calendar = Calendar.current
         var addedCount = 0
@@ -427,6 +426,13 @@ struct WeightChartView: View {
     let minDate: Date
     let maxDate: Date
     
+    private var chartEntries: [WeightEntry] {
+        // Keep only the entries from the last 90 days for the chart view
+        let ninetyDaysAgo = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
+        return weightEntries.filter { $0.date >= ninetyDaysAgo }
+                          .sorted { $0.date < $1.date }
+    }
+
     private var stats: (lowest: Double, lowestDate: Date?, highest: Double, highestDate: Date?, started: Double, startedDate: Date?, current: Double, currentDate: Date?) {
         let sorted = weightEntries.sorted { $0.date < $1.date }
         let lowest = sorted.min(by: { $0.weight < $1.weight })
@@ -453,7 +459,7 @@ struct WeightChartView: View {
                     actionTitle: nil,
                     action: nil
                 )
-                if weightEntries.count < 2 {
+                if chartEntries.count < 2 {
                     VStack(spacing: AppSpacing.md) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
                             .font(.system(size: 40))
@@ -476,8 +482,10 @@ struct WeightChartView: View {
                                         Spacer()
                                     }
                                 }
+                                let sortedEntries = chartEntries // safe shortcut
+
                                 Path { path in
-                                    let sortedEntries = weightEntries.sorted { $0.date < $1.date }
+                                    let sortedEntries = chartEntries // safe shortcut
                                     let minWeight = sortedEntries.map { $0.weight }.min() ?? 0
                                     let maxWeight = sortedEntries.map { $0.weight }.max() ?? 100
                                     let weightRange = maxWeight - minWeight
@@ -506,28 +514,7 @@ struct WeightChartView: View {
                                     ),
                                     style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
                                 )
-                                ForEach(weightEntries.sorted { $0.date < $1.date }, id: \.id) { entry in
-                                    let sortedEntries = weightEntries.sorted { $0.date < $1.date }
-                                    let minWeight = sortedEntries.map { $0.weight }.min() ?? 0
-                                    let maxWeight = sortedEntries.map { $0.weight }.max() ?? 100
-                                    let weightRange = maxWeight - minWeight
-                                    let width = geometry.size.width - 40
-                                    let height = geometry.size.height - 40
-                                    let minDate = sortedEntries.first?.date ?? Date()
-                                    let maxDate = sortedEntries.last?.date ?? Date()
-                                    let totalTime = maxDate.timeIntervalSince(minDate)
-                                    if sortedEntries.firstIndex(where: { $0.id == entry.id }) != nil {
-                                        let timeSinceStart = entry.date.timeIntervalSince(minDate)
-                                        let x = 20 + (CGFloat(totalTime == 0 ? 0 : timeSinceStart / totalTime)) * width
-                                        let normalizedWeight = weightRange > 0 ? (entry.weight - minWeight) / weightRange : 0.5
-                                        let y = 20 + (1 - normalizedWeight) * height
-                                        Circle()
-                                            .fill(AppColors.primary)
-                                            .frame(width: 7, height: 7)
-                                            .shadow(color: AppColors.primary.opacity(0.3), radius: 2, x: 0, y: 1)
-                                            .position(x: x, y: y)
-                                    }
-                                }
+                                // No per-point circles – keeps view hierarchy light
                                 // X-axis labels
                                 HStack {
                                     Text(minDate, style: .date)
@@ -725,9 +712,27 @@ struct MinimalAddWeightEntryView: View {
         let parsedWeight = Double(weightText.replacingOccurrences(of: ",", with: ".")) ?? 0
         let entry = WeightEntry(date: date, weight: parsedWeight)
         modelContext.insert(entry)
-        do { try modelContext.save() } catch {}
-        dismiss()
-        onEntryAdded()
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to save entry to SwiftData: \(error)")
+        }
+
+        // Save to Apple Health in background
+        HealthKitManager.shared.saveWeightEntry(weight: parsedWeight, date: date) { success, error in
+            if let error = error {
+                print("❌ Failed to write weight to HealthKit: \(error.localizedDescription)")
+            }
+            DispatchQueue.main.async {
+                // Trigger a lightweight refresh of in-memory HealthKit array so the chart reflects the new value
+                if let parent = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    // Broadcast notification; WeightTrackerView listens to refresh
+                    NotificationCenter.default.post(name: .healthKitWeightDidChange, object: nil)
+                }
+                dismiss()
+                onEntryAdded()
+            }
+        }
     }
 }
 
@@ -903,4 +908,9 @@ class WeightCSVImportDelegate: NSObject, UIDocumentPickerDelegate {
             ProgramExercise.self,
             WeightEntry.self
         ])
+} 
+
+// MARK: - Notification helper
+extension Notification.Name {
+    static let healthKitWeightDidChange = Notification.Name("healthKitWeightDidChange")
 } 
