@@ -73,16 +73,6 @@ struct MainTabView: View {
             }
             .tag(3)
             
-            // Workouts Tab
-            NavigationStack {
-                WorkoutLibraryView()
-            }
-            .tabItem {
-                Image(systemName: "dumbbell.fill")
-                Text("Train")
-            }
-            .tag(4)
-            
             // More Tab
             NavigationStack {
                 MoreView()
@@ -175,16 +165,18 @@ struct MoreView: View {
             }
             
             Section("Fitness") {
+                NavigationLink(destination: WorkoutLibraryView()) {
+                    Label("Train", systemImage: "dumbbell.fill")
+                        .foregroundColor(.primary)
+                }
                 NavigationLink(destination: WorkoutHistoryView()) {
                     Label("Workout History", systemImage: "clock.arrow.circlepath")
                         .foregroundColor(.primary)
                 }
-                
                 NavigationLink(destination: ProgramsView()) {
                     Label("Programs", systemImage: "list.bullet.rectangle")
                         .foregroundColor(.primary)
                 }
-                
                 NavigationLink(destination: ExerciseLibraryView()) {
                     Label("Exercise Library", systemImage: "figure.strengthtraining.traditional")
                         .foregroundColor(.primary)

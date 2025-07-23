@@ -152,7 +152,8 @@ struct WeightTrackerView: View {
                         // Modernized Weight Entry List
                         ModernWeightEntriesList(
                             filteredEntries: filteredEntries,
-                            editingEntry: $editingEntry
+                            editingEntry: $editingEntry,
+                            selectedRange: selectedRange
                         )
                     }
                 }
@@ -405,16 +406,17 @@ struct ModernWeightChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 3]))
                     .foregroundStyle(.gray)
                     .annotation(position: .top, alignment: .center) {
-                        VStack(spacing: 2) {
+                        VStack(alignment: .center, spacing: 4) {
                             Text("\(String(format: "%.1f", selected.weight)) kg")
+                                .font(.title3.bold())
+                            Text(selected.date, formatter: fullDateFormatter)
                                 .font(.caption)
-                                .fontWeight(.bold)
-                            Text(selected.date, format: .dateTime.month().day())
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         .padding(8)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .background(.thinMaterial)
+                        .cornerRadius(8)
+                        .shadow(radius: 3)
                     }
             }
         }
@@ -485,6 +487,7 @@ struct ModernWeightChart: View {
 struct ModernWeightEntriesList: View {
     let filteredEntries: [WeightEntry]
     @Binding var editingEntry: WeightEntry?
+    let selectedRange: TimeRange
     
     var body: some View {
         ModernCard {
@@ -514,15 +517,21 @@ struct ModernWeightEntriesList: View {
                     .values
                     .sorted { $0.date > $1.date }
                     
+                    let entriesToShow: [WeightEntry] = {
+                        if selectedRange == .all || selectedRange == .oneYear {
+                            return Array(uniqueEntries)
+                        } else {
+                            return Array(uniqueEntries.prefix(10))
+                        }
+                    }()
                     LazyVStack(spacing: 12) {
-                        ForEach(Array(uniqueEntries.prefix(10)), id: \.id) { entry in
+                        ForEach(entriesToShow, id: \.id) { entry in
                             ModernWeightEntryRow(entry: entry)
                                 .onTapGesture {
                                     editingEntry = entry
                                 }
                         }
-                        
-                        if uniqueEntries.count > 10 {
+                        if !(selectedRange == .all || selectedRange == .oneYear) && uniqueEntries.count > 10 {
                             Text("+ \(uniqueEntries.count - 10) more entries")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -754,3 +763,9 @@ extension Notification.Name {
             WeightEntry.self
         ])
 } 
+
+private let fullDateFormatter: DateFormatter = {
+    let df = DateFormatter()
+    df.dateStyle = .long
+    return df
+}() 
