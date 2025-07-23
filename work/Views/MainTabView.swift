@@ -162,6 +162,11 @@ struct MoreView: View {
                     Label("Supplements", systemImage: "pills.fill")
                         .foregroundColor(.primary)
                 }
+                
+                NavigationLink(destination: HydrationView()) {
+                    Label("Hydration", systemImage: "drop.fill")
+                        .foregroundColor(.primary)
+                }
             }
             
             Section("Fitness") {

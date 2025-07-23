@@ -208,12 +208,12 @@ struct WeightTrackerView: View {
         do {
             try modelContext.save()
         } catch {
-            print("❌ Error saving model context: \(error)")
+            // print("❌ Error saving model context: \(error)")
         }
         loadWeightEntries()
         
-        print("🔍 Weight entries count: \(weightEntries.count)")
-        print("🔍 Manual weight entries count: \(manualWeightEntries.count)")
+        // print("🔍 Weight entries count: \(weightEntries.count)")
+        // print("🔍 Manual weight entries count: \(manualWeightEntries.count)")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isLoading = false
@@ -232,11 +232,11 @@ struct WeightTrackerView: View {
         guard !isSyncing else { return }
         
         isSyncing = true
-        print("🔄 Starting HealthKit weight sync...")
+        // print("🔄 Starting HealthKit weight sync...")
         
         HealthKitManager.shared.requestAuthorization { [self] success in
             guard success else {
-                print("❌ HealthKit authorization failed")
+                // print("❌ HealthKit authorization failed")
                 DispatchQueue.main.async {
                     self.isSyncing = false
                 }
@@ -248,7 +248,7 @@ struct WeightTrackerView: View {
                     self.healthKitWeightData = weightData
                     self.lastSyncDate = Date()
                     self.isSyncing = false
-                    print("✅ HealthKit sync completed: \(weightData.count) entries")
+                    // print("✅ HealthKit sync completed: \(weightData.count) entries")
                 }
             }
         }
@@ -659,12 +659,14 @@ struct MinimalAddWeightEntryView: View {
         do {
             try modelContext.save()
         } catch {
-            print("❌ Failed to save entry to SwiftData: \(error)")
+            // print("❌ Failed to save entry to SwiftData: \(error)")
         }
 
-        HealthKitManager.shared.saveWeightEntry(weight: parsedWeight, date: date) { success, error in
-            if let error = error {
-                print("❌ Failed to write weight to HealthKit: \(error.localizedDescription)")
+        HealthKitManager.shared.saveWeightEntry(weight: parsedWeight, date: date) { success, _ in
+            if success {
+                // print("✅ Weight entry saved to HealthKit")
+            } else {
+                // print("❌ Failed to write weight to HealthKit")
             }
             DispatchQueue.main.async {
                 if UIApplication.shared.connectedScenes.first is UIWindowScene {

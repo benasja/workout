@@ -24,11 +24,11 @@ struct SleepData: Codable {
         let timeAsleepMinutes = max(0, sleepResult.timeAsleep / 60)
         
         // Debug: Print original values in seconds
-        print("🔍 Debug - Sleep data conversion:")
-        print("   Deep Sleep: \(sleepResult.deepSleep) seconds → \(deepSleepMinutes) minutes")
-        print("   REM Sleep: \(sleepResult.remSleep) seconds → \(remSleepMinutes) minutes") 
-        print("   Time Asleep: \(sleepResult.timeAsleep) seconds → \(timeAsleepMinutes) minutes")
-        print("   Sleep Score: \(sleepResult.finalScore)")
+        // print("🔍 Debug - Sleep data conversion:")
+        // print("   Deep Sleep: \(sleepResult.deepSleep) seconds → \(deepSleepMinutes) minutes")
+        // print("   REM Sleep: \(sleepResult.remSleep) seconds → \(remSleepMinutes) minutes") 
+        // print("   Time Asleep: \(sleepResult.timeAsleep) seconds → \(timeAsleepMinutes) minutes")
+        // print("   Sleep Score: \(sleepResult.finalScore)")
         
         // Validate ranges (ensure reasonable values)
         guard deepSleepMinutes >= 0 && deepSleepMinutes <= 720, // Max 12 hours
@@ -105,11 +105,11 @@ final class APIService {
              request.httpBody = jsonData
              
              // Debug: Print the exact JSON being sent
-             if let jsonString = String(data: jsonData, encoding: .utf8) {
-                 print("🌐 Posting sleep data for \(sleepData.session_date)...")
-                 print("📄 JSON payload being sent:")
-                 print(jsonString)
-             }
+             // if let jsonString = String(data: jsonData, encoding: .utf8) {
+             //     print("🌐 Posting sleep data for \(sleepData.session_date)...")
+             //     print("📄 JSON payload being sent:")
+             //     print(jsonString)
+             // }
             
             let (_, response) = try await session.data(for: request)
             
@@ -137,7 +137,7 @@ final class APIService {
         }
         
         do {
-            print("🌐 Fetching correlation data...")
+            // print("🌐 Fetching correlation data...")
             
             let (data, response) = try await session.data(from: url)
             
@@ -151,14 +151,14 @@ final class APIService {
             // The server sends a root object with a "data" key
             let apiResponse = try decoder.decode(CorrelationAPIResponse.self, from: data)
             
-            print("✅ Fetched \(apiResponse.data.count) correlation entries.")
+            // print("✅ Fetched \(apiResponse.data.count) correlation entries.")
             return apiResponse.data
             
         } catch let decodingError as DecodingError {
-            print("❌ Decoding error: \(decodingError)")
+            // print("❌ Decoding error: \(decodingError)")
             throw APIError.decodingError(description: decodingError.localizedDescription)
         } catch {
-            print("❌ Error fetching correlation data: \(error.localizedDescription)")
+            // print("❌ Error fetching correlation data: \(error.localizedDescription)")
             throw APIError.requestFailed(description: error.localizedDescription)
         }
     }
@@ -173,7 +173,7 @@ final class APIService {
         }
         
         do {
-            print("🌐 Fetching latest environmental data...")
+            // print("🌐 Fetching latest environmental data...")
             
             let (data, response) = try await session.data(from: url)
             
@@ -186,14 +186,14 @@ final class APIService {
             let decoder = JSONDecoder()
             let apiResponse = try decoder.decode(LatestEnvironmentalDataResponse.self, from: data)
             
-            print("✅ Fetched latest environmental data.")
+            // print("✅ Fetched latest environmental data.")
             return apiResponse.data
             
         } catch let decodingError as DecodingError {
-            print("❌ Decoding error: \(decodingError)")
+            // print("❌ Decoding error: \(decodingError)")
             throw APIError.decodingError(description: decodingError.localizedDescription)
         } catch {
-            print("❌ Error fetching latest environmental data: \(error.localizedDescription)")
+            // print("❌ Error fetching latest environmental data: \(error.localizedDescription)")
             throw APIError.requestFailed(description: error.localizedDescription)
         }
     }
@@ -206,7 +206,7 @@ final class APIService {
         }
         
         do {
-            print("🌐 Fetching environmental history data...")
+            // print("🌐 Fetching environmental history data...")
             
             let (data, response) = try await session.data(from: url)
             
@@ -219,14 +219,14 @@ final class APIService {
             let decoder = JSONDecoder()
             let apiResponse = try decoder.decode(EnvironmentalDataResponse.self, from: data)
             
-            print("✅ Fetched \(apiResponse.data.count) environmental history entries.")
+            // print("✅ Fetched \(apiResponse.data.count) environmental history entries.")
             return apiResponse.data
             
         } catch let decodingError as DecodingError {
-            print("❌ Decoding error: \(decodingError)")
+            // print("❌ Decoding error: \(decodingError)")
             throw APIError.decodingError(description: decodingError.localizedDescription)
         } catch {
-            print("❌ Error fetching environmental history: \(error.localizedDescription)")
+            // print("❌ Error fetching environmental history: \(error.localizedDescription)")
             throw APIError.requestFailed(description: error.localizedDescription)
         }
     }

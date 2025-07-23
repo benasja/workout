@@ -24,6 +24,7 @@ struct ContentView: View {
             Program.self,
             ProgramDay.self,
             ProgramExercise.self,
-            DailyJournal.self
+            DailyJournal.self,
+            HydrationLog.self
         ])
 }

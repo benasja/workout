@@ -45,24 +45,24 @@ final class HealthKitManager {
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
         
         guard let type = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
-            print("❌ HRV SDNN type not available")
+            // print("❌ HRV SDNN type not available")
             completion(nil)
             return
         }
         
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
         let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]) { _, samples, error in
-            if let error = error {
-                print("❌ Error fetching HRV samples: \(error.localizedDescription)")
+            if let _ = error {
+                // print("❌ Error fetching HRV samples: \(error.localizedDescription)")
                 completion(nil)
                 return
             }
             
             let hrvSamples = (samples as? [HKQuantitySample]) ?? []
-            print("🔍 Fetched \(hrvSamples.count) individual HRV samples for \(date)")
+            // print("🔍 Fetched \(hrvSamples.count) individual HRV samples for \(date)")
             
             guard !hrvSamples.isEmpty else {
-                print("⚠️ No HRV samples found for \(date)")
+                // print("⚠️ No HRV samples found for \(date)")
                 completion(nil)
                 return
             }
@@ -71,10 +71,10 @@ final class HealthKitManager {
             let hrvValues = hrvSamples.map { $0.quantity.doubleValue(for: HKUnit(from: "ms")) }
             let averageHRV = hrvValues.reduce(0, +) / Double(hrvValues.count)
             
-            print("📊 HRV Analysis for \(date):")
-            print("   Individual samples: \(hrvValues.count)")
-            print("   Values range: \(hrvValues.min() ?? 0) - \(hrvValues.max() ?? 0) ms")
-            print("   Average HRV: \(averageHRV) ms")
+            // print("📊 HRV Analysis for \(date):")
+            // print("   Individual samples: \(hrvValues.count)")
+            // print("   Values range: \(hrvValues.min() ?? 0) - \(hrvValues.max() ?? 0) ms")
+            // print("   Average HRV: \(averageHRV) ms")
             
             completion(averageHRV)
         }
@@ -90,7 +90,7 @@ final class HealthKitManager {
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
         
         guard let type = HKObjectType.quantityType(forIdentifier: .heartRate) else {
-            print("❌ Heart rate type not available")
+            // print("❌ Heart rate type not available")
             completion(nil)
             return
         }
@@ -99,17 +99,17 @@ final class HealthKitManager {
         if #available(iOS 13.0, *) {
             let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
             let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]) { _, samples, error in
-                if let error = error {
-                    print("❌ Error fetching heartbeat series: \(error.localizedDescription)")
+                if let _ = error {
+                    // print("❌ Error fetching heartbeat series: \(error.localizedDescription)")
                     completion(nil)
                     return
                 }
                 
                 let heartbeatSamples = (samples as? [HKHeartbeatSeriesSample]) ?? []
-                print("🔍 Fetched \(heartbeatSamples.count) heartbeat series samples for \(date)")
+                // print("🔍 Fetched \(heartbeatSamples.count) heartbeat series samples for \(date)")
                 
                 if heartbeatSamples.isEmpty {
-                    print("⚠️ No heartbeat series data available, falling back to regular heart rate samples")
+                    // print("⚠️ No heartbeat series data available, falling back to regular heart rate samples")
                     completion(nil)
                 } else {
                     completion(heartbeatSamples)
@@ -118,35 +118,35 @@ final class HealthKitManager {
             
             healthStore.execute(query)
         } else {
-            print("⚠️ Heartbeat series not available on this iOS version")
+            // print("⚠️ Heartbeat series not available on this iOS version")
             completion(nil)
         }
     }
     
     func requestAuthorization(completion: @escaping (Bool) -> Void) {
         guard HKHealthStore.isHealthDataAvailable() else {
-            print("❌ HealthKit is not available on this device")
+            // print("❌ HealthKit is not available on this device")
             completion(false)
             return
         }
         
         // Check current authorization status
         guard let sleepType = safeCategoryType(.sleepAnalysis) else {
-            print("❌ Sleep analysis type not available")
+            // print("❌ Sleep analysis type not available")
             completion(false)
             return
         }
         
         let status = healthStore.authorizationStatus(for: sleepType)
-        print("🔍 Current HealthKit authorization status: \(status.rawValue)")
+        // print("🔍 Current HealthKit authorization status: \(status.rawValue)")
         
         if status == .sharingAuthorized {
-            print("✅ HealthKit already authorized")
+            // print("✅ HealthKit already authorized")
             completion(true)
             return
         }
         
-        print("🔐 Requesting HealthKit authorization...")
+        // print("🔐 Requesting HealthKit authorization...")
         // Allow writing body mass so the app can save weight samples back to Apple Health
         var shareTypes: Set<HKSampleType> = []
         if let bodyMassType = HKObjectType.quantityType(forIdentifier: .bodyMass) {
@@ -154,22 +154,22 @@ final class HealthKitManager {
         }
 
         healthStore.requestAuthorization(toShare: shareTypes, read: readTypes) { success, error in
-            if let error = error {
-                print("❌ HealthKit authorization error: \(error.localizedDescription)")
+            if let _ = error {
+                // print("❌ HealthKit authorization error: \(error.localizedDescription)")
             }
-            print("🔐 HealthKit authorization result: \(success)")
+            // print("🔐 HealthKit authorization result: \(success)")
             completion(success)
         }
     }
     
     /// Forces a re-request of HealthKit authorization
     func forceReauthorization(completion: @escaping (Bool) -> Void) {
-        print("🔄 Force re-requesting HealthKit authorization...")
+        // print("🔄 Force re-requesting HealthKit authorization...")
         healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
-            if let error = error {
-                print("❌ HealthKit re-authorization error: \(error.localizedDescription)")
+            if let _ = error {
+                // print("❌ HealthKit re-authorization error: \(error.localizedDescription)")
             }
-            print("🔐 HealthKit re-authorization result: \(success)")
+            // print("🔐 HealthKit re-authorization result: \(success)")
             completion(success)
         }
     }
@@ -201,7 +201,7 @@ final class HealthKitManager {
     /// Checks if all required HealthKit permissions are granted
     func checkAuthorizationStatus() -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { 
-            print("❌ HealthKit is not available on this device")
+            // print("❌ HealthKit is not available on this device")
             return false 
         }
         
@@ -209,7 +209,7 @@ final class HealthKitManager {
         guard let sleepType = safeCategoryType(.sleepAnalysis),
               let hrvType = safeQuantityType(.heartRateVariabilitySDNN),
               let rhrType = safeQuantityType(.restingHeartRate) else {
-            print("❌ Required HealthKit types are not available")
+            // print("❌ Required HealthKit types are not available")
             return false
         }
         
@@ -222,17 +222,17 @@ final class HealthKitManager {
                            hrvStatus.rawValue == 1 && 
                            rhrStatus.rawValue == 1
         
-        print("🔍 HealthKit Authorization Status:")
-        print("   Sleep Analysis: \(sleepStatus.rawValue) (\(sleepStatus))")
-        print("   HRV: \(hrvStatus.rawValue) (\(hrvStatus))")
-        print("   RHR: \(rhrStatus.rawValue) (\(rhrStatus))")
-        print("   All Authorized: \(allAuthorized)")
+        // print("🔍 HealthKit Authorization Status:")
+        // print("   Sleep Analysis: \(sleepStatus.rawValue) (\(sleepStatus))")
+        // print("   HRV: \(hrvStatus.rawValue) (\(hrvStatus))")
+        // print("   RHR: \(rhrStatus.rawValue) (\(rhrStatus))")
+        // print("   All Authorized: \(allAuthorized)")
         
         // Additional debug info
-        print("🔍 Authorization Details:")
-        print("   Sleep Type Available: true")
-        print("   HRV Type Available: true")
-        print("   RHR Type Available: true")
+        // print("🔍 Authorization Details:")
+        // print("   Sleep Type Available: true")
+        // print("   HRV Type Available: true")
+        // print("   RHR Type Available: true")
         
         return allAuthorized
     }
@@ -374,11 +374,11 @@ final class HealthKitManager {
     
     /// Triggers a background refresh of health data
     func performBackgroundRefresh(completion: @escaping () -> Void) {
-        print("🔄 Performing background health data refresh...")
+        // print("🔄 Performing background health data refresh...")
         
         // Fetch today's data to ensure it's fresh
         fetchData(for: Date()) { _ in
-            print("✅ Background refresh completed")
+            // print("✅ Background refresh completed")
             completion()
         }
     }
@@ -550,7 +550,7 @@ final class HealthKitManager {
     /// Fetches all weight entries from HealthKit for a date range
     func fetchWeightEntries(from startDate: Date, to endDate: Date, completion: @escaping ([WeightData]) -> Void) {
         guard let weightType = HKObjectType.quantityType(forIdentifier: .bodyMass) else {
-            print("❌ Body mass type not available")
+            // print("❌ Body mass type not available")
             completion([])
             return
         }
@@ -559,8 +559,8 @@ final class HealthKitManager {
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
         
         let query = HKSampleQuery(sampleType: weightType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
-            if let error = error {
-                print("❌ Error fetching weight entries: \(error.localizedDescription)")
+            if let _ = error {
+                // print("❌ Error fetching weight entries: \(error.localizedDescription)")
                 completion([])
                 return
             }
@@ -574,7 +574,7 @@ final class HealthKitManager {
                 )
             }
             
-            print("✅ Fetched \(weightData.count) weight entries from HealthKit")
+            // print("✅ Fetched \(weightData.count) weight entries from HealthKit")
             completion(weightData)
         }
         
@@ -597,15 +597,15 @@ final class HealthKitManager {
     /// - Parameter completion: Callback delivering `[WeightData]` on the main queue.
     func fetchAllWeightEntries(completion: @escaping ([WeightData]) -> Void) {
         guard let weightType = HKObjectType.quantityType(forIdentifier: .bodyMass) else {
-            print("❌ Body mass type not available")
+            // print("❌ Body mass type not available")
             DispatchQueue.main.async { completion([]) }
             return
         }
 
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
         let query = HKSampleQuery(sampleType: weightType, predicate: nil, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
-            if let error = error {
-                print("❌ Error fetching all weight entries: \(error.localizedDescription)")
+            if let _ = error {
+                // print("❌ Error fetching all weight entries: \(error.localizedDescription)")
                 DispatchQueue.main.async { completion([]) }
                 return
             }
@@ -619,7 +619,7 @@ final class HealthKitManager {
                 )
             }
 
-            print("✅ Fetched \(data.count) total weight entries from HealthKit")
+            // print("✅ Fetched \(data.count) total weight entries from HealthKit")
             DispatchQueue.main.async { completion(data) }
         }
 
@@ -642,10 +642,10 @@ final class HealthKitManager {
         let sample = HKQuantitySample(type: weightType, quantity: quantity, start: date, end: date)
 
         healthStore.save(sample) { success, error in
-            if let error = error {
-                print("❌ Failed to save weight sample: \(error.localizedDescription)")
+            if let _ = error {
+                // print("❌ Failed to save weight sample: \(error.localizedDescription)")
             } else {
-                print("✅ Saved weight (\(weight) kg) to HealthKit at \(date)")
+                // print("✅ Saved weight (\(weight) kg) to HealthKit at \(date)")
             }
             DispatchQueue.main.async { completion(success, error) }
         }
@@ -737,7 +737,7 @@ final class HealthKitManager {
             )
             
         } catch {
-            print("Error syncing journal with health data: \(error)")
+            // print("Error syncing journal with health data: \(error)")
         }
     }
     
@@ -749,11 +749,11 @@ final class HealthKitManager {
     ) async {
         // This would typically update SwiftData journal entries
         // For now, we'll just print the data for demonstration
-        print("Syncing journal entries with health data:")
-        print("Recovery scores: \(recoveryScores.count) entries")
-        print("Sleep scores: \(sleepScores.count) entries")
-        print("HRV data: \(hrvData.count) entries")
-        print("RHR data: \(rhrData.count) entries")
+        // print("Syncing journal entries with health data:")
+        // print("Recovery scores: \(recoveryScores.count) entries")
+        // print("Sleep scores: \(sleepScores.count) entries")
+        // print("HRV data: \(hrvData.count) entries")
+        // print("RHR data: \(rhrData.count) entries")
     }
     
     func getHealthDataForDate(_ date: Date) async -> (recoveryScore: Int?, sleepScore: Int?, hrv: Double?, rhr: Double?) {
@@ -774,7 +774,7 @@ final class HealthKitManager {
                 rhr: rhrData[date]
             )
         } catch {
-            print("Error fetching health data for date: \(error)")
+            // print("Error fetching health data for date: \(error)")
             return (nil, nil, nil, nil)
         }
     }
@@ -783,7 +783,7 @@ final class HealthKitManager {
         do {
             return try await SleepScoreCalculator.shared.calculateSleepScore(for: date)
         } catch {
-            print("Error calculating detailed sleep score for \(date): \(error)")
+            // print("Error calculating detailed sleep score for \(date): \(error)")
             return nil
         }
     }
@@ -800,7 +800,7 @@ final class HealthKitManager {
                 result[currentDate] = sleepScore
             } catch {
                 // If we can't calculate a score for a specific date, skip it
-                print("Could not calculate detailed sleep score for \(currentDate): \(error)")
+                // print("Could not calculate detailed sleep score for \(currentDate): \(error)")
             }
             
             currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
@@ -854,7 +854,7 @@ final class HealthKitManager {
                 result[currentDate] = sleepScore.finalScore
             } catch {
                 // If we can't calculate a score for a specific date, skip it
-                print("Could not calculate sleep score for \(currentDate): \(error)")
+                // print("Could not calculate sleep score for \(currentDate): \(error)")
             }
             
             currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
@@ -993,7 +993,7 @@ extension HealthKitManager {
         let calendar = Calendar.current
         let endDate = calendar.startOfDay(for: Date())
         let startDate = calendar.date(byAdding: .day, value: -89, to: endDate) ?? endDate
-        print("\n===== 90-Day Baseline Averages =====")
+        // print("\n===== 90-Day Baseline Averages =====")
         do {
             let hrvData = try await fetchHRVData(from: startDate, to: endDate)
             let rhrData = try await fetchRHRData(from: startDate, to: endDate)
@@ -1016,17 +1016,17 @@ extension HealthKitManager {
                 }
                 return durations
             }
-            let hrvAvg = Array(hrvData.values).average
-            let rhrAvg = Array(rhrData.values).average
-            let sleepScoreAvg = Array(sleepData.values).map { Double($0) }.average
-            let sleepDurationAvg = sleepDurations.average / 3600 // hours
-            print("HRV (ms) 90d avg: \(hrvAvg)")
-            print("RHR (bpm) 90d avg: \(rhrAvg)")
-            print("Sleep Score 90d avg: \(sleepScoreAvg)")
-            print("Sleep Duration 90d avg: \(sleepDurationAvg) hours")
-            print("====================================\n")
+            let _ = Array(hrvData.values).average
+            let _ = Array(rhrData.values).average
+            let _ = Array(sleepData.values).map { Double($0) }.average
+            let _ = sleepDurations.average / 3600 // hours
+            // print("HRV (ms) 90d avg: \(hrvAvg)")
+            // print("RHR (bpm) 90d avg: \(rhrAvg)")
+            // print("Sleep Score 90d avg: \(sleepScoreAvg)")
+            // print("Sleep Duration 90d avg: \(sleepDurationAvg) hours")
+            // print("====================================\n")
         } catch {
-            print("Failed to fetch 90-day averages: \(error)")
+            // print("Failed to fetch 90-day averages: \(error)")
         }
     }
 
@@ -1035,11 +1035,11 @@ extension HealthKitManager {
         let calendar = Calendar.current
         let endDate = calendar.startOfDay(for: Date())
         let startDate = calendar.date(byAdding: .day, value: -89, to: endDate) ?? endDate
-        print("\n===== 90-Day Recovery & Sleep Baseline Averages =====")
+        // print("\n===== 90-Day Recovery & Sleep Baseline Averages =====")
         do {
-            let hrvData = try await fetchHRVData(from: startDate, to: endDate)
-            let rhrData = try await fetchRHRData(from: startDate, to: endDate)
-            let sleepScores = try await fetchSleepScores(from: startDate, to: endDate)
+            let _ = try await fetchHRVData(from: startDate, to: endDate)
+            let _ = try await fetchRHRData(from: startDate, to: endDate)
+            let _ = try await fetchSleepScores(from: startDate, to: endDate)
             let sleepResults = await getDetailedSleepScores(from: startDate, to: endDate)
             // Time Asleep, Time in Bed, Deep, REM, Efficiency, Avg HR (asleep)
             var timeInBed: [Double] = []
@@ -1062,24 +1062,24 @@ extension HealthKitManager {
             }
             let avgBedtime = bedtimes.isEmpty ? nil : bedtimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(bedtimes.count)
             let avgWaketime = waketimes.isEmpty ? nil : waketimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(waketimes.count)
-            let bedtimeStr = avgBedtime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
-            let waketimeStr = avgWaketime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
-            print("\nYour 90-Day Baseline Averages\n")
-            print("RHR: \(Array(rhrData.values).average.rounded(toPlaces: 1)) bpm")
-            print("HRV: \(Array(hrvData.values).average.rounded(toPlaces: 1)) ms")
-            print("Sleep Score: \(Array(sleepScores.values).map { Double($0) }.average.rounded(toPlaces: 1)) / 100")
-            print("Time Asleep (Sleep Duration): \((timeAsleep.average / 3600).rounded(toPlaces: 2)) hours")
-            print("\nAverages from Daily Logs (April-July)\n")
-            print("Time in Bed: \((timeInBed.average / 3600).rounded(toPlaces: 2)) hours")
-            print("Sleep Efficiency: \(sleepEfficiency.average.rounded(toPlaces: 1))%")
-            print("Deep Sleep: \((deepSleep.average / 3600).rounded(toPlaces: 2)) hours")
-            print("REM Sleep: \((remSleep.average / 3600).rounded(toPlaces: 2)) hours")
-            print("Average Heart Rate (while asleep): \(avgHR.average.rounded(toPlaces: 1)) bpm")
-            print("Baseline Bedtime (set by app): \(bedtimeStr)")
-            print("Baseline Wake Time (set by app): \(waketimeStr)")
-            print("====================================\n")
+            let _ = avgBedtime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            let _ = avgWaketime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            // print("\nYour 90-Day Baseline Averages\n")
+            // print("RHR: \(Array(rhrData.values).average.rounded(toPlaces: 1)) bpm")
+            // print("HRV: \(Array(hrvData.values).average.rounded(toPlaces: 1)) ms")
+            // print("Sleep Score: \(Array(sleepScores.values).map { Double($0) }.average.rounded(toPlaces: 1)) / 100")
+            // print("Time Asleep (Sleep Duration): \((timeAsleep.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("\nAverages from Daily Logs (April-July)\n")
+            // print("Time in Bed: \((timeInBed.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("Sleep Efficiency: \(sleepEfficiency.average.rounded(toPlaces: 1))%")
+            // print("Deep Sleep: \((deepSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("REM Sleep: \((remSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("Average Heart Rate (while asleep): \(avgHR.average.rounded(toPlaces: 1)) bpm")
+            // print("Baseline Bedtime (set by app): \(bedtimeStr)")
+            // print("Baseline Wake Time (set by app): \(waketimeStr)")
+            // print("====================================\n")
         } catch {
-            print("Failed to fetch 90-day recovery info: \(error)")
+            // print("Failed to fetch 90-day recovery info: \(error)")
         }
     }
     
@@ -1088,11 +1088,11 @@ extension HealthKitManager {
     /// Syncs the latest sleep data to the backend server
     /// This function fetches the most recently completed night's sleep data and sends it to the Sleep Lab
     func syncLatestSleepDataToServer() async {
-        print("🔄 Starting sleep data sync to server...")
+        // print("🔄 Starting sleep data sync to server...")
         
         // Check HealthKit authorization first
         guard checkAuthorizationStatus() else {
-            print("❌ HealthKit not authorized - cannot sync sleep data")
+            // print("❌ HealthKit not authorized - cannot sync sleep data")
             return
         }
         
@@ -1108,37 +1108,37 @@ extension HealthKitManager {
             // Create SleepData object from the result
             let sleepData = try SleepData(from: sleepResult, date: yesterday)
             
-            print("📊 Sleep data prepared for sync:")
-            print("   Date: \(sleepData.session_date)")
-            print("   Sleep Score: \(sleepData.score)")
-            print("   Time Asleep: \(String(format: "%.0f", sleepData.time_asleep_minutes)) minutes")
-            print("   Deep Sleep: \(String(format: "%.0f", sleepData.deep_sleep_minutes)) minutes")
-            print("   REM Sleep: \(String(format: "%.0f", sleepData.rem_sleep_minutes)) minutes")
+            // print("📊 Sleep data prepared for sync:")
+            // print("   Date: \(sleepData.session_date)")
+            // print("   Sleep Score: \(sleepData.score)")
+            // print("   Time Asleep: \(String(format: "%.0f", sleepData.time_asleep_minutes)) minutes")
+            // print("   Deep Sleep: \(String(format: "%.0f", sleepData.deep_sleep_minutes)) minutes")
+            // print("   REM Sleep: \(String(format: "%.0f", sleepData.rem_sleep_minutes)) minutes")
             
             // Send to server
             try await APIService.shared.postSleepData(sleepData: sleepData)
             
-            print("✅ Sleep data sync completed successfully")
+            // print("✅ Sleep data sync completed successfully")
             
             // Store last sync timestamp
             UserDefaults.standard.set(Date(), forKey: "lastSleepDataSync")
             
         } catch let error as SleepScoreError {
-            print("❌ Failed to calculate sleep score for sync: \(error.localizedDescription)")
+            // print("❌ Failed to calculate sleep score for sync: \(error.localizedDescription)")
         } catch let error as APIError {
-            print("❌ Failed to sync sleep data to server: \(error.localizedDescription)")
+            // print("❌ Failed to sync sleep data to server: \(error.localizedDescription)")
         } catch {
-            print("❌ Unexpected error during sleep data sync: \(error.localizedDescription)")
+            // print("❌ Unexpected error during sleep data sync: \(error.localizedDescription)")
         }
     }
     
     /// Syncs sleep data for a specific date to the server
     /// - Parameter date: The date to sync sleep data for
     func syncSleepDataToServer(for date: Date) async {
-        print("🔄 Starting sleep data sync for \(date) to server...")
+        // print("🔄 Starting sleep data sync for \(date) to server...")
         
         guard checkAuthorizationStatus() else {
-            print("❌ HealthKit not authorized - cannot sync sleep data")
+            // print("❌ HealthKit not authorized - cannot sync sleep data")
             return
         }
         
@@ -1146,16 +1146,16 @@ extension HealthKitManager {
             let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: date)
             let sleepData = try SleepData(from: sleepResult, date: date)
             
-            print("📊 Sleep data for \(date) prepared for sync:")
-            print("   Sleep Score: \(sleepData.score)")
-            print("   Time Asleep: \(String(format: "%.0f", sleepData.time_asleep_minutes)) minutes")
+            // print("📊 Sleep data for \(date) prepared for sync:")
+            // print("   Sleep Score: \(sleepData.score)")
+            // print("   Time Asleep: \(String(format: "%.0f", sleepData.time_asleep_minutes)) minutes")
             
             try await APIService.shared.postSleepData(sleepData: sleepData)
             
-            print("✅ Sleep data sync for \(date) completed successfully")
+            // print("✅ Sleep data sync for \(date) completed successfully")
             
         } catch {
-            print("❌ Failed to sync sleep data for \(date): \(error.localizedDescription)")
+            // print("❌ Failed to sync sleep data for \(date): \(error.localizedDescription)")
         }
     }
     
@@ -1170,13 +1170,13 @@ extension HealthKitManager {
         if let lastSync = lastSyncDate {
             let lastSyncDay = calendar.startOfDay(for: lastSync)
             if lastSyncDay < today {
-                print("🔄 Sleep data sync needed - last sync was \(lastSync)")
+                // print("🔄 Sleep data sync needed - last sync was \(lastSync)")
                 await syncLatestSleepDataToServer()
             } else {
-                print("✅ Sleep data already synced today")
+                // print("✅ Sleep data already synced today")
             }
         } else {
-            print("🔄 No previous sync found - performing initial sync")
+            // print("🔄 No previous sync found - performing initial sync")
             await syncLatestSleepDataToServer()
         }
     }
@@ -1187,9 +1187,9 @@ extension HealthKitManager {
         let endDate = calendar.startOfDay(for: Date())
         let startDate = calendar.date(byAdding: .day, value: -89, to: endDate) ?? endDate
         do {
-            let hrvData = try await fetchHRVData(from: startDate, to: endDate)
-            let rhrData = try await fetchRHRData(from: startDate, to: endDate)
-            let sleepScores = try await fetchSleepScores(from: startDate, to: endDate)
+            let _ = try await fetchHRVData(from: startDate, to: endDate)
+            let _ = try await fetchRHRData(from: startDate, to: endDate)
+            let _ = try await fetchSleepScores(from: startDate, to: endDate)
             let sleepResults = await getDetailedSleepScores(from: startDate, to: endDate)
             // Time Asleep, Time in Bed, Deep, REM, Efficiency, Avg HR (asleep), Sleep Onset
             var timeInBed: [Double] = []
@@ -1214,8 +1214,8 @@ extension HealthKitManager {
             }
             let avgBedtime = bedtimes.isEmpty ? nil : bedtimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(bedtimes.count)
             let avgWaketime = waketimes.isEmpty ? nil : waketimes.reduce(0) { $0 + $1.timeIntervalSince1970 } / Double(waketimes.count)
-            let bedtimeStr = avgBedtime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
-            let waketimeStr = avgWaketime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            let _ = avgBedtime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
+            let _ = avgWaketime.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) + " UTC" } ?? "-"
 
             // Fetch 90-day Recovery and Stress scores
             var recoveryScores: [Int] = []
@@ -1229,23 +1229,23 @@ extension HealthKitManager {
                 currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
             }
 
-            print("\nYour 90-Day Baseline Averages\n")
-            print("RHR: \(Array(rhrData.values).average.rounded(toPlaces: 1)) bpm")
-            print("HRV: \(Array(hrvData.values).average.rounded(toPlaces: 1)) ms")
-            print("Sleep Score: \(Array(sleepScores.values).map { Double($0) }.average.rounded(toPlaces: 1)) / 100")
-            print("Recovery Score: \((recoveryScores.map { Double($0) }.average).rounded(toPlaces: 1)) / 100")
-            print("Stress: \(stressScores.average.rounded(toPlaces: 1)) / 100")
-            print("Time Asleep (Sleep Duration): \((timeAsleep.average / 3600).rounded(toPlaces: 2)) hours")
-            print("Sleep Onset: \(sleepOnset.average.rounded(toPlaces: 1)) min")
-            print("\nAverages from Daily Logs (April-July)\n")
-            print("Time in Bed: \((timeInBed.average / 3600).rounded(toPlaces: 2)) hours")
-            print("Sleep Efficiency: \(sleepEfficiency.average.rounded(toPlaces: 1))%")
-            print("Deep Sleep: \((deepSleep.average / 3600).rounded(toPlaces: 2)) hours")
-            print("REM Sleep: \((remSleep.average / 3600).rounded(toPlaces: 2)) hours")
-            print("Average Heart Rate (while asleep): \(avgHR.average.rounded(toPlaces: 1)) bpm")
-            print("Baseline Bedtime (set by app): \(bedtimeStr)")
-            print("Baseline Wake Time (set by app): \(waketimeStr)")
-            print("====================================\n")
+            // print("\nYour 90-Day Baseline Averages\n")
+            // print("RHR: \(Array(rhrData.values).average.rounded(toPlaces: 1)) bpm")
+            // print("HRV: \(Array(hrvData.values).average.rounded(toPlaces: 1)) ms")
+            // print("Sleep Score: \(Array(sleepScores.values).map { Double($0) }.average.rounded(toPlaces: 1)) / 100")
+            // print("Recovery Score: \((recoveryScores.map { Double($0) }.average).rounded(toPlaces: 1)) / 100")
+            // print("Stress: \(stressScores.average.rounded(toPlaces: 1)) / 100")
+            // print("Time Asleep (Sleep Duration): \((timeAsleep.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("Sleep Onset: \(sleepOnset.average.rounded(toPlaces: 1)) min")
+            // print("\nAverages from Daily Logs (April-July)\n")
+            // print("Time in Bed: \((timeInBed.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("Sleep Efficiency: \(sleepEfficiency.average.rounded(toPlaces: 1))%")
+            // print("Deep Sleep: \((deepSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("REM Sleep: \((remSleep.average / 3600).rounded(toPlaces: 2)) hours")
+            // print("Average Heart Rate (while asleep): \(avgHR.average.rounded(toPlaces: 1)) bpm")
+            // print("Baseline Bedtime (set by app): \(bedtimeStr)")
+            // print("Baseline Wake Time (set by app): \(waketimeStr)")
+            // print("====================================\n")
         } catch {
             // No output if error
         }

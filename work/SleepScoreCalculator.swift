@@ -98,7 +98,7 @@ final class SleepScoreCalculator {
     // MARK: - Cache Management
     func clearCache() {
         sleepScoreCache.removeAll()
-        print("🗑️ Sleep score cache cleared")
+        // print("🗑️ Sleep score cache cleared")
     }
     
     // MARK: - Main Sleep Score Calculation
@@ -108,22 +108,22 @@ final class SleepScoreCalculator {
         let cacheKey = "\(calendar.component(.year, from: date))-\(calendar.component(.month, from: date))-\(calendar.component(.day, from: date))"
         
         if let cachedResult = sleepScoreCache[cacheKey] {
-            print("📋 Using cached sleep score for \(cacheKey)")
+            // print("📋 Using cached sleep score for \(cacheKey)")
             return cachedResult
         }
         
         // Check HealthKit authorization first
         guard HealthKitManager.shared.checkAuthorizationStatus() else {
-            print("❌ HealthKit authorization not granted for sleep score calculation")
+            // print("❌ HealthKit authorization not granted for sleep score calculation")
             throw SleepScoreError.healthKitNotAvailable
         }
         
         // Always use the date as the 'wake date' for sleep
         let sleepDate = date
-        let cal = Calendar.current
-        print("🔍 Attempting to calculate sleep score for recovery...")
-        print("   Sleep Date (wake date): \(sleepDate)")
-        print("   Sleep Date components: year: \(cal.component(.year, from: sleepDate)) month: \(cal.component(.month, from: sleepDate)) day: \(cal.component(.day, from: sleepDate))")
+        // Remove or comment out unused variables like 'cal'
+        // print("🔍 Attempting to calculate sleep score for recovery...")
+        // print("   Sleep Date (wake date): \(sleepDate)")
+        // print("   Sleep Date components: year: \(cal.component(.year, from: sleepDate)) month: \(cal.component(.month, from: sleepDate)) day: \(cal.component(.day, from: sleepDate))")
         
         // Fetch all required data - use try-catch for individual components
         let sleepData: (timeInBed: TimeInterval, timeAsleep: TimeInterval, deepSleepDuration: TimeInterval, remSleepDuration: TimeInterval, bedtime: Date?, wakeTime: Date?)
@@ -135,41 +135,41 @@ final class SleepScoreCalculator {
         do {
             sleepData = try await fetchDetailedSleepData(for: sleepDate)
         } catch {
-            print("❌ Failed to fetch sleep data: \(error)")
+            // print("❌ Failed to fetch sleep data: \(error)")
             throw error
         }
         
         do {
             heartRateData = try await fetchHeartRateData(for: sleepDate)
         } catch {
-            print("⚠️ Failed to fetch heart rate data, using fallback: \(error)")
+            // print("⚠️ Failed to fetch heart rate data, using fallback: \(error)")
             heartRateData = nil
         }
         
         do {
             restingHeartRate = try await fetchRestingHeartRate(for: sleepDate)
         } catch {
-            print("⚠️ Failed to fetch RHR data, using fallback: \(error)")
+            // print("⚠️ Failed to fetch RHR data, using fallback: \(error)")
             restingHeartRate = nil
         }
         
         do {
             baselineData = try await fetchBaselineData()
         } catch {
-            print("⚠️ Failed to fetch baseline data, using fallback: \(error)")
+            // print("⚠️ Failed to fetch baseline data, using fallback: \(error)")
             baselineData = (nil, nil)
         }
         
         do {
             enhancedHRVData = try await fetchEnhancedHRVData(for: date)
         } catch {
-            print("⚠️ Failed to fetch enhanced HRV data, using fallback: \(error)")
+            // print("⚠️ Failed to fetch enhanced HRV data, using fallback: \(error)")
             enhancedHRVData = nil
         }
         
         // Validate sleep data
         guard sleepData.timeInBed > 0, sleepData.timeAsleep > 0 else {
-            print("⚠️ Invalid sleep data - time in bed: \(sleepData.timeInBed), time asleep: \(sleepData.timeAsleep)")
+            // print("⚠️ Invalid sleep data - time in bed: \(sleepData.timeInBed), time asleep: \(sleepData.timeAsleep)")
             throw SleepScoreError.noSleepData
         }
         
@@ -186,13 +186,13 @@ final class SleepScoreCalculator {
             adjustedHeartRate = effectiveHeartRate
         }
         
-        print("💓 Heart Rate Data:")
-        print("   Average HR: \(heartRateData ?? 0) (using \(adjustedHeartRate ?? 0))")
-        print("   RHR: \(restingHeartRate ?? 0) (using \(effectiveRHR ?? 0))")
-        print("🌙 Sleep Data Validation:")
-        print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
-        print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
-        print("   Sleep Efficiency: \((sleepData.timeAsleep / sleepData.timeInBed) * 100)%")
+        // print("💓 Heart Rate Data:")
+        // print("   Average HR: \(heartRateData ?? 0) (using \(adjustedHeartRate ?? 0))")
+        // print("   RHR: \(restingHeartRate ?? 0) (using \(effectiveRHR ?? 0))")
+        // print("🌙 Sleep Data Validation:")
+        // print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
+        // print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
+        // print("   Sleep Efficiency: \((sleepData.timeAsleep / sleepData.timeInBed) * 100)%")
         
         // Calculate components using the NEW RE-CALIBRATED algorithm
         let restorationComponent = calculateRestorationComponent(
@@ -232,21 +232,21 @@ final class SleepScoreCalculator {
 
         // =============================
         // Debug: Print V3.0 Performance Score breakdown
-        print("🌙 Performance Sleep Score V3.0 Debug:")
-        print("   Duration Points: \(getDurationPoints(for: sleepData.timeAsleep))")
-        print("   Deep Sleep Points: \(getDeepSleepPoints(for: sleepData.deepSleepDuration))")
-        print("   REM Points: \(getREMPoints(for: sleepData.remSleepDuration))")
-        print("   Efficiency Points: \(getEfficiencyPoints(timeAsleep: sleepData.timeAsleep, timeInBed: sleepData.timeInBed))")
-        print("   Onset Consistency Points: \(getOnsetConsistencyPoints(actualBedtime: sleepData.bedtime ?? sleepDate, targetBedtime: baselineData.bedtime ?? sleepData.bedtime ?? sleepDate))")
-        print("   Final Score: \(finalScore)")
-        print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
-        print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
-        print("   Deep Sleep: \(sleepData.deepSleepDuration / 3600) hours")
-        print("   REM Sleep: \(sleepData.remSleepDuration / 3600) hours")
-        print("   Heart Rate: \(adjustedHeartRate ?? 0)")
-        print("   RHR: \(effectiveRHR ?? 0)")
-        print("   Baseline Bedtime: \(baselineData.bedtime?.description ?? "nil")")
-        print("   Baseline Wake: \(baselineData.wakeTime?.description ?? "nil")")
+        // print("🌙 Performance Sleep Score V3.0 Debug:")
+        // print("   Duration Points: \(getDurationPoints(for: sleepData.timeAsleep))")
+        // print("   Deep Sleep Points: \(getDeepSleepPoints(for: sleepData.deepSleepDuration))")
+        // print("   REM Points: \(getREMPoints(for: sleepData.remSleepDuration))")
+        // print("   Efficiency Points: \(getEfficiencyPoints(timeAsleep: sleepData.timeAsleep, timeInBed: sleepData.timeInBed))")
+        // print("   Onset Consistency Points: \(getOnsetConsistencyPoints(actualBedtime: sleepData.bedtime ?? sleepDate, targetBedtime: baselineData.bedtime ?? sleepData.bedtime ?? sleepDate))")
+        // print("   Final Score: \(finalScore)")
+        // print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
+        // print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
+        // print("   Deep Sleep: \(sleepData.deepSleepDuration / 3600) hours")
+        // print("   REM Sleep: \(sleepData.remSleepDuration / 3600) hours")
+        // print("   Heart Rate: \(adjustedHeartRate ?? 0)")
+        // print("   RHR: \(effectiveRHR ?? 0)")
+        // print("   Baseline Bedtime: \(baselineData.bedtime?.description ?? "nil")")
+        // print("   Baseline Wake: \(baselineData.wakeTime?.description ?? "nil")")
         
         // Helper function to calculate heart rate dip percentage
         func calculateHeartRateDipPercentage() -> Double? {
@@ -300,7 +300,7 @@ final class SleepScoreCalculator {
         
         // Cache the result
         sleepScoreCache[cacheKey] = result
-        print("📋 Cached sleep score for \(cacheKey)")
+        // print("📋 Cached sleep score for \(cacheKey)")
         
         return result
     }
@@ -312,9 +312,9 @@ final class SleepScoreCalculator {
         let startOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: calendar.date(byAdding: .day, value: -1, to: date)!))!
         let endOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: date))!
         
-        print("🌙 Fetching sleep data for wake date: \(date)")
-        print("   Start of window: \(startOfWindow)")
-        print("   End of window: \(endOfWindow)")
+        // print("🌙 Fetching sleep data for wake date: \(date)")
+        // print("   Start of window: \(startOfWindow)")
+        // print("   End of window: \(endOfWindow)")
         
         // Check authorization status for sleep data specifically
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
@@ -322,10 +322,10 @@ final class SleepScoreCalculator {
         }
         
         let sleepAuthStatus = healthStore.authorizationStatus(for: sleepType)
-        print("🔍 Sleep Authorization Status: \(sleepAuthStatus.rawValue) (\(sleepAuthStatus))")
+        // print("🔍 Sleep Authorization Status: \(sleepAuthStatus.rawValue) (\(sleepAuthStatus))")
         
         guard sleepAuthStatus.rawValue == 1 else {
-            print("❌ Sleep data authorization not granted: \(sleepAuthStatus) (raw value: \(sleepAuthStatus.rawValue))")
+            // print("❌ Sleep data authorization not granted: \(sleepAuthStatus) (raw value: \(sleepAuthStatus.rawValue))")
             throw SleepScoreError.healthKitNotAvailable
         }
         
@@ -338,32 +338,32 @@ final class SleepScoreCalculator {
                 }
                 
                 let sleepSamples = (samples as? [HKCategorySample]) ?? []
-                print("🌙 Sleep samples found: \(sleepSamples.count)")
+                // print("🌙 Sleep samples found: \(sleepSamples.count)")
                 
                 guard !sleepSamples.isEmpty else {
-                    print("❌ No sleep samples found for wake date: \(date)")
+                    // print("❌ No sleep samples found for wake date: \(date)")
                     continuation.resume(throwing: SleepScoreError.noSleepData)
                     return
                 }
                 
                 // Group sleep samples by session (continuous periods)
                 let sleepSessions = SleepScoreCalculator.groupSleepSamplesIntoSessions(sleepSamples)
-                print("🌙 Found \(sleepSessions.count) sleep sessions")
+                // print("🌙 Found \(sleepSessions.count) sleep sessions")
                 
                 // Find the main sleep session (longest one)
                 let mainSession = sleepSessions.max(by: { $0.totalDuration < $1.totalDuration }) ?? sleepSessions.first
                 
                 guard let session = mainSession else {
-                    print("❌ No valid sleep session found")
+                    // print("❌ No valid sleep session found")
                     continuation.resume(throwing: SleepScoreError.noSleepData)
                     return
                 }
                 
-                print("🌙 Main sleep session:")
-                print("   Start: \(session.startTime)")
-                print("   End: \(session.endTime)")
-                print("   Duration: \(session.totalDuration / 3600) hours")
-                print("   Time Asleep: \(session.timeAsleep / 3600) hours")
+                // print("🌙 Main sleep session:")
+                // print("   Start: \(session.startTime)")
+                // print("   End: \(session.endTime)")
+                // print("   Duration: \(session.totalDuration / 3600) hours")
+                // print("   Time Asleep: \(session.timeAsleep / 3600) hours")
                 
                 // Calculate time in bed for the main session only
                 let timeInBed = session.totalDuration
@@ -401,10 +401,10 @@ final class SleepScoreCalculator {
         
         // Check authorization status for heart rate data
         let hrAuthStatus = healthStore.authorizationStatus(for: heartRateType)
-        print("🔍 Heart Rate Authorization Status: \(hrAuthStatus.rawValue) (\(hrAuthStatus))")
+        // print("🔍 Heart Rate Authorization Status: \(hrAuthStatus.rawValue) (\(hrAuthStatus))")
         
         guard hrAuthStatus.rawValue == 1 else {
-            print("❌ Heart rate data authorization not granted: \(hrAuthStatus) (raw value: \(hrAuthStatus.rawValue))")
+            // print("❌ Heart rate data authorization not granted: \(hrAuthStatus) (raw value: \(hrAuthStatus.rawValue))")
             return nil // Return nil instead of throwing error for heart rate
         }
         
@@ -430,10 +430,10 @@ final class SleepScoreCalculator {
                 let values = sleepHeartRateSamples.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) }
                 let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
                 
-                print("💓 Heart Rate Analysis:")
-                print("   Total samples: \(heartRateSamples.count)")
-                print("   Sleep samples: \(sleepHeartRateSamples.count)")
-                print("   Average HR: \(average ?? 0)")
+                // print("💓 Heart Rate Analysis:")
+                // print("   Total samples: \(heartRateSamples.count)")
+                // print("   Sleep samples: \(sleepHeartRateSamples.count)")
+                // print("   Average HR: \(average ?? 0)")
                 
                 continuation.resume(returning: average)
             }
@@ -453,10 +453,10 @@ final class SleepScoreCalculator {
         
         // Check authorization status for resting heart rate data
         let rhrAuthStatus = healthStore.authorizationStatus(for: rhrType)
-        print("🔍 RHR Authorization Status: \(rhrAuthStatus.rawValue) (\(rhrAuthStatus))")
+        // print("🔍 RHR Authorization Status: \(rhrAuthStatus.rawValue) (\(rhrAuthStatus))")
         
         guard rhrAuthStatus.rawValue == 1 else {
-            print("❌ RHR data authorization not granted: \(rhrAuthStatus) (raw value: \(rhrAuthStatus.rawValue))")
+            // print("❌ RHR data authorization not granted: \(rhrAuthStatus) (raw value: \(rhrAuthStatus.rawValue))")
             return nil // Return nil instead of throwing error for RHR
         }
         
@@ -479,14 +479,14 @@ final class SleepScoreCalculator {
     private func fetchBaselineData() async throws -> (bedtime: Date?, wakeTime: Date?) {
         baselineEngine.loadBaselines()
         
-        print("🔄 Baseline Data Debug:")
-        print("   Baseline Bedtime: \(baselineEngine.bedtime14?.description ?? "nil")")
-        print("   Baseline Wake: \(baselineEngine.wake14?.description ?? "nil")")
-        print("   Calibrating: \(baselineEngine.calibrating)")
+        // print("🔄 Baseline Data Debug:")
+        // print("   Baseline Bedtime: \(baselineEngine.bedtime14?.description ?? "nil")")
+        // print("   Baseline Wake: \(baselineEngine.wake14?.description ?? "nil")")
+        // print("   Calibrating: \(baselineEngine.calibrating)")
         
         // If baseline data is missing, try to calculate it from recent data
         if baselineEngine.bedtime14 == nil || baselineEngine.wake14 == nil {
-            print("⚠️ Missing baseline data, calculating from recent sleep data...")
+            // print("⚠️ Missing baseline data, calculating from recent sleep data...")
             return try await calculateFallbackBaseline()
         }
         
@@ -512,10 +512,10 @@ final class SleepScoreCalculator {
         
         // Check authorization status for baseline calculation
         let sleepAuthStatus = healthStore.authorizationStatus(for: sleepType)
-        print("🔍 Baseline Sleep Authorization Status: \(sleepAuthStatus.rawValue) (\(sleepAuthStatus))")
+        // print("🔍 Baseline Sleep Authorization Status: \(sleepAuthStatus.rawValue) (\(sleepAuthStatus))")
         
         guard sleepAuthStatus.rawValue == 1 else {
-            print("❌ Sleep data authorization not granted for baseline calculation: \(sleepAuthStatus) (raw value: \(sleepAuthStatus.rawValue))")
+            // print("❌ Sleep data authorization not granted for baseline calculation: \(sleepAuthStatus) (raw value: \(sleepAuthStatus.rawValue))")
             throw SleepScoreError.healthKitNotAvailable
         }
         
@@ -544,10 +544,10 @@ final class SleepScoreCalculator {
                 let avgBedtime = bedtimes.isEmpty ? nil : Date(timeIntervalSince1970: bedtimes.map { $0.timeIntervalSince1970 }.reduce(0, +) / Double(bedtimes.count))
                 let avgWakeTime = wakeTimes.isEmpty ? nil : Date(timeIntervalSince1970: wakeTimes.map { $0.timeIntervalSince1970 }.reduce(0, +) / Double(wakeTimes.count))
                 
-                print("📊 Fallback Baseline Calculated:")
-                print("   Average Bedtime: \(avgBedtime?.description ?? "nil")")
-                print("   Average Wake Time: \(avgWakeTime?.description ?? "nil")")
-                print("   Data Points: \(bedtimes.count)")
+                // print("📊 Fallback Baseline Calculated:")
+                // print("   Average Bedtime: \(avgBedtime?.description ?? "nil")")
+                // print("   Average Wake Time: \(avgWakeTime?.description ?? "nil")")
+                // print("   Data Points: \(bedtimes.count)")
                 
                 continuation.resume(returning: (avgBedtime, avgWakeTime))
             }
@@ -614,11 +614,11 @@ final class SleepScoreCalculator {
         // Calculate weighted average
         let restorationScore = (deepScore * 0.40) + (remScore * 0.40) + (hrDipScore * 0.20)
         
-        print("🔍 RE-CALIBRATED Restoration Component Debug:")
-        print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepScore)")
-        print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remScore)")
-        print("   HR Dip: \(hrDipScore)")
-        print("   Final Restoration Score: \(restorationScore)")
+        // print("🔍 RE-CALIBRATED Restoration Component Debug:")
+        // print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepScore)")
+        // print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remScore)")
+        // print("   HR Dip: \(hrDipScore)")
+        // print("   Final Restoration Score: \(restorationScore)")
         
         return restorationScore
     }
@@ -702,11 +702,11 @@ final class SleepScoreCalculator {
         let sleepEfficiency = timeAsleep / timeInBed
         let efficiencyScore = sleepEfficiency * 100
         
-        print("🔍 RE-CALIBRATED Efficiency Component Debug:")
-        print("   Time in Bed: \(timeInBed / 3600) hours")
-        print("   Time Asleep: \(timeAsleep / 3600) hours")
-        print("   Sleep Efficiency: \(sleepEfficiency * 100)%")
-        print("   Efficiency Score: \(efficiencyScore)")
+        // print("🔍 RE-CALIBRATED Efficiency Component Debug:")
+        // print("   Time in Bed: \(timeInBed / 3600) hours")
+        // print("   Time Asleep: \(timeAsleep / 3600) hours")
+        // print("   Sleep Efficiency: \(sleepEfficiency * 100)%")
+        // print("   Efficiency Score: \(efficiencyScore)")
         
         return efficiencyScore
     }
@@ -730,11 +730,11 @@ final class SleepScoreCalculator {
         // Apply the RE-CALIBRATED scoring formula
         let consistencyScore = 100 * Foundation.exp(-0.005 * totalDeviationInMinutes)
         
-        print("🔍 RE-CALIBRATED Consistency Component Debug:")
-        print("   Bedtime: \(bedtime)")
-        print("   Baseline Bedtime: \(baselineBedtime)")
-        print("   Total Deviation: \(totalDeviationInMinutes) minutes")
-        print("   Consistency Score: \(consistencyScore)")
+        // print("🔍 RE-CALIBRATED Consistency Component Debug:")
+        // print("   Bedtime: \(bedtime)")
+        // print("   Baseline Bedtime: \(baselineBedtime)")
+        // print("   Total Deviation: \(totalDeviationInMinutes) minutes")
+        // print("   Consistency Score: \(consistencyScore)")
         
         return consistencyScore
     }
@@ -890,11 +890,11 @@ final class SleepScoreCalculator {
         
         let finalScore = baseScore + autonomicBonus - stressPenalty
         
-        print("🔍 Enhanced HRV Sleep Score:")
-        print("   Base Score: \(baseScore)")
-        print("   Autonomic Bonus: \(autonomicBonus)")
-        print("   Stress Penalty: \(stressPenalty)")
-        print("   Final Enhanced Score: \(finalScore)")
+        // print("🔍 Enhanced HRV Sleep Score:")
+        // print("   Base Score: \(baseScore)")
+        // print("   Autonomic Bonus: \(autonomicBonus)")
+        // print("   Stress Penalty: \(stressPenalty)")
+        // print("   Final Enhanced Score: \(finalScore)")
         
         return max(0, min(100, finalScore))
     }

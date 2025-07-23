@@ -458,39 +458,60 @@ struct QuickActionsView: View {
                 .font(.title3)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
-            HStack(spacing: 16) {
-                NavigationLink(destination: WorkoutLibraryView()) {
-                    QuickActionCard(
-                        title: "Workout",
-                        icon: "dumbbell.fill",
-                        color: .orange
-                    )
+            VStack(spacing: 12) {
+                HStack(spacing: 16) {
+                    NavigationLink(destination: WorkoutLibraryView()) {
+                        QuickActionCard(
+                            title: "Workout",
+                            icon: "dumbbell.fill",
+                            color: .orange
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    NavigationLink(destination: JournalView()) {
+                        QuickActionCard(
+                            title: "Journal",
+                            icon: "book.closed.fill",
+                            color: .blue
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    NavigationLink(destination: WeightTrackerView()) {
+                        QuickActionCard(
+                            title: "Weight",
+                            icon: "scalemass",
+                            color: .green
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
-                NavigationLink(destination: JournalView()) {
-                    QuickActionCard(
-                        title: "Journal",
-                        icon: "book.closed.fill",
-                        color: .blue
-                    )
+                HStack(spacing: 16) {
+                    NavigationLink(destination: SupplementsView()) {
+                        QuickActionCard(
+                            title: "Vitamins",
+                            icon: "pills.fill",
+                            color: .purple
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    NavigationLink(destination: HydrationView()) {
+                        QuickActionCard(
+                            title: "Hydration",
+                            icon: "drop.fill",
+                            color: .blue
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    Button(action: {}) {
+                        QuickActionCard(
+                            title: "Coming Soon",
+                            icon: "sparkles",
+                            color: .gray
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(true)
                 }
-                .buttonStyle(PlainButtonStyle())
-                NavigationLink(destination: WeightTrackerView()) {
-                    QuickActionCard(
-                        title: "Weight",
-                        icon: "scalemass",
-                        color: .green
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-                NavigationLink(destination: SupplementsView()) {
-                    QuickActionCard(
-                        title: "Vitamins",
-                        icon: "pills.fill",
-                        color: .purple
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
             }
         }
     }

@@ -493,8 +493,8 @@ struct EnhancedPerformanceView: View {
     
     private func fetchWeeklyTrends() async -> WeeklyTrends {
         // Calculate trends for the past week
-        let calendar = Calendar.current
-        let today = dateModel.selectedDate
+        let _ = Calendar.current
+        let _ = dateModel.selectedDate
         // This would fetch actual data - for now returning sample data
         return WeeklyTrends(
             recoveryTrend: 2.5,

@@ -23,7 +23,8 @@ private let sharedContainer: ModelContainer = {
             DailyJournal.self,
             Supplement.self,
             SupplementLog.self,
-            DailySupplementRecord.self
+            DailySupplementRecord.self,
+            HydrationLog.self
         )
     } catch {
         fatalError("Failed to initialize ModelContainer: \(error)")
@@ -42,7 +43,7 @@ struct workApp: App {
             MainTabView()
                 .environmentObject(dataManager)
                 .onAppear {
-                    print("App launched")
+                    // print("App launched")
                     if shouldResetDatabase {
                         resetDatabase()
                         shouldResetDatabase = false
@@ -65,41 +66,41 @@ struct workApp: App {
     }
     
     private func seedDataIfNeeded() {
-        print("Seeding data if needed")
+        // print("Seeding data if needed")
         // This will be called when the app launches
         // The actual seeding will happen in the views when they access the model context
     }
     
     private func resetDatabase() {
-        print("Resetting database...")
+        // print("Resetting database...")
         // This will be called when the app launches
         // The actual seeding will happen in the views when they access the model context
     }
     
     private func initializeBaselineEngine() {
-        print("Initializing baseline engine...")
+        // print("Initializing baseline engine...")
         
         // Request HealthKit authorization first
         HealthKitManager.shared.requestAuthorization { success in
             if success {
-                print("HealthKit authorization granted, updating baselines...")
+                // print("HealthKit authorization granted, updating baselines...")
                 
                 // Reset old baseline data first to ensure clean personal data
                 DynamicBaselineEngine.shared.resetBaselines()
                 
                 // Update with corrected algorithm
                 DynamicBaselineEngine.shared.updateAndStoreBaselines {
-                    print("Baseline engine initialized successfully")
+                    // print("Baseline engine initialized successfully")
                 }
             } else {
-                print("HealthKit authorization denied")
+                // print("HealthKit authorization denied")
             }
         }
     }
     
     /// Forces a complete reset of all data to ensure only personal data is used
     private func forceDataReset() {
-        print("🔄 Force resetting all data to use only personal data...")
+        // print("🔄 Force resetting all data to use only personal data...")
         
         // Reset baselines
         DynamicBaselineEngine.shared.resetBaselines()
@@ -110,12 +111,12 @@ struct workApp: App {
         // Re-request authorization and rebuild baselines
         HealthKitManager.shared.requestAuthorization { success in
             if success {
-                print("✅ Authorization granted, rebuilding baselines with personal data...")
+                // print("✅ Authorization granted, rebuilding baselines with personal data...")
                 DynamicBaselineEngine.shared.updateAndStoreBaselines {
-                    print("✅ Baseline engine rebuilt with personal data")
+                    // print("✅ Baseline engine rebuilt with personal data")
                 }
             } else {
-                print("❌ Authorization denied - cannot access personal health data")
+                // print("❌ Authorization denied - cannot access personal health data")
             }
         }
     }

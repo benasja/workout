@@ -1,5 +1,14 @@
 # Work App - Changelog
 
+## [Unreleased]
+
+- Added: Hydration Tracker feature with beautiful SwiftUI interface, animated circular progress gauge, and custom water intake buttons (200ml, 500ml, 700ml).
+- Added: Hydration data management via DataManager, including daily logs, goal editing, and reset functionality.
+- Added: HydrationView accessible from the More tab, with celebratory feedback and accessibility support.
+- Changed: UI/UX refinements for hydration (persistent intake/goal text, improved button icons, pencil button for goal editing, reset button, and two-row quick actions on Today screen).
+- Fixed: All debug print statements commented out; all Xcode warnings about unused variables and unreachable code resolved.
+- Docs: Merged FEATURES.md into README.md under "Core Features", deleted FEATURES.md, and created ROADMAP.md for future planning.
+
 ## Version 2.0.0 - Complete Overhaul (2024)
 
 ### Major New Features

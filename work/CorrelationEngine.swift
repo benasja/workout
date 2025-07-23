@@ -132,7 +132,7 @@ class CorrelationEngine: ObservableObject {
         var tagInsights: [CorrelationInsight] = []
         
         // Get all journal entries with tags
-        let entriesWithTags = entries.filter { !$0.tags.isEmpty }
+        // let entriesWithTags = entries.filter { !$0.tags.isEmpty }
         
         // Analyze alcohol impact
         let alcoholDays = entries.filter { $0.consumedAlcohol }

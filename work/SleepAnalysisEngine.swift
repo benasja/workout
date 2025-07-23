@@ -161,7 +161,7 @@ struct SleepAnalysisEngine {
             range: onsetRangeMinutes
         )
 
-        var components = [durationComp, deepComp, remComp, efficiencyComp, onsetComp]
+        // Remove or comment out unused variables like 'components'
 
         // -----------------------------------------
         // Determine weakest & strongest components
@@ -176,8 +176,8 @@ struct SleepAnalysisEngine {
             }
         }
 
-        let weakest = components.max { severity(of: $0.status) < severity(of: $1.status) } ?? durationComp
-        let strongest = components.min { severity(of: $0.status) < severity(of: $1.status) } ?? durationComp
+        let weakest = [durationComp, deepComp, remComp, efficiencyComp, onsetComp].max { severity(of: $0.status) < severity(of: $1.status) } ?? durationComp
+        let strongest = [durationComp, deepComp, remComp, efficiencyComp, onsetComp].min { severity(of: $0.status) < severity(of: $1.status) } ?? durationComp
 
         // -----------------------------------------
         // Headline Generation
@@ -231,7 +231,7 @@ struct SleepAnalysisEngine {
         // Return packaged insight
         return SleepAnalysisInsight(
             headline: headline,
-            componentBreakdown: components,
+            componentBreakdown: [durationComp, deepComp, remComp, efficiencyComp, onsetComp],
             recommendation: recommendation
         )
     }

@@ -66,12 +66,9 @@ final class HealthStatsViewModel: ObservableObject {
     /// This is the central function that should be called by all views instead of individual data fetching.
     /// - Parameter date: The date to load data for
     func loadData(for date: Date) async {
-        print("🏥 HealthStatsViewModel: Loading data for \(date)")
-        
         // Check cache first
         let cacheKey = cacheKey(for: date)
         if let cachedData = dataCache[cacheKey], !cachedData.isExpired {
-            print("📋 Using cached health data for \(date)")
             await publishCachedData(cachedData)
             return
         }

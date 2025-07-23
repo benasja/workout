@@ -22,6 +22,85 @@
 
 ---
 
+## Core Features
+
+# Work App - Feature List
+
+## Core Application Features
+
+### Today Dashboard
+- Real-time health and recovery metrics
+- Personalized insights and recommendations
+- Quick actions: Start workout, add journal, log weight
+- Health metrics grid: HRV, RHR, sleep, activity
+
+### Advanced Workout System
+- Smart set tracking: Warmup, working, drop, failure, back-off
+- Quick add: One-tap set logging with suggestions
+- Exercise library: 25+ exercises with instructions
+- Custom programs: Create, edit, and follow workout routines
+- Workout history: Detailed analytics and progress
+- 1RM calculations and personal records
+
+### Health Analytics
+- Recovery score: HRV, RHR, sleep, stress
+- Sleep score: Duration, efficiency, deep/REM, HR dip, consistency
+- Dynamic baselines: Personalized from 60-90 day history
+- Correlation engine: Lifestyle factors vs. health metrics
+- Trend analysis: Interactive charts and progress
+
+### Journal & Lifestyle Tracking
+- Daily journal: Tags for alcohol, caffeine, stress, etc.
+- Supplement tracking: Creatine, vitamins, magnesium, etc.
+- Notes and reflections
+- Insights based on journal and health data
+
+### Weight Tracking
+- Manual and HealthKit-synced entries
+- CSV import/export
+- Trend visualization
+
+### Insights & Analytics
+- AI-powered recommendations
+- Correlation discovery: Actionable lifestyle insights
+- Weekly and monthly trends
+
+### User Experience
+- Modern SwiftUI interface
+- Dark/light mode
+- Accessibility: VoiceOver, dynamic type, high contrast
+- Haptic feedback
+- Smooth animations and loading states
+
+### Privacy & Security
+- All data stored locally on device
+- Strict HealthKit privacy compliance
+- No cloud sync by default
+
+### Hydration Tracker
+- Log daily water intake with one tap (200ml, 500ml, 700ml buttons)
+- Animated circular progress gauge visualizes progress toward your hydration goal
+- Intake/goal text always visible, with celebratory feedback when goal is reached
+- Edit hydration goal per day or globally (with toggle)
+- Reset button to clear daily intake
+- Data persists across date changes and app restarts
+- Accessible from the More tab
+
+---
+
+## Planned & In-Progress Features
+- Apple Watch companion app
+- Machine learning predictions
+- Social/community features
+- Nutrition and meal tracking
+- More advanced analytics and forecasting
+
+---
+
+For technical details, algorithms, and architecture, see the main [README.md](README.md).
+
+---
+
 ## App Architecture
 
 - **Entry Point:** `workApp.swift` initializes the app, sets up the SwiftData model container, and launches the `MainTabView`.
@@ -33,17 +112,6 @@
   - **More:** Access to weight tracker, journal, analytics, settings, and more
 - **State Management:** Uses `@StateObject`, `@EnvironmentObject`, and SwiftData's `@Query` for reactive data flow.
 - **Modern UI:** Built with SwiftUI 5, supports dark/light mode, accessibility, and haptic feedback.
-
----
-
-## Core Features
-
-- **Workout System:** Smart set tracking, quick add, exercise library, custom programs, workout history, analytics.
-- **Health Analytics:** Recovery and sleep scoring, dynamic personal baselines, correlation engine for lifestyle factors.
-- **Journal:** Daily lifestyle and supplement tracking, notes, and tag-based insights.
-- **Weight Tracking:** Manual and HealthKit-synced weight entries, CSV import/export.
-- **Insights & Analytics:** AI-powered recommendations, trend analysis, and correlation discovery.
-- **Accessibility:** Full VoiceOver support, dynamic type, high contrast, and haptics.
 
 ---
 
@@ -60,6 +128,7 @@ All models are defined in `work/Models/` and use SwiftData for persistence.
 - **DailyJournal:** Tracks daily lifestyle factors, supplements, notes, and health metrics.
 - **WeightEntry:** Body weight tracking, supports manual and HealthKit entries.
 - **ScoreHistory:** Stores historical recovery and sleep scores for trend analysis.
+- **HydrationLog:** Tracks daily water intake and hydration goal. Integrated with DataManager for all hydration operations.
 
 ---
 
@@ -184,6 +253,18 @@ All models are defined in `work/Models/` and use SwiftData for persistence.
 - `FEATURES.md` (detailed feature list)
 - `CHANGELOG.md` (version history)
 - Remove or merge all other .md files as above.
+
+---
+
+## Usage
+
+### Using the Hydration Tracker
+
+1. Go to the **More** tab and select **Hydration**.
+2. Tap a water button (200ml, 500ml, 700ml) to log intake. The circular gauge animates to show your progress.
+3. Tap the pencil icon to edit your daily hydration goal. Use the toggle to apply the goal to all days.
+4. Use the reset button to set today’s intake to zero.
+5. Your hydration data is saved automatically and persists across app restarts.
 
 ---
 

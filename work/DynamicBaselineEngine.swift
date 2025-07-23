@@ -67,16 +67,17 @@ final class DynamicBaselineEngine {
             respiratoryRate14 = dict["respiratoryRate14"] as? Double
             oxygenSaturation14 = dict["oxygenSaturation14"] as? Double
             
-            print("📋 Loaded baselines from UserDefaults:")
-            print("   HRV 60-day: \(hrv60?.description ?? "nil")")
-            print("   RHR 60-day: \(rhr60?.description ?? "nil")")
+            // print("📋 Loaded baselines from UserDefaults:")
+            // print("   HRV 60-day: \(hrv60?.description ?? "nil")")
+            // print("   RHR 60-day: \(rhr60?.description ?? "nil")")
         } else {
-            print("⚠️ No baseline data found in UserDefaults - will calculate from HealthKit")
+            // print("⚠️ No baseline data found in UserDefaults - will calculate from HealthKit")
         }
     }
     
     func updateAndStoreBaselines(completion: @escaping () -> Void) {
-        print("🔄 Calculating baselines from your Apple Health data...")
+        // Comment out all print statements
+        // print("🔄 Calculating baselines from your Apple Health data...")
         
         let group = DispatchGroup()
         
@@ -84,7 +85,7 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), days: 60) { value in
             self.hrv60 = value
-            print("📊 HRV 60-day baseline: \(value?.description ?? "nil")")
+            // print("📊 HRV 60-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
@@ -92,7 +93,7 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"), days: 14) { value in
             self.hrv14 = value
-            print("📊 HRV 14-day baseline: \(value?.description ?? "nil")")
+            // print("📊 HRV 14-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
@@ -100,7 +101,7 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.restingHeartRate, unit: HKUnit(from: "count/min"), days: 60) { value in
             self.rhr60 = value
-            print("📊 RHR 60-day baseline: \(value?.description ?? "nil")")
+            // print("📊 RHR 60-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
@@ -108,7 +109,7 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.restingHeartRate, unit: HKUnit(from: "count/min"), days: 14) { value in
             self.rhr14 = value
-            print("📊 RHR 14-day baseline: \(value?.description ?? "nil")")
+            // print("📊 RHR 14-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
@@ -118,10 +119,10 @@ final class DynamicBaselineEngine {
             self.sleepDuration14 = duration
             self.bedtime14 = bedtime
             self.wake14 = wakeTime
-            print("📊 Sleep 14-day baselines:")
-            print("   Duration: \((duration ?? 0) / 3600) hours")
-            print("   Bedtime: \(bedtime?.description ?? "nil")")
-            print("   Wake time: \(wakeTime?.description ?? "nil")")
+            // print("📊 Sleep 14-day baselines:")
+            // print("   Duration: \((duration ?? 0) / 3600) hours")
+            // print("   Bedtime: \(bedtime?.description ?? "nil")")
+            // print("   Wake time: \(wakeTime?.description ?? "nil")")
             group.leave()
         }
         
@@ -129,7 +130,7 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.walkingHeartRateAverage, unit: HKUnit(from: "count/min"), days: 14) { value in
             self.walkingHR14 = value
-            print("📊 Walking HR 14-day baseline: \(value?.description ?? "nil")")
+            // print("📊 Walking HR 14-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
@@ -137,7 +138,7 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.respiratoryRate, unit: HKUnit(from: "count/min"), days: 14) { value in
             self.respiratoryRate14 = value
-            print("📊 Respiratory Rate 14-day baseline: \(value?.description ?? "nil")")
+            // print("📊 Respiratory Rate 14-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
@@ -145,13 +146,13 @@ final class DynamicBaselineEngine {
         group.enter()
         fetchRollingAverage(.oxygenSaturation, unit: HKUnit.percent(), days: 14) { value in
             self.oxygenSaturation14 = value
-            print("📊 Oxygen Saturation 14-day baseline: \(value?.description ?? "nil")")
+            // print("📊 Oxygen Saturation 14-day baseline: \(value?.description ?? "nil")")
             group.leave()
         }
         
         group.notify(queue: .main) {
             self.persistBaselines()
-            print("✅ Baseline calculation completed and persisted")
+            // print("✅ Baseline calculation completed and persisted")
             completion()
         }
     }
@@ -233,11 +234,11 @@ final class DynamicBaselineEngine {
                 avgWakeTime = nil
             }
             
-            print("📊 Sleep Baseline Calculation:")
-            print("   Bedtimes found: \(bedtimes.count)")
-            print("   Wake times found: \(wakes.count)")
-            print("   Average bedtime: \(avgBedtime?.description ?? "nil")")
-            print("   Average wake time: \(avgWakeTime?.description ?? "nil")")
+            // print("📊 Sleep Baseline Calculation:")
+            // print("   Bedtimes found: \(bedtimes.count)")
+            // print("   Wake times found: \(wakes.count)")
+            // print("   Average bedtime: \(avgBedtime?.description ?? "nil")")
+            // print("   Average wake time: \(avgWakeTime?.description ?? "nil")")
             
             completion(avgDuration, avgBedtime, avgWakeTime)
         }
@@ -262,18 +263,18 @@ final class DynamicBaselineEngine {
         ]
         UserDefaults.standard.set(dict, forKey: baselineKey)
         
-        print("💾 Baseline data persisted:")
-        print("   HRV 60-day: \(hrv60?.description ?? "nil")")
-        print("   HRV 14-day: \(hrv14?.description ?? "nil")")
-        print("   RHR 60-day: \(rhr60?.description ?? "nil")")
-        print("   RHR 14-day: \(rhr14?.description ?? "nil")")
-        print("   Walking HR 14-day: \(walkingHR14?.description ?? "nil")")
-        print("   Respiratory Rate 14-day: \(respiratoryRate14?.description ?? "nil")")
-        print("   Oxygen Saturation 14-day: \(oxygenSaturation14?.description ?? "nil")")
+        // print("💾 Baseline data persisted:")
+        // print("   HRV 60-day: \(hrv60?.description ?? "nil")")
+        // print("   HRV 14-day: \(hrv14?.description ?? "nil")")
+        // print("   RHR 60-day: \(rhr60?.description ?? "nil")")
+        // print("   RHR 14-day: \(rhr14?.description ?? "nil")")
+        // print("   Walking HR 14-day: \(walkingHR14?.description ?? "nil")")
+        // print("   Respiratory Rate 14-day: \(respiratoryRate14?.description ?? "nil")")
+        // print("   Oxygen Saturation 14-day: \(oxygenSaturation14?.description ?? "nil")")
     }
     
     func resetBaselines() {
-        print("🔄 Resetting baseline data...")
+        // print("🔄 Resetting baseline data...")
         UserDefaults.standard.removeObject(forKey: baselineKey)
         hrv60 = nil
         hrv14 = nil
@@ -297,14 +298,15 @@ final class DynamicBaselineEngine {
     ///   - days: Number of days to look back from the reference date (e.g., 60 for HRV/RHR baseline)
     /// - Returns: BaselineMetrics object containing all calculated baseline values
     func calculateBaseline(for date: Date, days: Int) async -> BaselineMetrics {
-        print("📊 Calculating \(days)-day baseline for date: \(date)")
+        // Comment out all print statements
+        // print("📊 Calculating \(days)-day baseline for date: \(date)")
         
         let calendar = Calendar.current
         // Calculate the range ending the day BEFORE the reference date
         let endDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: date)) ?? date
         let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) ?? endDate
         
-        print("   Baseline period: \(startDate) to \(endDate)")
+        // print("   Baseline period: \(startDate) to \(endDate)")
         
         // Use a dispatch group to fetch all metrics in parallel
         return await withTaskGroup(of: Void.self, returning: BaselineMetrics.self) { group in
@@ -389,13 +391,13 @@ final class DynamicBaselineEngine {
                 period: days
             )
             
-            print("✅ Baseline calculation completed for \(date):")
-            print("   HRV: \(hrv?.description ?? "nil") ms")
-            print("   RHR: \(rhr?.description ?? "nil") bpm")
-            print("   Sleep Duration: \((sleepDuration ?? 0) / 3600) hours")
-            print("   Walking HR: \(walkingHR?.description ?? "nil") bpm")
-            print("   Respiratory Rate: \(respiratoryRate?.description ?? "nil") rpm")
-            print("   Oxygen Saturation: \(oxygenSaturation?.description ?? "nil")%")
+            // print("✅ Baseline calculation completed for \(date):")
+            // print("   HRV: \(hrv?.description ?? "nil") ms")
+            // print("   RHR: \(rhr?.description ?? "nil") bpm")
+            // print("   Sleep Duration: \((sleepDuration ?? 0) / 3600) hours")
+            // print("   Walking HR: \(walkingHR?.description ?? "nil") bpm")
+            // print("   Respiratory Rate: \(respiratoryRate?.description ?? "nil") rpm")
+            // print("   Oxygen Saturation: \(oxygenSaturation?.description ?? "nil")%")
             
             return baseline
         }
