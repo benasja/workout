@@ -57,6 +57,7 @@ struct EnhancedPerformanceView: View {
                         
                         // Quick Actions with Smart Suggestions
                         EnhancedQuickActionsView()
+                            .environmentObject(tabSelectionModel)
                         
                         // Journal Summary with AI Insights
                         EnhancedJournalSummaryView(
@@ -984,6 +985,7 @@ struct PersonalizedTipsView: View {
 }
 
 struct EnhancedQuickActionsView: View {
+    @EnvironmentObject var tabSelectionModel: TabSelectionModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Quick Actions")
@@ -996,14 +998,6 @@ struct EnhancedQuickActionsView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                NavigationLink(destination: WorkoutLibraryView()) {
-                    QuickActionCard(
-                        title: "Start Workout",
-                        icon: "dumbbell.fill",
-                        color: .orange
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
                 
                 NavigationLink(destination: JournalView()) {
                     QuickActionCard(
@@ -1019,6 +1013,19 @@ struct EnhancedQuickActionsView: View {
                         title: "Log Weight",
                         icon: "scalemass",
                         color: .green
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                Button(action: {
+                    tabSelectionModel.selection = 5 // Switch to More tab
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // Optionally, you could set a flag in tabSelectionModel to scroll to the Workout section if needed
+                    }
+                }) {
+                    QuickActionCard(
+                        title: "Workout",
+                        icon: "dumbbell.fill",
+                        color: .orange
                     )
                 }
                 .buttonStyle(PlainButtonStyle())

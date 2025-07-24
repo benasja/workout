@@ -3,16 +3,19 @@ import SwiftData
 
 struct WorkoutLibraryView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var programs: [Program]
+    @EnvironmentObject private var dataManager: DataManager
+    @Query private var programs: [WorkoutProgram]
     @Query private var exercises: [ExerciseDefinition]
     @State private var showingStartWorkoutSheet = false
-    @State private var selectedProgram: Program?
+    @State private var selectedProgram: WorkoutProgram?
     @State private var showingHistory = false
     @State private var selectedExercise: ExerciseDefinition?
     @State private var showingExerciseProgress = false
     @State private var hasSeededData = false
     @State private var activeWorkout: WorkoutSession?
     @State private var showingWorkout = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationView {
@@ -20,31 +23,27 @@ struct WorkoutLibraryView: View {
                 VStack(spacing: 24) {
                     // Quick Start Section
                     ModernCard {
-                        VStack(spacing: 16) {
-                            HStack {
-                                Image(systemName: "play.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(AppColors.accent)
-                                Text("Quick Start")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                Spacer()
-                            }
-                            
-                            Text("Start a workout immediately or choose from your programs.")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.leading)
-                            
-                            Button(action: { showingStartWorkoutSheet = true }) {
-                                HStack {
-                                    Image(systemName: "plus.circle.fill")
-                                    Text("Start Workout")
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
-                            .primaryButton()
+                        HStack {
+                            Image(systemName: "play.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(AppColors.accent)
+                            Text("Quick Start")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                            Spacer()
                         }
+                        Text("Start a workout immediately or choose from your programs.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                        Button(action: { showingStartWorkoutSheet = true }) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Start Workout")
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .primaryButton()
                     }
                     
                     // Programs Section
@@ -70,10 +69,7 @@ struct WorkoutLibraryView: View {
                                                         .font(.subheadline)
                                                         .fontWeight(.semibold)
                                                         .foregroundColor(.primary)
-                                                    Text(program.programDescription)
-                                                        .font(.caption)
-                                                        .foregroundColor(.secondary)
-                                                        .lineLimit(2)
+                                                    // Add description if needed
                                                 }
                                                 Spacer()
                                                 Image(systemName: "chevron.right")
@@ -191,15 +187,9 @@ struct WorkoutLibraryView: View {
         }
     }
     
-    @State private var showingErrorAlert = false
-    @State private var errorMessage = ""
-    
     private func startEmptyWorkout() {
-        let workout = WorkoutSession()
-        modelContext.insert(workout)
-        
         do {
-            try modelContext.save()
+            let workout = try dataManager.startWorkout()
             activeWorkout = workout
             showingWorkout = true
         } catch {
@@ -208,13 +198,9 @@ struct WorkoutLibraryView: View {
         }
     }
     
-    private func startProgramWorkout(_ program: Program) {
-        let workout = WorkoutSession()
-        workout.programName = program.name
-        modelContext.insert(workout)
-        
+    private func startProgramWorkout(_ program: WorkoutProgram) {
         do {
-            try modelContext.save()
+            let workout = try dataManager.startWorkout(program: program)
             activeWorkout = workout
             showingWorkout = true
         } catch {
@@ -225,11 +211,11 @@ struct WorkoutLibraryView: View {
 }
 
 struct StartWorkoutSheet: View {
-    let programs: [Program]
+    let programs: [WorkoutProgram]
     let onStartEmpty: () -> Void
-    let onStartFromLibrary: (Program) -> Void
+    let onStartFromLibrary: (WorkoutProgram) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedProgram: Program?
+    @State private var selectedProgram: WorkoutProgram?
     
     var body: some View {
         NavigationView {
@@ -292,10 +278,6 @@ struct StartWorkoutSheet: View {
                                                         .font(.subheadline)
                                                         .fontWeight(.semibold)
                                                         .foregroundColor(.primary)
-                                                    Text(program.programDescription)
-                                                        .font(.caption)
-                                                        .foregroundColor(.secondary)
-                                                        .lineLimit(2)
                                                 }
                                                 Spacer()
                                                 Image(systemName: "chevron.right")
@@ -330,10 +312,13 @@ struct StartWorkoutSheet: View {
 }
 
 struct ProgramDetailView: View {
-    let program: Program
+    let program: WorkoutProgram
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var dataManager: DataManager
     @State private var showingWorkout = false
     @State private var workout: WorkoutSession?
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationView {
@@ -345,18 +330,6 @@ struct ProgramDetailView: View {
                             Text(program.name)
                                 .font(.title2)
                                 .fontWeight(.bold)
-                            
-                            Text(program.programDescription)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            
-                            HStack {
-                                Label("\(program.weeks) weeks", systemImage: "calendar")
-                                Spacer()
-                                Label("\(program.days.count) days", systemImage: "list.bullet")
-                            }
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                         }
                     }
                     
@@ -384,15 +357,24 @@ struct ProgramDetailView: View {
                     WorkoutView(workout: workout)
                 }
             }
+            .alert("Start Workout Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text(errorMessage)
+            }
         }
     }
     
     private func startWorkout() {
-        let newWorkout = WorkoutSession()
-        newWorkout.programName = program.name
-        workout = newWorkout
-        showingWorkout = true
-        dismiss()
+        do {
+            let newWorkout = try dataManager.startWorkout(program: program)
+            workout = newWorkout
+            showingWorkout = true
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
     }
 }
 

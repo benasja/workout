@@ -452,66 +452,62 @@ struct DailyReadinessDetailView: View {
 // MARK: - Refined Quick Actions (KEPT)
 
 struct QuickActionsView: View {
+    @EnvironmentObject var tabSelectionModel: TabSelectionModel
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Quick Actions")
                 .font(.title3)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
-            VStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    NavigationLink(destination: WorkoutLibraryView()) {
-                        QuickActionCard(
-                            title: "Workout",
-                            icon: "dumbbell.fill",
-                            color: .orange
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    NavigationLink(destination: JournalView()) {
-                        QuickActionCard(
-                            title: "Journal",
-                            icon: "book.closed.fill",
-                            color: .blue
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    NavigationLink(destination: WeightTrackerView()) {
-                        QuickActionCard(
-                            title: "Weight",
-                            icon: "scalemass",
-                            color: .green
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
+            
+            HStack(spacing: 16) {
+                NavigationLink(destination: JournalView()) {
+                    QuickActionCard(
+                        title: "Journal",
+                        icon: "book.closed.fill",
+                        color: .blue
+                    )
                 }
-                HStack(spacing: 16) {
-                    NavigationLink(destination: SupplementsView()) {
-                        QuickActionCard(
-                            title: "Vitamins",
-                            icon: "pills.fill",
-                            color: AppColors.accent
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    NavigationLink(destination: HydrationView()) {
-                        QuickActionCard(
-                            title: "Hydration",
-                            icon: "drop.fill",
-                            color: AppColors.primary
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    Button(action: {}) {
-                        QuickActionCard(
-                            title: "Coming Soon",
-                            icon: "sparkles",
-                            color: AppColors.textSecondary
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .disabled(true)
+                .buttonStyle(PlainButtonStyle())
+                NavigationLink(destination: WeightTrackerView()) {
+                    QuickActionCard(
+                        title: "Weight",
+                        icon: "scalemass",
+                        color: .green
+                    )
                 }
+                .buttonStyle(PlainButtonStyle())
+            }
+            HStack(spacing: 16) {
+                NavigationLink(destination: SupplementsView()) {
+                    QuickActionCard(
+                        title: "Vitamins",
+                        icon: "pills.fill",
+                        color: AppColors.accent
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                NavigationLink(destination: HydrationView()) {
+                    QuickActionCard(
+                        title: "Hydration",
+                        icon: "drop.fill",
+                        color: AppColors.primary
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                Button(action: {
+                    tabSelectionModel.selection = 5 // Switch to More tab
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // Optionally, you could set a flag in tabSelectionModel to scroll to the Workout section if needed
+                    }
+                }) {
+                    QuickActionCard(
+                        title: "Workout",
+                        icon: "dumbbell.fill",
+                        color: .orange
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
     }

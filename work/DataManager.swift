@@ -286,12 +286,35 @@ class DataManager: ObservableObject {
     }
     
     func startWorkout(program: WorkoutProgram? = nil) throws -> WorkoutSession {
+        // Prevent overlapping sessions
+        if let current = currentWorkoutSession, !current.isCompleted {
+            throw NSError(domain: "work", code: 1, userInfo: [NSLocalizedDescriptionKey: "A workout is already in progress. Please end it before starting a new one."])
+        }
+        
         let session = WorkoutSession(
             date: Date(),
             duration: 0,
             programName: program?.name
         )
         _modelContext.insert(session)
+        
+        // If starting from a program, add all program exercises
+        if let program = program {
+            for exercise in program.exercises {
+                let completedExercise = CompletedExercise(exercise: exercise)
+                completedExercise.workoutSession = session
+                session.completedExercises.append(completedExercise)
+                _modelContext.insert(completedExercise)
+                // Optionally, pre-fill with a default set (comment out if not wanted):
+                /*
+                let defaultSet = WorkoutSet(weight: 0, reps: 0, date: Date())
+                defaultSet.completedExercise = completedExercise
+                _modelContext.insert(defaultSet)
+                completedExercise.sets.append(defaultSet)
+                session.sets.append(defaultSet)
+                */
+            }
+        }
         currentWorkoutSession = session
         try save()
         return session
