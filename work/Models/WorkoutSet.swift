@@ -20,10 +20,11 @@ final class WorkoutSet {
     var isCompleted: Bool
     var restTime: TimeInterval?
     
-    // Reference to the completed exercise
+    // Reference to the exercise and completed exercise
+    @Relationship var exercise: ExerciseDefinition?
     @Relationship var completedExercise: CompletedExercise?
     
-    init(weight: Double, reps: Int, rpe: Int? = nil, notes: String? = nil, date: Date = Date(), setType: SetType = .working, isCompleted: Bool = false, restTime: TimeInterval? = nil, completedExercise: CompletedExercise? = nil) {
+    init(weight: Double, reps: Int, rpe: Int? = nil, notes: String? = nil, date: Date = Date(), setType: SetType = .working, isCompleted: Bool = false, restTime: TimeInterval? = nil, exercise: ExerciseDefinition? = nil, completedExercise: CompletedExercise? = nil) {
         self.weight = weight
         self.reps = reps
         self.rpe = rpe
@@ -32,6 +33,7 @@ final class WorkoutSet {
         self.setType = setType
         self.isCompleted = isCompleted
         self.restTime = restTime
+        self.exercise = exercise
         self.completedExercise = completedExercise
     }
 }
@@ -50,15 +52,15 @@ enum SetType: String, CaseIterable, Codable {
     var color: Color {
         switch self {
         case .warmup:
-            return .orange
+            return AppColors.warning
         case .working:
-            return .blue
+            return AppColors.primary
         case .dropset:
-            return .purple
+            return AppColors.accent
         case .failure:
-            return .red
+            return AppColors.error
         case .backoff:
-            return .green
+            return AppColors.success
         }
     }
     
@@ -80,8 +82,9 @@ enum SetType: String, CaseIterable, Codable {
 
 // Extension for computed properties to avoid SwiftData conflicts
 extension WorkoutSet {
-    var estimatedOneRepMax: Double {
-        // Epley formula: 1RM = weight × (1 + reps/30)
-        return weight * (1 + Double(reps) / 30.0)
+    var e1RM: Double {
+        // Using the Brzycki formula. Do not calculate for more than 10 reps.
+        if reps > 10 { return weight }
+        return weight / (1.0278 - (0.0278 * Double(reps)))
     }
 } 

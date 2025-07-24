@@ -256,12 +256,12 @@ struct PerformanceView: View {
     }
     
     private func scoreColor(for score: Int?) -> Color {
-        guard let score = score else { return .gray }
+        guard let score = score else { return AppColors.textSecondary }
         switch score {
-        case 85...: return .green
-        case 70..<85: return .blue
-        case 55..<70: return .orange
-        default: return .red
+        case 85...: return AppColors.success
+        case 70..<85: return AppColors.primary
+        case 55..<70: return AppColors.warning
+        default: return AppColors.error
         }
     }
 }
@@ -270,17 +270,17 @@ struct PerformanceView: View {
 func colorFor(score: Int) -> Color {
     switch score {
     case 90...100:
-        return .green // Elite
+        return AppColors.success // Elite
     case 80...89:
-        return .blue // Excellent
+        return AppColors.primary // Excellent
     case 70...79:
-        return .teal // Good
+        return AppColors.secondary // Good
     case 60...69:
-        return .yellow // Needs Attention
+        return AppColors.warning // Needs Attention
     case 50...59:
-        return .orange // Fair
+        return AppColors.accent // Fair
     default:
-        return .red // Poor
+        return AppColors.error // Poor
     }
 }
 
@@ -490,7 +490,7 @@ struct QuickActionsView: View {
                         QuickActionCard(
                             title: "Vitamins",
                             icon: "pills.fill",
-                            color: .purple
+                            color: AppColors.accent
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -498,7 +498,7 @@ struct QuickActionsView: View {
                         QuickActionCard(
                             title: "Hydration",
                             icon: "drop.fill",
-                            color: .blue
+                            color: AppColors.primary
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -506,7 +506,7 @@ struct QuickActionsView: View {
                         QuickActionCard(
                             title: "Coming Soon",
                             icon: "sparkles",
-                            color: .gray
+                            color: AppColors.textSecondary
                         )
                     }
                     .buttonStyle(PlainButtonStyle())

@@ -51,6 +51,17 @@ final class DynamicBaselineEngine {
         return hrv60 == nil || rhr60 == nil || hrv14 == nil || rhr14 == nil || bedtime14 == nil || wake14 == nil
     }
     
+    // Check if baselines should be updated (only if they're more than 24 hours old)
+    func shouldUpdateBaselines() -> Bool {
+        if let dict = UserDefaults.standard.dictionary(forKey: baselineKey),
+           let lastUpdated = dict["lastUpdated"] as? Double {
+            let lastUpdateDate = Date(timeIntervalSince1970: lastUpdated)
+            let hoursSinceUpdate = Date().timeIntervalSince(lastUpdateDate) / 3600
+            return hoursSinceUpdate > 24 // Only update if more than 24 hours old
+        }
+        return true // Update if no timestamp found
+    }
+    
     private init() {}
     
     func loadBaselines() {
@@ -259,7 +270,8 @@ final class DynamicBaselineEngine {
             "wake14": wake14?.timeIntervalSince1970,
             "walkingHR14": walkingHR14,
             "respiratoryRate14": respiratoryRate14,
-            "oxygenSaturation14": oxygenSaturation14
+            "oxygenSaturation14": oxygenSaturation14,
+            "lastUpdated": Date().timeIntervalSince1970
         ]
         UserDefaults.standard.set(dict, forKey: baselineKey)
         

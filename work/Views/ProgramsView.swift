@@ -2,566 +2,347 @@
 //  ProgramsView.swift
 //  work
 //
-//  Created by Benas on 6/27/25.
+//  Created by Kiro on 7/24/25.
 //
 
 import SwiftUI
 import SwiftData
 
 struct ProgramsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var programs: [Program]
-    
-    @State private var showingAddProgram = false
-    @State private var selectedProgram: Program?
+    @EnvironmentObject private var dataManager: DataManager
+    @State private var showingProgramEditor = false
+    @State private var editingProgram: WorkoutProgram? = nil
+    @State private var errorMessage = ""
+    @State private var showingErrorAlert = false
+    @State private var programToDelete: WorkoutProgram? = nil
+    @State private var showingDeleteAlert = false
     
     var body: some View {
         NavigationView {
-            VStack {
-                if programs.isEmpty {
-                    EmptyProgramsView {
-                        showingAddProgram = true
-                    }
-                } else {
-                    ProgramsListView(
-                        programs: programs,
-                        onProgramSelected: { program in
-                            selectedProgram = program
+            List {
+                if dataManager.workoutPrograms.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "dumbbell")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("No Programs Yet")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        Text("Create your first workout program to get started")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Create Program") {
+                            editingProgram = nil
+                            showingProgramEditor = true
                         }
-                    )
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 60)
+                    .listRowSeparator(.hidden)
+                } else {
+                    ForEach(dataManager.workoutPrograms, id: \.id) { program in
+                        ProgramRowView(program: program)
+                            .swipeActions(edge: .trailing) {
+                                Button {
+                                    editingProgram = program
+                                    showingProgramEditor = true
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .tint(.blue)
+                                Button(role: .destructive) {
+                                    programToDelete = program
+                                    showingDeleteAlert = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                    }
                 }
             }
             .navigationTitle("Programs")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddProgram = true }) {
+                    Button(action: {
+                        editingProgram = nil
+                        showingProgramEditor = true
+                    }) {
                         Image(systemName: "plus")
                     }
-                    .primaryButton()
-                    .accessibilityLabel("Add Program")
                 }
             }
-            .sheet(isPresented: $showingAddProgram) {
-                AddProgramView()
+            .sheet(isPresented: $showingProgramEditor) {
+                ProgramEditorView(editingProgram: editingProgram)
             }
-            .sheet(item: $selectedProgram) { program in
-                ProgramDetailView(program: program)
+            .alert("Operation Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to complete operation: \(errorMessage)")
+            }
+            .alert("Delete Program?", isPresented: $showingDeleteAlert, presenting: programToDelete) { program in
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    deleteProgram(program)
+                }
+            } message: { program in
+                Text("Are you sure you want to delete the program ' [1m\(program.name) [0m'? This cannot be undone.")
+            }
+            .onAppear {
+                dataManager.fetchWorkoutPrograms()
             }
         }
     }
-}
-
-struct EmptyProgramsView: View {
-    let onAddProgram: () -> Void
     
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            Image(systemName: "calendar.badge.plus")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("No Programs Yet")
-                .font(.title2)
-                .fontWeight(.medium)
-            
-            Text("Create your first workout program to get started with structured training")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            
-            Button(action: onAddProgram) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Create Program")
-                }
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(AppCornerRadius.sm)
-                .primaryButton()
-                .accessibilityLabel("Add Program")
-            }
-            
-            Spacer()
-        }
-        .padding()
-    }
-}
-
-struct ProgramsListView: View {
-    let programs: [Program]
-    let onProgramSelected: (Program) -> Void
-    
-    var body: some View {
-        List(programs, id: \.id) { program in
-            ProgramRowView(program: program) {
-                onProgramSelected(program)
-            }
+    private func deleteProgram(_ program: WorkoutProgram) {
+        let context = dataManager.modelContext
+        context.delete(program)
+        do {
+            try context.save()
+            dataManager.fetchWorkoutPrograms()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
         }
     }
 }
 
 struct ProgramRowView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var allPrograms: [Program]
-    let program: Program
-    let onTap: () -> Void
+    let program: WorkoutProgram
+    @EnvironmentObject private var dataManager: DataManager
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Program icon
-                Image(systemName: program.isActive ? "star.fill" : "calendar")
-                    .font(.title2)
-                    .foregroundColor(program.isActive ? .yellow : .blue)
-                    .frame(width: 40)
-                
-                // Program details
+        Button(action: {
+            do {
+                let _ = try dataManager.startWorkout(program: program)
+            } catch {
+                errorMessage = error.localizedDescription
+                showingErrorAlert = true
+            }
+        }) {
+            HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(program.name)
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        if program.isActive {
-                            Text("ACTIVE")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(AppCornerRadius.sm)
-                        }
-                    }
+                    Text(program.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
                     
-                    Text(program.programDescription)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                    
-                    Text("\(program.weeks) weeks • \(program.days.count) workout days")
+                    Text("\(program.exercises.count) exercises")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    
+                    if !program.exercises.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(program.exercises.prefix(3), id: \.id) { exercise in
+                                    Text(exercise.name)
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.accentColor.opacity(0.2))
+                                        .foregroundColor(.accentColor)
+                                        .clipShape(Capsule())
+                                }
+                                
+                                if program.exercises.count > 3 {
+                                    Text("+\(program.exercises.count - 3)")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color(.systemGray5))
+                                        .foregroundColor(.secondary)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 Spacer()
                 
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack {
+                    Image(systemName: "play.fill")
+                        .font(.title2)
+                        .foregroundColor(.accentColor)
+                    
+                    Text("Start")
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                }
             }
             .padding(.vertical, 4)
         }
-        .buttonStyle(PlainButtonStyle())
-        .swipeActions(edge: .trailing) {
-            if !program.isActive {
-                Button("Activate") {
-                    activateProgram(program)
-                }
-                .tint(.green)
-                .primaryButton()
-                .accessibilityLabel("Activate Program")
-            }
-            
-            Button("Delete", role: .destructive) {
-                deleteProgram(program)
-            }
-            .secondaryButton()
-            .accessibilityLabel("Delete Program")
+        .buttonStyle(.plain)
+        .alert("Workout Failed", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Unable to start workout: \(errorMessage)")
         }
-    }
-    
-    private func activateProgram(_ program: Program) {
-        // Deactivate all other programs
-        for p in allPrograms {
-            p.isActive = false
-        }
-        program.isActive = true
-    }
-    
-    private func deleteProgram(_ program: Program) {
-        modelContext.delete(program)
     }
 }
 
-struct AddProgramView: View {
-    @Environment(\.modelContext) private var modelContext
+struct ProgramEditorView: View {
+    @EnvironmentObject private var dataManager: DataManager
     @Environment(\.dismiss) private var dismiss
     
-    @State private var name = ""
-    @State private var description = ""
-    @State private var weeks = 4
-    @State private var showingAddDay = false
-    @State private var programDays: [ProgramDay] = []
+    var editingProgram: WorkoutProgram? = nil
+    @State private var programName = ""
+    @State private var selectedExercises: Set<UUID> = []
+    @State private var searchText = ""
+    @State private var errorMessage = ""
+    @State private var showingErrorAlert = false
     
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Program Details") {
-                    TextField("Program name", text: $name)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Program Name")
-                        .accessibilityIdentifier("programNameField")
-                    
-                    TextField("Description", text: $description, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Program Description")
-                        .accessibilityIdentifier("programDescriptionField")
-                        .lineLimit(3...6)
-                    
-                    Stepper("Duration: \(weeks) weeks", value: $weeks, in: 1...52)
-                }
-                
-                Section("Workout Days") {
-                    ForEach(programDays, id: \.dayName) { day in
-                        HStack {
-                            Text(day.dayName)
-                            Spacer()
-                            Text("\(day.exercises.count) exercises")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .onDelete(perform: deleteDay)
-                    
-                    Button(action: { showingAddDay = true }) {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add Workout Day")
-                        }
-                        .primaryButton()
-                        .accessibilityLabel("Add Day")
-                    }
-                }
-            }
-            .navigationTitle("New Program")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .secondaryButton()
-                    .accessibilityLabel("Cancel")
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveProgram()
-                    }
-                    .primaryButton()
-                    .accessibilityLabel("Save")
-                }
-            }
-            .sheet(isPresented: $showingAddDay) {
-                AddProgramDayView { day in
-                    programDays.append(day)
-                }
+    private var filteredExercises: [ExerciseDefinition] {
+        if searchText.isEmpty {
+            return dataManager.exercises
+        } else {
+            return dataManager.exercises.filter { exercise in
+                exercise.name.localizedCaseInsensitiveContains(searchText)
             }
         }
-    }
-    
-    private func deleteDay(offsets: IndexSet) {
-        programDays.remove(atOffsets: offsets)
-    }
-    
-    private func saveProgram() {
-        let program = Program(name: name, description: description, weeks: weeks)
-        program.days = programDays
-        
-        modelContext.insert(program)
-        dismiss()
-    }
-}
-
-struct AddProgramDayView: View {
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var dayName = ""
-    @State private var exercises: [ProgramExercise] = []
-    @State private var showingExerciseLibrary = false
-    @State private var selectedExercise: ProgramExercise?
-    
-    let onSave: (ProgramDay) -> Void
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Day Details") {
-                    TextField("Day name (e.g., Push Day)", text: $dayName)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Day Name")
-                        .accessibilityIdentifier("dayNameField")
-                }
-                
-                Section("Exercises") {
-                    ForEach(exercises, id: \.exercise?.id) { programExercise in
-                        if let exercise = programExercise.exercise {
-                            Button(action: { selectedExercise = programExercise }) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(exercise.name)
-                                            .font(.subheadline)
-                                            .foregroundColor(.primary)
-                                        
-                                        Text("\(programExercise.targetSets) sets × \(programExercise.targetReps)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        
-                                        if programExercise.warmupSets > 0 {
-                                            Text("\(programExercise.warmupSets) warmup sets")
-                                                .font(.caption2)
-                                                .foregroundColor(.orange)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    Text(programExercise.progressionRule.displayName)
-                                        .font(.caption2)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.blue.opacity(0.2))
-                                        .cornerRadius(AppCornerRadius.sm)
-                                    
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .primaryButton()
-                                .accessibilityLabel("Select Exercise")
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    .onDelete(perform: deleteExercise)
-                    
-                    Button(action: { showingExerciseLibrary = true }) {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add Exercise")
-                        }
-                        .primaryButton()
-                        .accessibilityLabel("Show Exercise Library")
-                    }
-                }
-            }
-            .navigationTitle("Add Workout Day")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .secondaryButton()
-                    .accessibilityLabel("Cancel")
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveDay()
-                    }
-                    .primaryButton()
-                    .accessibilityLabel("Save")
-                }
-            }
-            .sheet(isPresented: $showingExerciseLibrary) {
-                ExerciseLibraryView(selectionMode: true) { exercise in
-                    addExerciseToDay(exercise)
-                }
-            }
-            .sheet(item: $selectedExercise) { exercise in
-                EditProgramExerciseView(programExercise: exercise) { updatedExercise in
-                    if let index = exercises.firstIndex(where: { $0.exercise?.id == updatedExercise.exercise?.id }) {
-                        exercises[index] = updatedExercise
-                    }
-                }
-            }
-        }
-    }
-    
-    private func deleteExercise(offsets: IndexSet) {
-        exercises.remove(atOffsets: offsets)
-    }
-    
-    private func addExerciseToDay(_ exercise: ExerciseDefinition) {
-        let programExercise = ProgramExercise(
-            exercise: exercise,
-            targetSets: 3,
-            targetReps: "8-12",
-            progressionRule: .doubleProgression,
-            warmupSets: 0
-        )
-        exercises.append(programExercise)
-    }
-    
-    private func saveDay() {
-        let day = ProgramDay(dayName: dayName)
-        day.exercises = exercises
-        onSave(day)
-        dismiss()
-    }
-}
-
-struct EditProgramExerciseView: View {
-    @Environment(\.dismiss) private var dismiss
-    let programExercise: ProgramExercise
-    let onSave: (ProgramExercise) -> Void
-    
-    @State private var targetSets: Int
-    @State private var targetReps: String
-    @State private var progressionRule: ProgressionRule
-    @State private var warmupSets: Int
-    
-    init(programExercise: ProgramExercise, onSave: @escaping (ProgramExercise) -> Void) {
-        self.programExercise = programExercise
-        self.onSave = onSave
-        self._targetSets = State(initialValue: programExercise.targetSets)
-        self._targetReps = State(initialValue: programExercise.targetReps)
-        self._progressionRule = State(initialValue: programExercise.progressionRule)
-        self._warmupSets = State(initialValue: programExercise.warmupSets)
     }
     
     var body: some View {
         NavigationView {
-            Form {
-                Section("Exercise Details") {
-                    if let exercise = programExercise.exercise {
-                        Text(exercise.name)
-                            .font(.headline)
-                        
-                        Text(exercise.primaryMuscleGroup)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Section("Sets & Reps") {
-                    Stepper("Target Sets: \(targetSets)", value: $targetSets, in: 1...10)
-                    
-                    TextField("Target Reps (e.g., 8-12)", text: $targetReps)
+            VStack(spacing: 0) {
+                // Program name section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Program Name")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    TextField("Enter program name", text: $programName)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Target Reps")
-                        .accessibilityIdentifier("targetRepsField")
-                    
-                    Stepper("Warmup Sets: \(warmupSets)", value: $warmupSets, in: 0...5)
+                        .padding(.horizontal)
                 }
-                
-                Section("Progression") {
-                    Picker("Progression Rule", selection: $progressionRule) {
-                        ForEach(ProgressionRule.allCases, id: \.self) { rule in
-                            Text(rule.displayName).tag(rule)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                    .accessibilityLabel("Progression Rule")
-                    .accessibilityIdentifier("progressionRulePicker")
-                }
-            }
-            .navigationTitle("Edit Exercise")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .secondaryButton()
-                    .accessibilityLabel("Cancel")
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveExercise()
-                    }
-                    .primaryButton()
-                    .accessibilityLabel("Save")
-                }
-            }
-        }
-    }
-    
-    private func saveExercise() {
-        guard let exercise = programExercise.exercise else {
-            dismiss()
-            return
-        }
-        
-        let updatedExercise = ProgramExercise(
-            exercise: exercise,
-            targetSets: targetSets,
-            targetReps: targetReps,
-            progressionRule: progressionRule,
-            warmupSets: warmupSets
-        )
-        onSave(updatedExercise)
-        dismiss()
-    }
-}
-
-struct ProgramDayCard: View {
-    let day: ProgramDay
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(day.dayName)
-                .font(.headline)
-            
-            ForEach(day.exercises, id: \.exercise?.id) { programExercise in
-                if let exercise = programExercise.exercise {
+                .padding(.vertical)
+                .background(Color(.systemGray6))
+                // Exercise selection
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("• \(exercise.name)")
-                            .font(.subheadline)
-                        
+                        Text("Select Exercises")
+                            .font(.headline)
                         Spacer()
-                        
-                        Text("\(programExercise.targetSets) × \(programExercise.targetReps)")
+                        Text("\(selectedExercises.count) selected")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                    .padding(.horizontal)
+                    List(filteredExercises, id: \.id) { exercise in
+                        ExerciseSelectionRow(
+                            exercise: exercise,
+                            isSelected: selectedExercises.contains(exercise.id)
+                        ) { isSelected in
+                            if isSelected {
+                                selectedExercises.insert(exercise.id)
+                            } else {
+                                selectedExercises.remove(exercise.id)
+                            }
+                        }
+                    }
+                    .searchable(text: $searchText, prompt: "Search exercises...")
+                }
+            }
+            .navigationTitle(editingProgram == nil ? "New Program" : "Edit Program")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        let selectedExerciseObjects = dataManager.exercises.filter { exercise in
+                            selectedExercises.contains(exercise.id)
+                        }
+                        do {
+                            if let editingProgram = editingProgram {
+                                editingProgram.name = programName
+                                editingProgram.exercises = selectedExerciseObjects
+                            } else {
+                                let _ = try dataManager.createWorkoutProgram(
+                                    name: programName,
+                                    exercises: selectedExerciseObjects
+                                )
+                            }
+                            dismiss()
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingErrorAlert = true
+                        }
+                    }
+                    .disabled(programName.isEmpty || selectedExercises.isEmpty)
+                }
+            }
+            .onAppear {
+                dataManager.fetchExercises()
+                if let editingProgram = editingProgram {
+                    programName = editingProgram.name
+                    selectedExercises = Set(editingProgram.exercises.map { $0.id })
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(AppCornerRadius.sm)
+        .alert("Save Failed", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Unable to save program: \(errorMessage)")
+        }
     }
 }
 
-struct EditProgramView: View {
-    @Environment(\.dismiss) private var dismiss
-    let program: Program
+struct ExerciseSelectionRow: View {
+    let exercise: ExerciseDefinition
+    let isSelected: Bool
+    let onToggle: (Bool) -> Void
     
     var body: some View {
-        NavigationView {
-            Text("Edit Program - Coming Soon")
-                .navigationTitle("Edit Program")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .primaryButton()
-                        .accessibilityLabel("Done")
+        Button(action: {
+            onToggle(!isSelected)
+        }) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(exercise.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    HStack {
+                        Text(exercise.primaryMuscleGroup)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.2))
+                            .foregroundColor(.accentColor)
+                            .clipShape(Capsule())
+                        
+                        Text(exercise.equipment)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color(.systemGray5))
+                            .foregroundColor(.secondary)
+                            .clipShape(Capsule())
                     }
                 }
+                
+                Spacer()
+                
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+            }
+            .padding(.vertical, 4)
         }
+        .buttonStyle(.plain)
     }
 }
 
 #Preview {
-    ProgramsView()
-        .modelContainer(for: [
-            UserProfile.self,
-            WorkoutSession.self,
-            CompletedExercise.self,
-            WorkoutSet.self,
-            ExerciseDefinition.self,
-            Program.self,
-            ProgramDay.self,
-            ProgramExercise.self
-        ])
-} 
+    let container = try! ModelContainer(for: WorkoutProgram.self, ExerciseDefinition.self)
+    let dataManager = DataManager(modelContext: container.mainContext)
+    
+    return ProgramsView()
+        .environmentObject(dataManager)
+        .modelContainer(container)
+}

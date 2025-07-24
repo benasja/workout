@@ -18,6 +18,7 @@ final class CompletedExercise {
     
     @Relationship(inverse: \WorkoutSession.completedExercises) var workoutSession: WorkoutSession?
     @Relationship var exercise: ExerciseDefinition?
+    @Relationship(deleteRule: .cascade, inverse: \WorkoutSet.completedExercise) var sets: [WorkoutSet] = []
     
     init(exercise: ExerciseDefinition, notes: String? = nil, targetSets: Int = 3, targetReps: String = "8-12", warmupSets: Int = 0) {
         self.id = UUID()

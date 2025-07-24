@@ -19,12 +19,16 @@ private let sharedContainer: ModelContainer = {
             WorkoutSet.self,
             ExerciseDefinition.self,
             Program.self,
+            ProgramDay.self,
+            ProgramExercise.self,
+            WorkoutProgram.self,
             WeightEntry.self,
             DailyJournal.self,
             Supplement.self,
             SupplementLog.self,
             DailySupplementRecord.self,
-            HydrationLog.self
+            HydrationLog.self,
+            ScoreHistory.self
         )
     } catch {
         fatalError("Failed to initialize ModelContainer: \(error)")
@@ -52,6 +56,9 @@ struct workApp: App {
                         seedDataIfNeeded()
                         hasSeededData = true
                     }
+                    
+                    // Initialize ScoreHistoryStore with model context
+                    ScoreHistoryStore.shared.initialize(with: sharedContainer.mainContext)
                     
                     // Initialize baseline engine with your personal data
                     initializeBaselineEngine()

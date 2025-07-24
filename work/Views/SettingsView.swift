@@ -170,15 +170,30 @@ struct SettingsView: View {
             .sheet(isPresented: $showingProfileEditor) {
                 ProfileEditorView(profile: userProfile.first ?? createDefaultProfile())
             }
+            .alert("Save Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to save your changes: \(errorMessage)")
+            }
         }
         .preferredColorScheme(colorScheme)
     }
+    
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     @discardableResult
     private func createDefaultProfile() -> UserProfile {
         let profile = UserProfile()
         modelContext.insert(profile)
-        try? modelContext.save()
+        
+        do {
+            try modelContext.save()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
+        
         return profile
     }
     
@@ -202,7 +217,14 @@ struct SettingsView: View {
     
     private func refreshAllData() async {
         // Refresh all data sources
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingErrorAlert = true
+            }
+        }
         
         // Trigger a sync with HealthKit
         await MainActor.run {
@@ -306,14 +328,28 @@ struct ProfileEditorView: View {
                 name = profile.name
                 height = profile.height
             }
+            .alert("Save Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to save your changes: \(errorMessage)")
+            }
         }
     }
+    
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     private func saveProfile() {
         profile.name = name
         profile.height = height
-        try? modelContext.save()
-        dismiss()
+        
+        do {
+            try modelContext.save()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
     }
 }
 

@@ -122,7 +122,7 @@ struct WeightTrackerView: View {
                         ModernCard {
                             HStack {
                                 Image(systemName: "heart.fill")
-                                    .foregroundColor(.red)
+                                    .foregroundColor(AppColors.error)
                                     .font(.caption)
                                 Text("Last synced: \(syncDate, style: .relative) ago")
                                     .font(.caption)
@@ -171,7 +171,7 @@ struct WeightTrackerView: View {
                     Button(action: { showingAddEntry = true }) {
                         Image(systemName: "plus")
                     }
-                    .iconButton(color: .blue)
+                    .iconButton(color: AppColors.primary)
                 }
             }
             .sheet(isPresented: $showingAddEntry) {
@@ -183,7 +183,12 @@ struct WeightTrackerView: View {
                 EditWeightEntryView(entry: entry, modelContext: modelContext, onDelete: {
                     if let idx = weightEntries.firstIndex(where: { $0.id == entry.id }) {
                         modelContext.delete(weightEntries[idx])
-                        do { try modelContext.save() } catch {}
+                        do {
+                            try modelContext.save()
+                        } catch {
+                            // Handle error in parent view
+                            print("❌ Failed to delete weight entry: \(error)")
+                        }
                     }
                     editingEntry = nil
                 }) {
@@ -200,15 +205,24 @@ struct WeightTrackerView: View {
             .onReceive(NotificationCenter.default.publisher(for: .healthKitWeightDidChange)) { _ in
                 refreshHealthKitEntries()
             }
+            .alert("Save Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to save your changes: \(errorMessage)")
+            }
         }
     }
+    
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     private func refreshData() {
         isLoading = true
         do {
             try modelContext.save()
         } catch {
-            // print("❌ Error saving model context: \(error)")
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
         }
         loadWeightEntries()
         
@@ -363,7 +377,7 @@ struct ModernWeightChart: View {
     var body: some View {
         let sortedEntries = entries.sorted { $0.date < $1.date }
         let gradient = LinearGradient(
-            colors: [Color.blue.opacity(0.6), Color.blue.opacity(0.2), Color.clear],
+                            colors: [AppColors.primary.opacity(0.6), AppColors.primary.opacity(0.2), Color.clear],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -386,7 +400,7 @@ struct ModernWeightChart: View {
                 )
                 .interpolationMethod(.catmullRom)
                 .lineStyle(.init(lineWidth: 3))
-                .foregroundStyle(.blue)
+                .foregroundStyle(AppColors.primary)
             }
             
             // Interactive points
@@ -396,7 +410,7 @@ struct ModernWeightChart: View {
                     y: .value("Weight", entry.weight)
                 )
                 .symbolSize(selectedEntry?.id == entry.id ? 80 : 30)
-                .foregroundStyle(.blue)
+                .foregroundStyle(AppColors.primary)
                 .opacity(selectedEntry?.id == entry.id ? 1.0 : 0.7)
             }
             
@@ -404,7 +418,7 @@ struct ModernWeightChart: View {
             if let selected = selectedEntry {
                 RuleMark(x: .value("Date", selected.date))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 3]))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(AppColors.textSecondary)
                     .annotation(position: .top, alignment: .center) {
                         VStack(alignment: .center, spacing: 4) {
                             Text("\(String(format: "%.1f", selected.weight)) kg")
@@ -564,7 +578,7 @@ struct ModernWeightEntryRow: View {
                 HStack(spacing: 6) {
                     Image(systemName: isFromHealth ? "heart.fill" : "pencil")
                         .font(.caption)
-                        .foregroundColor(isFromHealth ? .red : .blue)
+                        .foregroundColor(isFromHealth ? AppColors.error : AppColors.primary)
                     
                     Text(isFromHealth ? "Health" : "Manual")
                         .font(.caption)
@@ -730,10 +744,15 @@ struct EditWeightEntryView: View {
                         if let parsedWeight = Double(weightText.replacingOccurrences(of: ",", with: ".")), parsedWeight > 0 {
                             entry.weight = parsedWeight
                             entry.date = date
-                            do { try modelContext.save() } catch {}
+                            do {
+                                try modelContext.save()
+                                dismiss()
+                                onSave()
+                            } catch {
+                                // Handle error - could show alert here
+                                print("❌ Failed to save weight entry: \(error)")
+                            }
                         }
-                        dismiss()
-                        onSave()
                     }.disabled(!isValidWeight)
                 }
                 ToolbarItem(placement: .cancellationAction) {

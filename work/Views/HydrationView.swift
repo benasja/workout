@@ -15,6 +15,8 @@ struct HydrationView: View {
     @State private var newGoalText = ""
     @State private var didCelebrate = false
     @State private var applyToAllDays = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     private let waterOptions: [WaterIntakeOption] = [
         WaterIntakeOption(icon: "drop.fill", label: "+200ml", amount: 200),
@@ -29,12 +31,22 @@ struct HydrationView: View {
                 DateSliderView(selectedDate: $selectedDate)
                     .padding(.top, 8)
                     .onChange(of: selectedDate) {
-                        dataManager.fetchHydrationLog(for: selectedDate)
+                        do {
+                            try dataManager.fetchHydrationLog(for: selectedDate)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingErrorAlert = true
+                        }
                         animateGoalReached = false
                         didCelebrate = false
                     }
                     .onAppear {
-                        dataManager.fetchHydrationLog(for: selectedDate)
+                        do {
+                            try dataManager.fetchHydrationLog(for: selectedDate)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingErrorAlert = true
+                        }
                     }
                 // Card
                 hydrationCard
@@ -69,6 +81,11 @@ struct HydrationView: View {
         }
         .sheet(isPresented: $showGoalSheet) {
             goalEditSheet
+        }
+        .alert("Save Failed", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Unable to save your changes: \(errorMessage)")
         }
     }
     
@@ -136,7 +153,12 @@ struct HydrationView: View {
                 }
                 .accessibilityLabel("Edit hydration goal")
                 Button(action: {
-                    dataManager.resetHydrationIntake(for: selectedDate)
+                    do {
+                        try dataManager.resetHydrationIntake(for: selectedDate)
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        showingErrorAlert = true
+                    }
                 }) {
                     Label("Reset Intake", systemImage: "arrow.counterclockwise")
                         .labelStyle(.iconOnly)
@@ -161,7 +183,12 @@ struct HydrationView: View {
             ForEach(waterOptions, id: \.self) { option in
                 if #available(iOS 17.0, *) {
                     Button(action: {
-                        dataManager.addWater(amountInML: option.amount, for: selectedDate)
+                        do {
+                            try dataManager.addWater(amountInML: option.amount, for: selectedDate)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingErrorAlert = true
+                        }
                     }) {
                         VStack(spacing: 6) {
                             // Fallback for bottle icon if not available
@@ -189,7 +216,12 @@ struct HydrationView: View {
                     .sensoryFeedback(.impact, trigger: true)
                 } else {
                     Button(action: {
-                        dataManager.addWater(amountInML: option.amount, for: selectedDate)
+                        do {
+                            try dataManager.addWater(amountInML: option.amount, for: selectedDate)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingErrorAlert = true
+                        }
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     }) {
                         VStack(spacing: 6) {
@@ -234,12 +266,17 @@ struct HydrationView: View {
                     .padding(.horizontal)
                 Button("Save") {
                     if let newGoal = Int(newGoalText), newGoal > 0 {
-                        if applyToAllDays {
-                            dataManager.updateHydrationGoalForAllDays(newGoal: newGoal)
-                        } else {
-                            dataManager.updateHydrationGoal(newGoal: newGoal, for: selectedDate)
+                        do {
+                            if applyToAllDays {
+                                try dataManager.updateHydrationGoalForAllDays(newGoal: newGoal)
+                            } else {
+                                try dataManager.updateHydrationGoal(newGoal: newGoal, for: selectedDate)
+                            }
+                            showGoalSheet = false
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showingErrorAlert = true
                         }
-                        showGoalSheet = false
                     }
                 }
                 .buttonStyle(.borderedProminent)

@@ -38,9 +38,13 @@ class PerformanceDashboardViewModel: ObservableObject {
                 cont.resume()
             }
         }
-        await withCheckedContinuation { cont in
-            baseline.updateAndStoreBaselines {
-                cont.resume()
+        
+        // Only update baselines if they're missing or very old (more than 24 hours)
+        if baseline.calibrating || baseline.shouldUpdateBaselines() {
+            await withCheckedContinuation { cont in
+                baseline.updateAndStoreBaselines {
+                    cont.resume()
+                }
             }
         }
         calibrating = baseline.calibrating

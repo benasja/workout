@@ -2,29 +2,261 @@
 //  WorkoutHistoryView.swift
 //  work
 //
-//  Created by Benas on 6/27/25.
+//  Created by Kiro on 7/24/25.
 //
 
 import SwiftUI
 import SwiftData
 
 struct WorkoutHistoryView: View {
-    @Query(sort: \WorkoutSession.date, order: .reverse) private var allWorkouts: [WorkoutSession]
+    @EnvironmentObject private var dataManager: DataManager
+    @State private var selectedTimeframe: TimeFrame = .all
+    @State private var sessionToDelete: WorkoutSession? = nil
+    @State private var showingDeleteAlert = false
+    @State private var editingSession: WorkoutSession? = nil
+    @State private var showingEditSheet = false
     
-    var completedWorkouts: [WorkoutSession] {
-        allWorkouts.filter { $0.isCompleted }
+    private enum TimeFrame: String, CaseIterable {
+        case week = "This Week"
+        case month = "This Month"
+        case all = "All Time"
+    }
+    
+    private var filteredSessions: [WorkoutSession] {
+        let now = Date()
+        let calendar = Calendar.current
+        
+        switch selectedTimeframe {
+        case .week:
+            let weekAgo = calendar.date(byAdding: .weekOfYear, value: -1, to: now) ?? now
+            return dataManager.workoutSessions.filter { $0.date >= weekAgo }
+        case .month:
+            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now) ?? now
+            return dataManager.workoutSessions.filter { $0.date >= monthAgo }
+        case .all:
+            return dataManager.workoutSessions
+        }
     }
     
     var body: some View {
         NavigationView {
-            Group {
-                if completedWorkouts.isEmpty {
+            VStack(spacing: 0) {
+                // Time frame picker
+                Picker("Time Frame", selection: $selectedTimeframe) {
+                    ForEach(TimeFrame.allCases, id: \.self) { timeframe in
+                        Text(timeframe.rawValue).tag(timeframe)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                
+                // Workout list
+                if filteredSessions.isEmpty {
                     EmptyHistoryView()
                 } else {
-                    WorkoutList(workouts: completedWorkouts)
+                    List {
+                        ForEach(filteredSessions, id: \.id) { session in
+                            HStack {
+                                NavigationLink(destination: WorkoutDetailView(session: session)) {
+                                    WorkoutHistoryRowView(session: session)
+                                }
+                                Spacer()
+                                Button {
+                                    editingSession = session
+                                    showingEditSheet = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .foregroundColor(.blue)
+                                        .padding(.trailing, 4)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .onDelete { indexSet in
+                            if let index = indexSet.first {
+                                sessionToDelete = filteredSessions[index]
+                                showingDeleteAlert = true
+                            }
+                        }
+                    }
+                    .alert("Delete Workout?", isPresented: $showingDeleteAlert, presenting: sessionToDelete) { session in
+                        Button("Cancel", role: .cancel) {}
+                        Button("Delete", role: .destructive) {
+                            if let session = sessionToDelete {
+                                deleteSession(session)
+                            }
+                        }
+                    } message: { session in
+                        Text("Are you sure you want to delete this workout? This action cannot be undone.")
+                    }
+                    .sheet(item: $editingSession) { session in
+                        EditWorkoutView(session: session)
+                    }
                 }
             }
             .navigationTitle("Workout History")
+            .onAppear {
+                dataManager.fetchWorkoutSessions()
+            }
+        }
+    }
+    
+    private func deleteSession(_ session: WorkoutSession) {
+        if let index = dataManager.workoutSessions.firstIndex(where: { $0.id == session.id }) {
+            let context = dataManager.modelContext
+            context.delete(session)
+            do {
+                try context.save()
+                dataManager.fetchWorkoutSessions()
+            } catch {
+                // Optionally handle error (show alert, etc.)
+            }
+        }
+    }
+}
+
+// New EditWorkoutView for editing sets, reps, weight, etc.
+struct EditWorkoutView: View {
+    var session: WorkoutSession
+    @EnvironmentObject private var dataManager: DataManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingAddSetSheet = false
+    @State private var setToEdit: WorkoutSet? = nil
+    @State private var showingEditSetSheet = false
+    @State private var setToDelete: WorkoutSet? = nil
+    @State private var showingDeleteSetAlert = false
+    
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(session.completedExercises, id: \.id) { completedExercise in
+                    Section(header: Text(completedExercise.exercise?.name ?? "Exercise").font(.headline)) {
+                        ForEach(completedExercise.sets, id: \.self) { set in
+                            HStack {
+                                Text("\(set.weight, specifier: "%.1f") kg × \(set.reps) reps")
+                                Spacer()
+                                Button {
+                                    setToEdit = set
+                                    showingEditSetSheet = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .foregroundColor(.blue)
+                                }
+                                .buttonStyle(.plain)
+                                Button(role: .destructive) {
+                                    setToDelete = set
+                                    showingDeleteSetAlert = true
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        Button("Add Set") {
+                            setToEdit = nil
+                            showingAddSetSheet = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+            .navigationTitle("Edit Workout")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showingAddSetSheet) {
+                EditSetSheet(completedExercise: session.completedExercises.first(where: { $0.exercise?.id == setToEdit?.exercise?.id }), set: nil) { dismiss() }
+            }
+            .sheet(item: $setToEdit) { set in
+                EditSetSheet(completedExercise: set.completedExercise, set: set) { dismiss() }
+            }
+            .alert("Delete Set?", isPresented: $showingDeleteSetAlert, presenting: setToDelete) { set in
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    deleteSet(set)
+                }
+            } message: { set in
+                Text("Are you sure you want to delete this set?")
+            }
+        }
+    }
+    
+    private func deleteSet(_ set: WorkoutSet) {
+        let context = dataManager.modelContext
+        context.delete(set)
+        do {
+            try context.save()
+        } catch {
+            // Optionally handle error
+        }
+    }
+}
+
+// EditSetSheet for adding/editing a set
+struct EditSetSheet: View {
+    var completedExercise: CompletedExercise?
+    var set: WorkoutSet?
+    var onSave: () -> Void
+    @EnvironmentObject private var dataManager: DataManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var weight: String = ""
+    @State private var reps: String = ""
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Set Details") {
+                    TextField("Weight (kg)", text: $weight)
+                        .keyboardType(.decimalPad)
+                    TextField("Reps", text: $reps)
+                        .keyboardType(.numberPad)
+                }
+            }
+            .navigationTitle(set == nil ? "Add Set" : "Edit Set")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveSet()
+                        onSave()
+                        dismiss()
+                    }
+                    .disabled(weight.isEmpty || reps.isEmpty)
+                }
+            }
+            .onAppear {
+                if let set = set {
+                    weight = String(format: "%.1f", set.weight)
+                    reps = "\(set.reps)"
+                }
+            }
+        }
+    }
+    
+    private func saveSet() {
+        guard let completedExercise = completedExercise,
+              let weightValue = Double(weight),
+              let repsValue = Int(reps) else { return }
+        let context = dataManager.modelContext
+        if let set = set {
+            set.weight = weightValue
+            set.reps = repsValue
+        } else {
+            let newSet = WorkoutSet(weight: weightValue, reps: repsValue, date: Date())
+            newSet.completedExercise = completedExercise
+            context.insert(newSet)
+        }
+        do {
+            try context.save()
+        } catch {
+            // Optionally handle error
         }
     }
 }
@@ -32,56 +264,46 @@ struct WorkoutHistoryView: View {
 struct EmptyHistoryView: View {
     var body: some View {
         VStack(spacing: 20) {
-            Spacer()
-            
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
             
-            Text("No workout history yet")
+            Text("No Workouts Yet")
                 .font(.title2)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
             
-            Text("Complete your first workout to see it here")
+            Text("Your completed workouts will appear here")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-            
-            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 }
 
-struct WorkoutList: View {
-    let workouts: [WorkoutSession]
-    @State private var selectedWorkout: WorkoutSession?
+struct WorkoutHistoryRowView: View {
+    let session: WorkoutSession
+    @EnvironmentObject private var dataManager: DataManager
     
-    var body: some View {
-        List(workouts, id: \.id) { workout in
-            WorkoutHistoryRow(workout: workout)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedWorkout = workout
-                }
-        }
-        .sheet(item: $selectedWorkout) { workout in
-            WorkoutDetailView(workout: workout)
-        }
+    private var totalVolume: Double {
+        let sets = session.sets
+        return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
-}
-
-struct WorkoutHistoryRow: View {
-    let workout: WorkoutSession
+    
+    private var setCount: Int {
+        return session.sets.count
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(workout.programName ?? "Workout")
+                    Text(session.programName ?? "Quick Workout")
                         .font(.headline)
+                        .fontWeight(.semibold)
                     
-                    Text(workout.date, style: .date)
+                    Text(session.date, format: .dateTime.weekday(.wide).month().day().year())
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -89,485 +311,276 @@ struct WorkoutHistoryRow: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(workout.completedExercises.count) exercises")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Text(formatDuration(session.duration))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
                     
-                    Text("\(Int(workout.duration / 60))m")
+                    Text("\(setCount) sets")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
             
-            if !workout.completedExercises.isEmpty {
-                Text("\(workout.completedExercises.prefix(3).compactMap { $0.exercise?.name }.joined(separator: ", "))")
+            HStack {
+                Label("\(session.completedExercises.count) exercises", systemImage: "dumbbell")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
+                
+                Spacer()
+                
+                Label("\(totalVolume.formatted(.number.precision(.fractionLength(0)))) kg total", systemImage: "scalemass")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Exercise preview
+            if !session.completedExercises.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(session.completedExercises.prefix(3), id: \.id) { completedExercise in
+                            if let exercise = completedExercise.exercise {
+                                Text(exercise.name)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.accentColor.opacity(0.2))
+                                    .foregroundColor(.accentColor)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        
+                        if session.completedExercises.count > 3 {
+                            Text("+\(session.completedExercises.count - 3)")
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color(.systemGray5))
+                                .foregroundColor(.secondary)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
             }
         }
         .padding(.vertical, 4)
-        .cornerRadius(AppCornerRadius.sm)
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = Int(duration) % 3600 / 60
+        
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
     }
 }
 
 struct WorkoutDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    let workout: WorkoutSession
-    @State private var showingEditSheet = false
+    let session: WorkoutSession
+    @EnvironmentObject private var dataManager: DataManager
+    
+    private var totalVolume: Double {
+        let sets = session.sets
+        return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+    }
+    
+    private var exerciseGroups: [(ExerciseDefinition, [WorkoutSet])] {
+        let groupedSets = Dictionary(grouping: session.sets) { set in
+            set.exercise?.id ?? UUID()
+        }
+        
+        return session.completedExercises.compactMap { completedExercise in
+            guard let exercise = completedExercise.exercise else { return nil }
+            let sets = groupedSets[exercise.id] ?? []
+            return (exercise, sets.sorted { $0.date < $1.date })
+        }
+    }
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Workout header
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(workout.programName ?? "Workout")
-                            .font(.title)
-                            .fontWeight(.bold)
-                        
-                        Text(workout.date, style: .date)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
-                        HStack {
-                            Label("\(Int(workout.duration / 60)) minutes", systemImage: "clock")
-                            Spacer()
-                            Label("\(workout.completedExercises.count) exercises", systemImage: "dumbbell")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Workout summary card
+                WorkoutSummaryCard(session: session, totalVolume: totalVolume)
+                
+                // Exercise breakdown
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Exercises")
+                        .font(.title2)
+                        .fontWeight(.bold)
                     
-                    // Exercises
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Exercises")
-                                .font(.headline)
-                            
-                            Spacer()
-                            
-                            Button("Edit") {
-                                showingEditSheet = true
-                            }
-                            .primaryButton()
-                            .accessibilityLabel("Edit Workout")
-                        }
-                        
-                        ForEach(workout.completedExercises, id: \.id) { completedExercise in
-                            if let exercise = completedExercise.exercise {
-                                ExerciseDetailRow(exercise: exercise, completedExercise: completedExercise)
-                            }
-                        }
+                    ForEach(exerciseGroups, id: \.0.id) { exercise, sets in
+                        ExerciseBreakdownCard(exercise: exercise, sets: sets)
                     }
                 }
-                .padding()
             }
-            .navigationTitle("Workout Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .primaryButton()
-                    .accessibilityLabel("Done Editing")
-                }
-            }
-            .sheet(isPresented: $showingEditSheet) {
-                EditWorkoutView(workout: workout)
-            }
+            .padding()
         }
-        .cornerRadius(AppCornerRadius.md)
+        .navigationTitle("Workout Details")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-struct ExerciseDetailRow: View {
-    let exercise: ExerciseDefinition
-    let completedExercise: CompletedExercise
+struct WorkoutSummaryCard: View {
+    let session: WorkoutSession
+    let totalVolume: Double
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(exercise.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Spacer()
-                
-                Text(exercise.primaryMuscleGroup)
-                    .font(.caption)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.2))
-                    .cornerRadius(4)
-            }
-            
-            if let warmupSets = completedExercise.warmupSets, warmupSets > 0 {
-                Text("\(warmupSets) warmup sets")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
-            
-            let targetSets = completedExercise.targetSets ?? 3
-            let targetReps = completedExercise.targetReps ?? "8-12"
-            Text("Target: \(targetSets) sets × \(targetReps)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(AppCornerRadius.sm)
-    }
-}
-
-struct EditWorkoutView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    let workout: WorkoutSession
-    
-    @State private var workoutDate: Date
-    @State private var workoutNotes: String
-    @State private var showingDeleteAlert = false
-    
-    init(workout: WorkoutSession) {
-        self.workout = workout
-        self._workoutDate = State(initialValue: workout.date)
-        self._workoutNotes = State(initialValue: workout.notes ?? "")
-    }
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Workout Details") {
-                    DatePicker("Date", selection: $workoutDate, displayedComponents: .date)
-                        .accessibilityLabel("Workout Date")
-                        .accessibilityIdentifier("workoutDatePicker")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.programName ?? "Quick Workout")
+                        .font(.title2)
+                        .fontWeight(.bold)
                     
-                    TextField("Notes", text: $workoutNotes, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Workout Notes")
-                        .accessibilityIdentifier("workoutNotesField")
-                        .lineLimit(3...6)
-                }
-                
-                Section("Exercises") {
-                    ForEach(workout.completedExercises, id: \.id) { completedExercise in
-                        if let exercise = completedExercise.exercise {
-                            NavigationLink(destination: EditExerciseView(completedExercise: completedExercise)) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(exercise.name)
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                    
-                                    Text(exercise.primaryMuscleGroup)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .onDelete(perform: deleteExercise)
-                }
-                
-                Section {
-                    Button("Delete Workout", role: .destructive) {
-                        showingDeleteAlert = true
-                    }
-                    .secondaryButton()
-                    .accessibilityLabel("Delete Workout")
-                }
-            }
-            .navigationTitle("Edit Workout")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .secondaryButton()
-                    .accessibilityLabel("Cancel")
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveChanges()
-                    }
-                    .primaryButton()
-                    .accessibilityLabel("Save Changes")
-                }
-            }
-            .alert("Delete Workout", isPresented: $showingDeleteAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    deleteWorkout()
-                }
-            } message: {
-                Text("Are you sure you want to delete this workout? This action cannot be undone.")
-            }
-        }
-    }
-    
-    private func saveChanges() {
-        workout.date = workoutDate
-        workout.notes = workoutNotes.isEmpty ? nil : workoutNotes
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error saving workout changes: \(error)")
-        }
-        
-        dismiss()
-    }
-    
-    private func deleteExercise(offsets: IndexSet) {
-        for index in offsets {
-            let exercise = workout.completedExercises[index]
-            modelContext.delete(exercise)
-        }
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error deleting exercise: \(error)")
-        }
-    }
-    
-    private func deleteWorkout() {
-        // Delete all exercises first
-        for exercise in workout.completedExercises {
-            modelContext.delete(exercise)
-        }
-        
-        // Delete the workout
-        modelContext.delete(workout)
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error deleting workout: \(error)")
-        }
-        
-        dismiss()
-    }
-}
-
-struct EditExerciseView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    let completedExercise: CompletedExercise
-    @Query private var workoutSets: [WorkoutSet]
-    
-    @State private var targetSets: Int
-    @State private var targetReps: String
-    @State private var warmupSets: Int
-    @State private var showingDeleteAlert = false
-    
-    init(completedExercise: CompletedExercise) {
-        self.completedExercise = completedExercise
-        self._targetSets = State(initialValue: completedExercise.targetSets ?? 3)
-        self._targetReps = State(initialValue: completedExercise.targetReps ?? "8-12")
-        self._warmupSets = State(initialValue: completedExercise.warmupSets ?? 0)
-    }
-    
-    var exerciseSets: [WorkoutSet] {
-        workoutSets.filter { $0.completedExercise?.id == completedExercise.id }
-    }
-    
-    var body: some View {
-        Form {
-            Section("Exercise Details") {
-                if let exercise = completedExercise.exercise {
-                    Text(exercise.name)
-                        .font(.headline)
-                    
-                    Text(exercise.primaryMuscleGroup)
+                    Text(session.date, format: .dateTime.weekday(.wide).month().day().year())
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
                 
-                Stepper("Target Sets: \(targetSets)", value: $targetSets, in: 1...10)
-                
-                TextField("Target Reps (e.g., 8-12)", text: $targetReps)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Target Reps")
-                    .accessibilityIdentifier("targetRepsField")
-                
-                Stepper("Warmup Sets: \(warmupSets)", value: $warmupSets, in: 0...5)
+                Spacer()
             }
             
-            Section("Sets") {
-                ForEach(exerciseSets, id: \.id) { set in
-                    EditSetRow(set: set)
-                }
-                .onDelete(perform: deleteSet)
-                
-                Button("Add Set") {
-                    addSet()
-                }
-                .primaryButton()
-                .accessibilityLabel("Add Set")
-            }
-            
-            Section {
-                Button("Delete Exercise", role: .destructive) {
-                    showingDeleteAlert = true
-                }
-                .secondaryButton()
-                .accessibilityLabel("Delete Exercise")
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 16) {
+                StatView(title: "Duration", value: formatDuration(session.duration), icon: "clock")
+                StatView(title: "Total Volume", value: "\(totalVolume.formatted(.number.precision(.fractionLength(0)))) kg", icon: "scalemass")
+                StatView(title: "Sets", value: "\(session.sets.count)", icon: "list.number")
             }
         }
-        .navigationTitle("Edit Exercise")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
-                    saveChanges()
-                }
-                .primaryButton()
-                .accessibilityLabel("Save Exercise")
-            }
-        }
-        .alert("Delete Exercise", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                deleteExercise()
-            }
-        } message: {
-            Text("Are you sure you want to delete this exercise? This action cannot be undone.")
-        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     
-    private func saveChanges() {
-        completedExercise.targetSets = targetSets
-        completedExercise.targetReps = targetReps
-        completedExercise.warmupSets = warmupSets
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = Int(duration) % 3600 / 60
         
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error saving exercise changes: \(error)")
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
         }
-        
-        dismiss()
-    }
-    
-    private func addSet() {
-        let newSet = WorkoutSet(
-            weight: 0.0,
-            reps: 0,
-            rpe: nil,
-            notes: nil,
-            completedExercise: completedExercise
-        )
-        
-        modelContext.insert(newSet)
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error adding set: \(error)")
-        }
-    }
-    
-    private func deleteSet(offsets: IndexSet) {
-        for index in offsets {
-            let set = exerciseSets[index]
-            modelContext.delete(set)
-        }
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error deleting set: \(error)")
-        }
-    }
-    
-    private func deleteExercise() {
-        // Delete all sets first
-        for set in exerciseSets {
-            modelContext.delete(set)
-        }
-        
-        // Delete the exercise
-        modelContext.delete(completedExercise)
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("❌ Error deleting exercise: \(error)")
-        }
-        
-        dismiss()
     }
 }
 
-struct EditSetRow: View {
-    @Environment(\.modelContext) private var modelContext
-    let set: WorkoutSet
-    @State private var weight: String
-    @State private var reps: String
+struct StatView: View {
+    let title: String
+    let value: String
+    let icon: String
     
-    init(set: WorkoutSet) {
-        self.set = set
-        self._weight = State(initialValue: String(format: "%.1f", set.weight))
-        self._reps = State(initialValue: "\(set.reps)")
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(.accentColor)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.semibold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+struct ExerciseBreakdownCard: View {
+    let exercise: ExerciseDefinition
+    let sets: [WorkoutSet]
+    
+    private var bestSet: WorkoutSet? {
+        sets.max { $0.e1RM < $1.e1RM }
+    }
+    
+    private var totalVolume: Double {
+        sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
     
     var body: some View {
-        HStack {
-            TextField("Weight", text: $weight)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Set Weight")
-                .accessibilityIdentifier("setWeightField")
-                .keyboardType(.decimalPad)
-                .frame(width: 80)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(exercise.name)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let bestSet = bestSet {
+                        Text("Best: \(bestSet.weight.formatted(.number.precision(.fractionLength(1)))) kg × \(bestSet.reps)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text("Volume: \(totalVolume.formatted(.number.precision(.fractionLength(0)))) kg")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
             
-            Text("kg")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Spacer()
-            
-            TextField("Reps", text: $reps)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Set Reps")
-                .accessibilityIdentifier("setRepsField")
-                .keyboardType(.numberPad)
-                .frame(width: 60)
-            
-            Text("reps")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .onChange(of: weight) { _, newValue in
-            if let weightDouble = Double(newValue) {
-                set.weight = weightDouble
-                try? modelContext.save()
+            // Sets table
+            LazyVGrid(columns: [
+                GridItem(.fixed(40)),
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 8) {
+                Text("Set")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                
+                Text("Weight")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                
+                Text("Reps")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                
+                Text("e1RM")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                
+                ForEach(Array(sets.enumerated()), id: \.offset) { index, set in
+                    Text("\(index + 1)")
+                        .font(.subheadline)
+                    
+                    Text("\(set.weight.formatted(.number.precision(.fractionLength(1))))")
+                        .font(.subheadline)
+                    
+                    Text("\(set.reps)")
+                        .font(.subheadline)
+                    
+                    Text("\(set.e1RM.formatted(.number.precision(.fractionLength(1))))")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(set == bestSet ? .accentColor : .primary)
+                }
             }
         }
-        .onChange(of: reps) { _, newValue in
-            if let repsInt = Int(newValue) {
-                set.reps = repsInt
-                try? modelContext.save()
-            }
-        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
 #Preview {
-    WorkoutHistoryView()
-        .modelContainer(for: [
-            UserProfile.self,
-            WorkoutSession.self,
-            CompletedExercise.self,
-            WorkoutSet.self,
-            ExerciseDefinition.self,
-            Program.self,
-            ProgramDay.self,
-            ProgramExercise.self,
-            WeightEntry.self
-        ])
-} 
+    let container = try! ModelContainer(for: WorkoutSession.self, ExerciseDefinition.self, WorkoutSet.self)
+    let dataManager = DataManager(modelContext: container.mainContext)
+    
+    return WorkoutHistoryView()
+        .environmentObject(dataManager)
+        .modelContainer(container)
+}

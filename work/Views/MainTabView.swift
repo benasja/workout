@@ -170,12 +170,8 @@ struct MoreView: View {
             }
             
             Section("Fitness") {
-                NavigationLink(destination: WorkoutLibraryView()) {
-                    Label("Train", systemImage: "dumbbell.fill")
-                        .foregroundColor(.primary)
-                }
-                NavigationLink(destination: WorkoutHistoryView()) {
-                    Label("Workout History", systemImage: "clock.arrow.circlepath")
+                NavigationLink(destination: ActiveWorkoutView()) {
+                    Label("Workout", systemImage: "dumbbell.fill")
                         .foregroundColor(.primary)
                 }
                 NavigationLink(destination: ProgramsView()) {
@@ -184,6 +180,10 @@ struct MoreView: View {
                 }
                 NavigationLink(destination: ExerciseLibraryView()) {
                     Label("Exercise Library", systemImage: "figure.strengthtraining.traditional")
+                        .foregroundColor(.primary)
+                }
+                NavigationLink(destination: WorkoutHistoryView()) {
+                    Label("Workout History", systemImage: "clock.arrow.circlepath")
                         .foregroundColor(.primary)
                 }
             }

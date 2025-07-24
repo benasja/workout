@@ -79,45 +79,36 @@ final class HealthStatsViewModel: ObservableObject {
             self.currentDate = date
         }
         
-        do {
-            // Step 1: Fetch raw health data
-            let rawData = await fetchRawHealthData(for: date)
-            
-            // Step 2: Calculate historical baseline for this date
-            let baseline = await calculateHistoricalBaseline(for: date)
-            
-            // Step 3: Calculate scores using the unified data and baseline
-            let (recovery, sleep) = await calculateScores(for: date, rawData: rawData, baseline: baseline)
-            
-            // Step 4: Generate component breakdowns and trends
-            let components = generateComponentBreakdowns(recovery: recovery, sleep: sleep)
-            let trends = await generateBiomarkerTrends(for: date)
-            let historicalTrends = await generateHistoricalTrends(for: date)
-            
-            // Step 5: Cache the results
-            let cachedData = CachedHealthData(
-                date: date,
-                rawData: rawData,
-                baseline: baseline,
-                recovery: recovery,
-                sleep: sleep,
-                components: components,
-                trends: trends,
-                historicalTrends: historicalTrends,
-                timestamp: Date()
-            )
-            dataCache[cacheKey] = cachedData
-            
-            // Step 6: Publish all results
-            await publishData(cachedData)
-            
-        } catch {
-            await MainActor.run {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
-            }
-            print("❌ HealthStatsViewModel: Error loading data - \(error)")
-        }
+        // Step 1: Fetch raw health data
+        let rawData = await fetchRawHealthData(for: date)
+        
+        // Step 2: Calculate historical baseline for this date
+        let baseline = await calculateHistoricalBaseline(for: date)
+        
+        // Step 3: Calculate scores using the unified data and baseline
+        let (recovery, sleep) = await calculateScores(for: date, rawData: rawData, baseline: baseline)
+        
+        // Step 4: Generate component breakdowns and trends
+        let components = generateComponentBreakdowns(recovery: recovery, sleep: sleep)
+        let trends = await generateBiomarkerTrends(for: date)
+        let historicalTrends = await generateHistoricalTrends(for: date)
+        
+        // Step 5: Cache the results
+        let cachedData = CachedHealthData(
+            date: date,
+            rawData: rawData,
+            baseline: baseline,
+            recovery: recovery,
+            sleep: sleep,
+            components: components,
+            trends: trends,
+            historicalTrends: historicalTrends,
+            timestamp: Date()
+        )
+        dataCache[cacheKey] = cachedData
+        
+        // Step 6: Publish all results
+        await publishData(cachedData)
     }
     
     // MARK: - Data Fetching
@@ -180,32 +171,32 @@ final class HealthStatsViewModel: ObservableObject {
         if let recovery = recovery {
             recoveryComponents = [
                 ComponentData(
-                    name: "HRV Component",
+                    name: "HRV Recovery",
                     score: recovery.hrvComponent.score,
                     maxScore: 50,
                     description: recovery.hrvComponent.description,
-                    color: .green
+                    color: AppColors.success
                 ),
                 ComponentData(
-                    name: "RHR Component",
+                    name: "RHR Recovery", 
                     score: recovery.rhrComponent.score,
                     maxScore: 25,
                     description: recovery.rhrComponent.description,
-                    color: .blue
+                    color: AppColors.primary
                 ),
                 ComponentData(
-                    name: "Sleep Component",
+                    name: "Sleep Quality",
                     score: recovery.sleepComponent.score,
                     maxScore: 15,
                     description: recovery.sleepComponent.description,
-                    color: .purple
+                    color: AppColors.accent
                 ),
                 ComponentData(
-                    name: "Stress Component",
+                    name: "Stress Indicators",
                     score: recovery.stressComponent.score,
                     maxScore: 10,
                     description: recovery.stressComponent.description,
-                    color: .orange
+                    color: AppColors.warning
                 )
             ]
         }
@@ -215,38 +206,45 @@ final class HealthStatsViewModel: ObservableObject {
             sleepComponents = [
                 ComponentData(
                     name: "Sleep Duration",
-                    score: calculateDurationScore(from: sleep),
+                    score: Double(sleep.finalScore) * 0.3, // Approximate duration contribution
                     maxScore: 25,
                     description: "Sleep duration: \(sleep.timeAsleep.formattedAsHoursAndMinutes())",
-                    color: .blue
+                    color: AppColors.primary
                 ),
                 ComponentData(
                     name: "Sleep Efficiency",
                     score: sleep.efficiencyComponent,
                     maxScore: 25,
-                    description: "Efficiency: \(String(format: "%.1f", sleep.sleepEfficiency * 100))%",
-                    color: .green
+                    description: "Sleep efficiency: \(String(format: "%.1f", sleep.sleepEfficiency * 100))%",
+                    color: AppColors.success
                 ),
                 ComponentData(
                     name: "Deep Sleep",
-                    score: calculateDeepSleepScore(from: sleep),
-                    maxScore: 20,
-                    description: "Deep sleep: \(sleep.deepSleep.formattedAsHoursAndMinutes()) (\(String(format: "%.1f", sleep.deepSleepPercentage * 100))%)",
-                    color: .indigo
+                    score: Double(sleep.finalScore) * 0.2, // Approximate deep sleep contribution
+                    maxScore: 25,
+                    description: "Deep sleep: \(sleep.deepSleep.formattedAsHoursAndMinutes())",
+                    color: AppColors.primary
                 ),
                 ComponentData(
                     name: "REM Sleep",
-                    score: calculateREMSleepScore(from: sleep),
-                    maxScore: 20,
-                    description: "REM sleep: \(sleep.remSleep.formattedAsHoursAndMinutes()) (\(String(format: "%.1f", sleep.remSleepPercentage * 100))%)",
-                    color: .purple
+                    score: Double(sleep.finalScore) * 0.2, // Approximate REM contribution
+                    maxScore: 25,
+                    description: "REM sleep: \(sleep.remSleep.formattedAsHoursAndMinutes())",
+                    color: AppColors.accent
                 ),
                 ComponentData(
-                    name: "Sleep Onset",
-                    score: calculateOnsetScore(from: sleep),
-                    maxScore: 10,
-                    description: "Time to fall asleep: \(String(format: "%.0f", sleep.timeToFallAsleep)) min",
-                    color: .red
+                    name: "Sleep Quality",
+                    score: sleep.qualityComponent,
+                    maxScore: 25,
+                    description: "Overall restoration quality",
+                    color: AppColors.warning
+                ),
+                ComponentData(
+                    name: "Sleep Timing",
+                    score: sleep.timingComponent,
+                    maxScore: 25,
+                    description: "Bedtime consistency",
+                    color: AppColors.error
                 )
             ]
         }

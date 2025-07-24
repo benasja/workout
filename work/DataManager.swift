@@ -3,15 +3,26 @@ import SwiftData
 
 @MainActor
 class DataManager: ObservableObject {
-    private var modelContext: ModelContext
+    private var _modelContext: ModelContext
+    
+    // Public accessor for seeding data
+    var modelContext: ModelContext {
+        return _modelContext
+    }
 
     // MARK: - Published Properties for UI Updates
     @Published var currentSupplementRecord: DailySupplementRecord?
     @Published var currentJournalEntry: DailyJournal?
     @Published var currentHydrationLog: HydrationLog?
     
+    // MARK: - Fitness Published Properties
+    @Published var exercises: [ExerciseDefinition] = []
+    @Published var workoutPrograms: [WorkoutProgram] = []
+    @Published var workoutSessions: [WorkoutSession] = []
+    @Published var currentWorkoutSession: WorkoutSession?
+    
     init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+        self._modelContext = modelContext
     }
 
     // MARK: - Supplement Methods
@@ -28,7 +39,7 @@ class DataManager: ObservableObject {
         let descriptor = FetchDescriptor<DailySupplementRecord>(predicate: predicate)
         
         do {
-            let records = try modelContext.fetch(descriptor)
+            let records = try _modelContext.fetch(descriptor)
             currentSupplementRecord = records.first
         } catch {
             print("❌ Failed to fetch supplement record for \(date): \(error)")
@@ -36,7 +47,7 @@ class DataManager: ObservableObject {
         }
     }
     
-    func toggleSupplement(_ supplementName: String, for date: Date) {
+    func toggleSupplement(_ supplementName: String, for date: Date) throws {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         
@@ -45,7 +56,7 @@ class DataManager: ObservableObject {
             record = existingRecord
         } else {
             record = DailySupplementRecord(date: startOfDay)
-            modelContext.insert(record)
+            _modelContext.insert(record)
             currentSupplementRecord = record
         }
         
@@ -55,7 +66,7 @@ class DataManager: ObservableObject {
             record.takenSupplements.append(supplementName)
         }
         
-        save()
+        try save()
     }
 
     func isSupplementTaken(_ supplementName: String) -> Bool {
@@ -75,7 +86,7 @@ class DataManager: ObservableObject {
         let descriptor = FetchDescriptor<DailyJournal>(predicate: predicate)
         
         do {
-            let entries = try modelContext.fetch(descriptor)
+            let entries = try _modelContext.fetch(descriptor)
             currentJournalEntry = entries.first
         } catch {
             print("❌ Failed to fetch journal entry for \(date): \(error)")
@@ -83,13 +94,13 @@ class DataManager: ObservableObject {
         }
     }
     
-    func saveJournalEntry(for date: Date, tags: Set<String>, notes: String) {
+    func saveJournalEntry(for date: Date, tags: Set<String>, notes: String) throws {
         let entry: DailyJournal
         if let existingEntry = currentJournalEntry {
             entry = existingEntry
         } else {
             entry = DailyJournal(date: date)
-            modelContext.insert(entry)
+            _modelContext.insert(entry)
             currentJournalEntry = entry
         }
         
@@ -116,7 +127,7 @@ class DataManager: ObservableObject {
         }
         // --- End of legacy boolean logic ---
         
-        save()
+        try save()
     }
     
     // MARK: - Hydration Methods
@@ -131,7 +142,7 @@ class DataManager: ObservableObject {
         UserDefaults.standard.set(newGoal, forKey: globalHydrationGoalKey)
     }
     
-    func fetchHydrationLog(for date: Date) {
+    func fetchHydrationLog(for date: Date) throws {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
@@ -142,15 +153,15 @@ class DataManager: ObservableObject {
         let descriptor = FetchDescriptor<HydrationLog>(predicate: predicate)
         
         do {
-            let logs = try modelContext.fetch(descriptor)
+            let logs = try _modelContext.fetch(descriptor)
             if let log = logs.first {
                 currentHydrationLog = log
             } else {
                 // Use global goal if no log exists
                 let newLog = HydrationLog(date: startOfDay, currentIntakeInML: 0, goalInML: getGlobalHydrationGoal())
-                modelContext.insert(newLog)
+                _modelContext.insert(newLog)
                 currentHydrationLog = newLog
-                save()
+                try save()
             }
         } catch {
             print("❌ Failed to fetch hydration log for \(date): \(error)")
@@ -158,7 +169,7 @@ class DataManager: ObservableObject {
         }
     }
     
-    func addWater(amountInML: Int, for date: Date) {
+    func addWater(amountInML: Int, for date: Date) throws {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         
@@ -167,15 +178,15 @@ class DataManager: ObservableObject {
             log = existingLog
         } else {
             log = HydrationLog(date: startOfDay, currentIntakeInML: 0, goalInML: getGlobalHydrationGoal())
-            modelContext.insert(log)
+            _modelContext.insert(log)
             currentHydrationLog = log
         }
         
         log.currentIntakeInML += amountInML
-        save()
+        try save()
     }
 
-    func updateHydrationGoal(newGoal: Int, for date: Date) {
+    func updateHydrationGoal(newGoal: Int, for date: Date) throws {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         let log: HydrationLog
@@ -183,28 +194,28 @@ class DataManager: ObservableObject {
             log = existingLog
         } else {
             log = HydrationLog(date: startOfDay)
-            modelContext.insert(log)
+            _modelContext.insert(log)
             currentHydrationLog = log
         }
         log.goalInML = newGoal
-        save()
+        try save()
     }
 
-    func updateHydrationGoalForAllDays(newGoal: Int) {
+    func updateHydrationGoalForAllDays(newGoal: Int) throws {
         setGlobalHydrationGoal(newGoal)
         let fetchDescriptor = FetchDescriptor<HydrationLog>()
         do {
-            let logs = try modelContext.fetch(fetchDescriptor)
+            let logs = try _modelContext.fetch(fetchDescriptor)
             for log in logs {
                 log.goalInML = newGoal
             }
-            save()
+            try save()
         } catch {
             print("❌ Failed to update hydration goal for all days: \(error)")
         }
     }
 
-    func resetHydrationIntake(for date: Date) {
+    func resetHydrationIntake(for date: Date) throws {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         let log: HydrationLog
@@ -212,21 +223,154 @@ class DataManager: ObservableObject {
             log = existingLog
         } else {
             log = HydrationLog(date: startOfDay, currentIntakeInML: 0, goalInML: getGlobalHydrationGoal())
-            modelContext.insert(log)
+            _modelContext.insert(log)
             currentHydrationLog = log
         }
         log.currentIntakeInML = 0
-        save()
+        try save()
     }
 
-    // MARK: - Private Save Method
+    // MARK: - Fitness Methods
     
-    private func save() {
+    func fetchExercises() {
+        let descriptor = FetchDescriptor<ExerciseDefinition>(sortBy: [SortDescriptor(\.name)])
         do {
-            try modelContext.save()
-            print("✅ DataManager saved successfully.")
+            exercises = try _modelContext.fetch(descriptor)
         } catch {
-            print("❌ DataManager failed to save: \(error)")
+            print("❌ Failed to fetch exercises: \(error)")
+            exercises = []
         }
+    }
+    
+    func fetchWorkoutPrograms() {
+        let descriptor = FetchDescriptor<WorkoutProgram>(sortBy: [SortDescriptor(\.name)])
+        do {
+            workoutPrograms = try _modelContext.fetch(descriptor)
+        } catch {
+            print("❌ Failed to fetch workout programs: \(error)")
+            workoutPrograms = []
+        }
+    }
+    
+    func fetchWorkoutSessions() {
+        let descriptor = FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        do {
+            workoutSessions = try _modelContext.fetch(descriptor)
+        } catch {
+            print("❌ Failed to fetch workout sessions: \(error)")
+            workoutSessions = []
+        }
+    }
+    
+    func createExercise(name: String, bodyPart: String, category: String) throws -> ExerciseDefinition {
+        let exercise = ExerciseDefinition(
+            name: name,
+            instructions: "",
+            primaryMuscleGroup: bodyPart,
+            equipment: category,
+            userCreated: true
+        )
+        _modelContext.insert(exercise)
+        try save()
+        fetchExercises()
+        return exercise
+    }
+    
+    func createWorkoutProgram(name: String, exercises: [ExerciseDefinition] = []) throws -> WorkoutProgram {
+        let program = WorkoutProgram(name: name)
+        program.exercises = exercises
+        _modelContext.insert(program)
+        try save()
+        fetchWorkoutPrograms()
+        return program
+    }
+    
+    func startWorkout(program: WorkoutProgram? = nil) throws -> WorkoutSession {
+        let session = WorkoutSession(
+            date: Date(),
+            duration: 0,
+            programName: program?.name
+        )
+        _modelContext.insert(session)
+        currentWorkoutSession = session
+        try save()
+        return session
+    }
+    
+    func endWorkout() throws {
+        guard let session = currentWorkoutSession else { return }
+        session.isCompleted = true
+        session.duration = Date().timeIntervalSince(session.date)
+        currentWorkoutSession = nil
+        try save()
+        fetchWorkoutSessions()
+    }
+    
+    func addSetToWorkout(exercise: ExerciseDefinition, weight: Double, reps: Int, setType: SetType = .working) throws {
+        guard let session = currentWorkoutSession else { return }
+        
+        let set = WorkoutSet(
+            weight: weight,
+            reps: reps,
+            date: Date(),
+            setType: setType,
+            exercise: exercise
+        )
+        
+        // Find or create completed exercise
+        let completedExercise: CompletedExercise
+        if let existing = session.completedExercises.first(where: { $0.exercise?.id == exercise.id }) {
+            completedExercise = existing
+        } else {
+            completedExercise = CompletedExercise(exercise: exercise)
+            completedExercise.workoutSession = session
+            session.completedExercises.append(completedExercise)
+            _modelContext.insert(completedExercise)
+        }
+        
+        set.completedExercise = completedExercise
+        session.sets.append(set)
+        _modelContext.insert(set)
+        try save()
+    }
+    
+    func getSetsForExercise(_ exercise: ExerciseDefinition) -> [WorkoutSet] {
+        let descriptor = FetchDescriptor<WorkoutSet>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        
+        do {
+            let allSets = try _modelContext.fetch(descriptor)
+            return allSets.filter { set in
+                set.exercise?.id == exercise.id
+            }
+        } catch {
+            print("❌ Failed to fetch sets for exercise: \(error)")
+            return []
+        }
+    }
+    
+    func getPersonalRecords(for exercise: ExerciseDefinition) -> (bestSet: WorkoutSet?, maxVolume: Double, estimatedOneRepMax: Double) {
+        let sets = getSetsForExercise(exercise)
+        
+        let bestSet = sets.max { $0.e1RM < $1.e1RM }
+        let estimatedOneRepMax = bestSet?.e1RM ?? 0.0
+        
+        // Calculate max volume per session
+        let sessionVolumes = Dictionary(grouping: sets) { set in
+            Calendar.current.startOfDay(for: set.date)
+        }.mapValues { sets in
+            sets.reduce(0.0) { $0 + ($1.weight * Double($1.reps)) }
+        }
+        
+        let maxVolume = sessionVolumes.values.max() ?? 0.0
+        
+        return (bestSet, maxVolume, estimatedOneRepMax)
+    }
+
+    // MARK: - Save Method
+    
+    func save() throws {
+        try _modelContext.save()
     }
 } 

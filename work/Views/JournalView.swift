@@ -15,6 +15,9 @@ struct JournalView: View {
     @State private var selectedDate = Date()
     @State private var selectedTags: Set<String> = []
     @State private var notes: String = ""
+    @State private var isLoading = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     private var availableTags: [JournalTag] = JournalTag.allCases
     
@@ -77,6 +80,11 @@ struct JournalView: View {
             .onChange(of: dataManager.currentJournalEntry) {
                 updateUI(from: dataManager.currentJournalEntry)
             }
+            .alert("Save Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to save your changes: \(errorMessage)")
+            }
         }
     }
     
@@ -107,7 +115,12 @@ struct JournalView: View {
     }
     
     private func autoSave() {
-        dataManager.saveJournalEntry(for: selectedDate, tags: selectedTags, notes: notes)
+        do {
+            try dataManager.saveJournalEntry(for: selectedDate, tags: selectedTags, notes: notes)
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
     }
 }
 

@@ -4,6 +4,8 @@ import SwiftData
 struct SupplementsView: View {
     @EnvironmentObject private var dataManager: DataManager
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     // Supplement definitions (name, dosage)
     private let dailyHealthSupplements = [
@@ -61,6 +63,11 @@ struct SupplementsView: View {
             .background(Color(.secondarySystemGroupedBackground).ignoresSafeArea())
             .navigationTitle("Supplements")
             .navigationBarTitleDisplayMode(.large)
+            .alert("Save Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to save your changes: \(errorMessage)")
+            }
         }
     }
 }
@@ -84,9 +91,9 @@ struct SupplementSectionCard: View {
                         name: supplement.0,
                         dosage: supplement.1,
                         isTaken: dataManager.isSupplementTaken(supplement.0),
-                        onTap: {
-                            dataManager.toggleSupplement(supplement.0, for: selectedDate)
-                        }
+                                                    onTap: {
+                                toggleSupplement(supplement.0)
+                            }
                     )
                 }
             }
@@ -99,6 +106,23 @@ struct SupplementSectionCard: View {
                 .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
         )
         .padding(.vertical, 2)
+        .alert("Save Failed", isPresented: $showingErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Unable to save your changes: \(errorMessage)")
+        }
+    }
+    
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+    
+    private func toggleSupplement(_ supplementName: String) {
+        do {
+            try dataManager.toggleSupplement(supplementName, for: selectedDate)
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
     }
 }
 

@@ -30,10 +30,10 @@ struct RecoveryDetailView: View {
                         VStack(spacing: 8) {
                             Text("Recovery Score")
                                 .font(.subheadline)
-                                .foregroundColor(.gray)
+                                .foregroundColor(AppColors.textSecondary)
                             Text("\(recoveryResult.finalScore)")
                                 .font(.system(size: 48, weight: .bold, design: .rounded))
-                                .foregroundColor(.green)
+                                .foregroundColor(AppColors.success)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(16)
@@ -102,7 +102,7 @@ struct RecoveryDetailView: View {
                             // Recommendation Box
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: "bolt.fill")
-                                    .foregroundColor(.yellow)
+                                    .foregroundColor(AppColors.warning)
                                 Text(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).recommendation)
                                     .font(.subheadline)
                                     .foregroundColor(.primary)

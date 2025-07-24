@@ -34,13 +34,33 @@
 - Quick actions: Start workout, add journal, log weight
 - Health metrics grid: HRV, RHR, sleep, activity
 
-### Advanced Workout System
-- Smart set tracking: Warmup, working, drop, failure, back-off
-- Quick add: One-tap set logging with suggestions
-- Exercise library: 25+ exercises with instructions
-- Custom programs: Create, edit, and follow workout routines
-- Workout history: Detailed analytics and progress
-- 1RM calculations and personal records
+### Complete Fitness Module ("Digital Logbook")
+- **Live Workout Tracker**: Frictionless gym experience with one-handed operation
+  - Real-time workout timer with elapsed time display
+  - Smart set logging with weight/rep defaults from previous sessions
+  - Automatic rest timer with notifications (90s default, customizable)
+  - Quick exercise addition mid-workout
+  - Set type tracking: Warmup, working, drop set, failure, back-off
+- **Exercise Library**: Comprehensive, searchable database
+  - 50+ pre-loaded exercises with detailed instructions
+  - Filter by body part (Chest, Back, Shoulders, Legs, etc.)
+  - Custom exercise creation with user-defined categories
+  - Exercise detail pages with progress visualization
+- **Workout Programs**: Intelligent routine management
+  - Create custom programs with selected exercises
+  - Quick program selection to start workouts
+  - Program-based workout tracking
+- **Advanced Analytics & Progress Tracking**:
+  - Personal Records (PRs) with best set identification using e1RM
+  - Estimated 1-Rep Max calculations using Brzycki formula
+  - Interactive Swift Charts with gradient fills and scrubbing
+  - Volume tracking per session and exercise
+  - Historical performance graphs showing strength progression
+- **Workout History**: Complete session logging
+  - Chronological workout list with filtering (week/month/all time)
+  - Detailed workout breakdowns with exercise-by-exercise analysis
+  - Total volume, duration, and set count tracking
+  - Exercise performance comparison across sessions
 
 ### Health Analytics
 - Recovery score: HRV, RHR, sleep, stress
@@ -119,16 +139,22 @@ For technical details, algorithms, and architecture, see the main [README.md](RE
 
 All models are defined in `work/Models/` and use SwiftData for persistence.
 
+### Core Health Models
 - **UserProfile:** Stores user info, height, experience, and goals.
-- **WorkoutSession:** Represents a workout, with date, duration, notes, and completed exercises.
-- **CompletedExercise:** Links a workout to an exercise, with sets, reps, and notes.
-- **WorkoutSet:** Individual set data (weight, reps, RPE, type, etc.).
-- **ExerciseDefinition:** Exercise library with instructions, muscle groups, and equipment.
-- **Program/ProgramDay/ProgramExercise:** Custom workout programs and progression rules.
 - **DailyJournal:** Tracks daily lifestyle factors, supplements, notes, and health metrics.
 - **WeightEntry:** Body weight tracking, supports manual and HealthKit entries.
 - **ScoreHistory:** Stores historical recovery and sleep scores for trend analysis.
 - **HydrationLog:** Tracks daily water intake and hydration goal. Integrated with DataManager for all hydration operations.
+
+### Fitness Models (Complete Digital Logbook System)
+- **ExerciseDefinition:** Comprehensive exercise library with instructions, muscle groups, equipment, and user-created flag
+- **WorkoutProgram:** Simple program structure linking exercises for quick workout starts
+- **WorkoutSession:** Complete workout representation with date, duration, program name, and relationships to sets
+- **WorkoutSet:** Individual set with weight, reps, date, set type, and computed e1RM property using Brzycki formula
+- **CompletedExercise:** Links exercises to workout sessions for organization and history tracking
+
+### Legacy Fitness Models (Maintained for Compatibility)
+- **Program/ProgramDay/ProgramExercise:** Advanced workout programs with progression rules and periodization
 
 ---
 
@@ -157,6 +183,14 @@ All models are defined in `work/Models/` and use SwiftData for persistence.
 - **Analyzes:** Relationships between lifestyle tags (alcohol, late eating, stress, etc.) and health metrics (sleep, recovery, HRV).
 - **Methods:** T-tests, effect size, confidence intervals, multi-factor regression.
 - **Insights:** Actionable recommendations and reliability scoring.
+
+### Fitness Analytics
+
+- **Estimated 1-Rep Max (e1RM):** Uses Brzycki formula: `weight / (1.0278 - (0.0278 × reps))` for reps ≤ 10
+- **Personal Records:** Automatically identifies best sets using highest e1RM values across all workout history
+- **Volume Tracking:** Calculates total volume per session: `Σ(weight × reps)` for each exercise
+- **Progress Visualization:** Charts highest e1RM per session over time to show true strength progression
+- **Set Type Classification:** Warmup, working, drop set, failure, and back-off sets with different visual indicators
 
 ---
 

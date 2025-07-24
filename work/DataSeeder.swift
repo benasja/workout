@@ -640,7 +640,215 @@ class DataSeeder {
             modelContext.insert(exercise)
         }
         
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to seed exercise library: \(error)")
+        }
+    }
+    
+    static func seedSampleWorkoutPrograms(modelContext: ModelContext) {
+        // Check if workout programs already exist
+        let descriptor = FetchDescriptor<WorkoutProgram>()
+        let existingPrograms = try? modelContext.fetch(descriptor)
+        
+        if let existingPrograms = existingPrograms, !existingPrograms.isEmpty {
+            return // Already seeded
+        }
+        
+        // Get some exercises for the programs
+        let exerciseDescriptor = FetchDescriptor<ExerciseDefinition>()
+        let exercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
+        
+        if exercises.isEmpty {
+            return // Need exercises first
+        }
+        
+        // Create sample programs
+        let pushProgram = WorkoutProgram(name: "Push Day")
+        if let benchPress = exercises.first(where: { $0.name == "Bench Press" }),
+           let shoulderPress = exercises.first(where: { $0.name == "Overhead Press" }),
+           let tricepDips = exercises.first(where: { $0.name == "Tricep Dips" }) {
+            pushProgram.exercises = [benchPress, shoulderPress, tricepDips]
+        }
+        
+        let pullProgram = WorkoutProgram(name: "Pull Day")
+        if let pullUps = exercises.first(where: { $0.name == "Pull-Ups" }),
+           let rows = exercises.first(where: { $0.name == "Barbell Rows" }),
+           let curls = exercises.first(where: { $0.name == "Barbell Curls" }) {
+            pullProgram.exercises = [pullUps, rows, curls]
+        }
+        
+        let legProgram = WorkoutProgram(name: "Leg Day")
+        if let squats = exercises.first(where: { $0.name == "Squat" }),
+           let deadlifts = exercises.first(where: { $0.name == "Romanian Deadlift" }),
+           let lunges = exercises.first(where: { $0.name == "Lunges" }) {
+            legProgram.exercises = [squats, deadlifts, lunges]
+        }
+        
+        let fullBodyProgram = WorkoutProgram(name: "Full Body Workout")
+        if let squats = exercises.first(where: { $0.name == "Squat" }),
+           let benchPress = exercises.first(where: { $0.name == "Bench Press" }),
+           let rows = exercises.first(where: { $0.name == "Barbell Rows" }),
+           let shoulderPress = exercises.first(where: { $0.name == "Overhead Press" }) {
+            fullBodyProgram.exercises = [squats, benchPress, rows, shoulderPress]
+        }
+        
+        // Insert programs
+        modelContext.insert(pushProgram)
+        modelContext.insert(pullProgram)
+        modelContext.insert(legProgram)
+        modelContext.insert(fullBodyProgram)
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to seed workout programs: \(error)")
+        }
+    }
+    
+    static func seedFakeWorkoutHistory(modelContext: ModelContext) {
+        // Check if workout history already exists
+        let sessionDescriptor = FetchDescriptor<WorkoutSession>()
+        let existingSessions = try? modelContext.fetch(sessionDescriptor)
+        
+        if let existingSessions = existingSessions, !existingSessions.isEmpty {
+            return // Already seeded
+        }
+        
+        // Get exercises
+        let exerciseDescriptor = FetchDescriptor<ExerciseDefinition>()
+        let exercises = (try? modelContext.fetch(exerciseDescriptor)) ?? []
+        
+        if exercises.isEmpty {
+            return // Need exercises first
+        }
+        
+        // Define exercise groups for Push/Pull/Legs
+        let pushExercises = exercises.filter { exercise in
+            ["Bench Press", "Overhead Press", "Tricep Dips", "Dumbbell Shoulder Press"].contains(exercise.name)
+        }
+        
+        let pullExercises = exercises.filter { exercise in
+            ["Pull-Ups", "Barbell Rows", "Barbell Curls", "Lat Pulldowns"].contains(exercise.name)
+        }
+        
+        let legExercises = exercises.filter { exercise in
+            ["Squat", "Romanian Deadlift", "Lunges", "Leg Press"].contains(exercise.name)
+        }
+        
+        // Create 3 cycles of Push/Pull/Legs with progression
+        let calendar = Calendar.current
+        let startDate = calendar.date(byAdding: .day, value: -60, to: Date()) ?? Date()
+        
+        for cycle in 0..<3 {
+            for week in 0..<3 {
+                let weekOffset = (cycle * 3 + week) * 7
+                
+                // Push Day
+                if let pushDate = calendar.date(byAdding: .day, value: weekOffset, to: startDate) {
+                    createWorkoutSession(
+                        modelContext: modelContext,
+                        date: pushDate,
+                        programName: "Push Day",
+                        exercises: pushExercises,
+                        cycle: cycle,
+                        week: week
+                    )
+                }
+                
+                // Pull Day
+                if let pullDate = calendar.date(byAdding: .day, value: weekOffset + 2, to: startDate) {
+                    createWorkoutSession(
+                        modelContext: modelContext,
+                        date: pullDate,
+                        programName: "Pull Day",
+                        exercises: pullExercises,
+                        cycle: cycle,
+                        week: week
+                    )
+                }
+                
+                // Leg Day
+                if let legDate = calendar.date(byAdding: .day, value: weekOffset + 4, to: startDate) {
+                    createWorkoutSession(
+                        modelContext: modelContext,
+                        date: legDate,
+                        programName: "Leg Day",
+                        exercises: legExercises,
+                        cycle: cycle,
+                        week: week
+                    )
+                }
+            }
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to seed workout history: \(error)")
+        }
+    }
+    
+    private static func createWorkoutSession(
+        modelContext: ModelContext,
+        date: Date,
+        programName: String,
+        exercises: [ExerciseDefinition],
+        cycle: Int,
+        week: Int
+    ) {
+        let session = WorkoutSession(
+            date: date,
+            duration: Double.random(in: 3600...5400), // 1-1.5 hours
+            programName: programName
+        )
+        session.isCompleted = true
+        modelContext.insert(session)
+        
+        // Create sets for each exercise with progression
+        for exercise in exercises.prefix(3) { // Limit to 3 exercises per workout
+            let completedExercise = CompletedExercise(exercise: exercise)
+            completedExercise.workoutSession = session
+            session.completedExercises.append(completedExercise)
+            modelContext.insert(completedExercise)
+            
+            // Base weights for different exercises
+            let baseWeight: Double
+            switch exercise.name {
+            case "Squat": baseWeight = 80.0
+            case "Bench Press": baseWeight = 60.0
+            case "Romanian Deadlift": baseWeight = 70.0
+            case "Overhead Press": baseWeight = 40.0
+            case "Barbell Rows": baseWeight = 50.0
+            case "Pull-Ups": baseWeight = 0.0 // Bodyweight
+            case "Barbell Curls": baseWeight = 30.0
+            case "Tricep Dips": baseWeight = 0.0 // Bodyweight
+            default: baseWeight = 40.0
+            }
+            
+            // Progressive overload: increase weight each cycle and week
+            let progressionMultiplier = 1.0 + (Double(cycle) * 0.15) + (Double(week) * 0.05)
+            let workoutWeight = baseWeight * progressionMultiplier
+            
+            // Create 3-4 sets per exercise
+            let setCount = Int.random(in: 3...4)
+            for setIndex in 0..<setCount {
+                let setWeight = workoutWeight + Double.random(in: -2.5...2.5) // Small variation
+                let reps = Int.random(in: 6...10) // Rep range
+                
+                let workoutSet = WorkoutSet(
+                    weight: setWeight,
+                    reps: reps,
+                    date: date.addingTimeInterval(TimeInterval(setIndex * 180)), // 3 minutes apart
+                    setType: setIndex == 0 ? .warmup : .working,
+                    exercise: exercise
+                )
+                workoutSet.completedExercise = completedExercise
+                session.sets.append(workoutSet)
+                modelContext.insert(workoutSet)
+            }
+        }
     }
     
     static func seedSamplePrograms(modelContext: ModelContext) {
@@ -733,7 +941,11 @@ class DataSeeder {
         pushPullLegs.days = [pushDay, pullDay, legsDay]
         modelContext.insert(pushPullLegs)
         
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to seed sample programs: \(error)")
+        }
     }
     
     private static func findExercise(_ name: String, in exercises: [ExerciseDefinition]) -> ExerciseDefinition? {
@@ -820,7 +1032,11 @@ class DataSeeder {
                 modelContext.insert(session)
             }
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to seed workout sessions: \(error)")
+        }
     }
     
     static func seedJournalData(context: ModelContext) {

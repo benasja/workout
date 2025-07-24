@@ -146,25 +146,25 @@ enum JournalTag: String, CaseIterable, Hashable {
     }
     var color: Color {
         switch self {
-        case .coffee: return .brown
-        case .alcohol: return .red
-        case .caffeine: return .orange
-        case .lateEating: return .orange
-        case .stress: return .red
-        case .exercise: return .green
-        case .meditation: return .mint
-        case .goodSleep: return .blue
-        case .poorSleep: return .purple
-        case .illness: return .red
-        case .travel: return .cyan
-        case .work: return .gray
-        case .social: return .pink
-        case .supplements: return .blue
-        case .hydration: return .cyan
-        case .mood: return .yellow
-        case .energy: return .orange
-        case .focus: return .indigo
-        case .recovery: return .green
+        case .coffee: return AppColors.accent
+        case .alcohol: return AppColors.error
+        case .caffeine: return AppColors.warning
+        case .lateEating: return AppColors.warning
+        case .stress: return AppColors.error
+        case .exercise: return AppColors.success
+        case .meditation: return AppColors.secondary
+        case .goodSleep: return AppColors.primary
+        case .poorSleep: return AppColors.accent
+        case .illness: return AppColors.error
+        case .travel: return AppColors.primary
+        case .work: return AppColors.textSecondary
+        case .social: return AppColors.secondary
+        case .supplements: return AppColors.primary
+        case .hydration: return AppColors.primary
+        case .mood: return AppColors.warning
+        case .energy: return AppColors.accent
+        case .focus: return AppColors.primary
+        case .recovery: return AppColors.success
         }
     }
 }

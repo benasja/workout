@@ -24,7 +24,7 @@ struct WorkoutLibraryView: View {
                             HStack {
                                 Image(systemName: "play.circle.fill")
                                     .font(.title2)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(AppColors.accent)
                                 Text("Quick Start")
                                     .font(.headline)
                                     .fontWeight(.bold)
@@ -54,7 +54,7 @@ struct WorkoutLibraryView: View {
                                 HStack {
                                     Image(systemName: "list.bullet")
                                         .font(.title2)
-                                        .foregroundColor(.green)
+                                        .foregroundColor(AppColors.secondary)
                                     Text("Your Programs")
                                         .font(.headline)
                                         .fontWeight(.bold)
@@ -156,6 +156,7 @@ struct WorkoutLibraryView: View {
                 if !hasSeededData {
                     DataSeeder.seedExerciseLibrary(modelContext: modelContext)
                     DataSeeder.seedSamplePrograms(modelContext: modelContext)
+                    DataSeeder.seedSampleWorkoutPrograms(modelContext: modelContext)
                     hasSeededData = true
                 }
             }
@@ -182,26 +183,44 @@ struct WorkoutLibraryView: View {
                     WorkoutView(workout: workout)
                 }
             }
+            .alert("Save Failed", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Unable to save your changes: \(errorMessage)")
+            }
         }
     }
+    
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     private func startEmptyWorkout() {
         let workout = WorkoutSession()
         modelContext.insert(workout)
-        try? modelContext.save()
         
-        activeWorkout = workout
-        showingWorkout = true
+        do {
+            try modelContext.save()
+            activeWorkout = workout
+            showingWorkout = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
     }
     
     private func startProgramWorkout(_ program: Program) {
         let workout = WorkoutSession()
         workout.programName = program.name
         modelContext.insert(workout)
-        try? modelContext.save()
         
-        activeWorkout = workout
-        showingWorkout = true
+        do {
+            try modelContext.save()
+            activeWorkout = workout
+            showingWorkout = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
+        }
     }
 }
 
