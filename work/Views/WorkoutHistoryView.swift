@@ -287,12 +287,11 @@ struct WorkoutHistoryRowView: View {
     @EnvironmentObject private var dataManager: DataManager
     
     private var totalVolume: Double {
-        let sets = session.sets
-        return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+        return session.totalVolume
     }
     
     private var setCount: Int {
-        return session.sets.count
+        return session.setCount
     }
     
     var body: some View {
@@ -311,7 +310,7 @@ struct WorkoutHistoryRowView: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(formatDuration(session.duration))
+                    Text(formatDuration(session.actualDuration))
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
@@ -382,8 +381,7 @@ struct WorkoutDetailView: View {
     @EnvironmentObject private var dataManager: DataManager
     
     private var totalVolume: Double {
-        let sets = session.sets
-        return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+        return session.totalVolume
     }
     
     private var exerciseGroups: [(ExerciseDefinition, [WorkoutSet])] {

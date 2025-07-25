@@ -323,7 +323,21 @@ class DataManager: ObservableObject {
     func endWorkout() throws {
         guard let session = currentWorkoutSession else { return }
         session.isCompleted = true
+        session.endDate = Date()
         session.duration = Date().timeIntervalSince(session.date)
+        
+        // Ensure all relationships are properly saved
+        for completedExercise in session.completedExercises {
+            for set in completedExercise.sets {
+                if set.completedExercise == nil {
+                    set.completedExercise = completedExercise
+                }
+                if !session.sets.contains(set) {
+                    session.sets.append(set)
+                }
+            }
+        }
+        
         currentWorkoutSession = nil
         try save()
         fetchWorkoutSessions()
@@ -351,7 +365,9 @@ class DataManager: ObservableObject {
             _modelContext.insert(completedExercise)
         }
         
+        // Properly establish all relationships
         set.completedExercise = completedExercise
+        completedExercise.sets.append(set)
         session.sets.append(set)
         _modelContext.insert(set)
         try save()

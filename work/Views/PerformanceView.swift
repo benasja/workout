@@ -40,26 +40,31 @@ struct PerformanceView: View {
                     // Date Slider (KEPT)
                     DateSliderView(selectedDate: $dateModel.selectedDate)
                     
-                    if isLoading {
-                        loadingView
-                    } else if let error = errorMessage {
-                        errorView(error)
-                    } else {
-                        // Daily Readiness Card (NEW - Combined Recovery + Sleep)
-                        NavigationLink(destination: DailyReadinessDetailView()
-                            .environmentObject(dateModel)
-                            .environmentObject(tabSelectionModel)) {
-                            DailyReadinessCard(
-                                recoveryScore: recoveryScore,
-                                sleepScore: sleepScore,
-                                recoverySubtitle: recoverySubtitle,
-                                sleepSubtitle: sleepSubtitle
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        // Quick Actions (KEPT and REFINED)
-                        QuickActionsView()
+                    // Daily Readiness Card (Always visible with loading/placeholder states)
+                    NavigationLink(destination: DailyReadinessDetailView()
+                        .environmentObject(dateModel)
+                        .environmentObject(tabSelectionModel)) {
+                        DailyReadinessCard(
+                            recoveryScore: recoveryScore,
+                            sleepScore: sleepScore,
+                            recoverySubtitle: recoverySubtitle,
+                            sleepSubtitle: sleepSubtitle,
+                            isLoading: isLoading
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    // Quick Actions (ALWAYS VISIBLE - REFINED)
+                    QuickActionsView()
+                    
+                    // Show error message if any, but don't hide the UI
+                    if let error = errorMessage {
+                        Text("⚠️ \(error)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding()
+                            .background(AppColors.secondaryBackground)
+                            .cornerRadius(8)
                     }
                 }
                 .padding()
@@ -141,7 +146,10 @@ struct PerformanceView: View {
     }
     
     private var recoverySubtitle: String {
-        guard let score = recoveryScore else { return "Loading..." }
+        if isLoading {
+            return "Loading..."
+        }
+        guard let score = recoveryScore else { return "Data unavailable" }
         switch score {
         case 85...: return "Primed for peak performance"
         case 70..<85: return "Good recovery state"
@@ -151,7 +159,10 @@ struct PerformanceView: View {
     }
     
     private var sleepSubtitle: String {
-        guard let score = sleepScore else { return "Loading..." }
+        if isLoading {
+            return "Loading..."
+        }
+        guard let score = sleepScore else { return "Data unavailable" }
         switch score {
         case 85...: return "Excellent sleep quality"
         case 70..<85: return "Good sleep quality"
@@ -213,29 +224,65 @@ struct PerformanceView: View {
         if !HealthKitManager.shared.checkAuthorizationStatus() {
             showingHealthKitAlert = true
             isLoading = false
+            // Still show UI with placeholder scores
+            recoveryScore = nil
+            sleepScore = nil
             return
         }
         
         Task {
-            do {
-                // Fetch scores concurrently
-                async let recoveryResult = RecoveryScoreCalculator.shared.calculateRecoveryScore(for: dateModel.selectedDate)
-                async let sleepResult = SleepScoreCalculator.shared.calculateSleepScore(for: dateModel.selectedDate)
-                
-                let (recovery, sleep) = try await (recoveryResult, sleepResult)
-                
-                await MainActor.run {
-                    self.recoveryScore = recovery.finalScore
-                    self.sleepScore = sleep.finalScore
-                    self.isLoading = false
-                    self.errorMessage = nil
-                }
-            } catch {
-                await MainActor.run {
-                    self.isLoading = false
-                    self.errorMessage = "Failed to load health data. Please check your HealthKit permissions."
-                }
+            // Use the most appropriate date for data fetching
+            let dataDate = getMostRecentDataDate()
+            
+            // Fetch scores concurrently with graceful fallbacks
+            async let recoveryResult = fetchRecoveryScoreWithFallback(for: dataDate)
+            async let sleepResult = fetchSleepScoreWithFallback(for: dataDate)
+            
+            let (recovery, sleep) = await (recoveryResult, sleepResult)
+            
+            await MainActor.run {
+                self.recoveryScore = recovery
+                self.sleepScore = sleep
+                self.isLoading = false
+                self.errorMessage = nil
             }
+        }
+    }
+    
+    // Get the most appropriate date for fetching health data
+    private func getMostRecentDataDate() -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        
+        // If it's after midnight but before 8 AM, and we're viewing "today",
+        // use yesterday's date to get the most recent completed sleep data
+        if calendar.isDateInToday(dateModel.selectedDate) && currentHour < 8 {
+            return calendar.date(byAdding: .day, value: -1, to: dateModel.selectedDate) ?? dateModel.selectedDate
+        }
+        
+        return dateModel.selectedDate
+    }
+    
+    // Fetch recovery score with graceful fallback
+    private func fetchRecoveryScoreWithFallback(for date: Date) async -> Int? {
+        do {
+            let result = try await RecoveryScoreCalculator.shared.calculateRecoveryScore(for: date)
+            return result.finalScore
+        } catch {
+            print("⚠️ Recovery score calculation failed: \(error)")
+            return nil // Return nil instead of crashing
+        }
+    }
+    
+    // Fetch sleep score with graceful fallback
+    private func fetchSleepScoreWithFallback(for date: Date) async -> Int? {
+        do {
+            let result = try await SleepScoreCalculator.shared.calculateSleepScore(for: date)
+            return result.finalScore
+        } catch {
+            print("⚠️ Sleep score calculation failed: \(error)")
+            return nil // Return nil instead of crashing
         }
     }
     
@@ -291,6 +338,7 @@ struct DailyReadinessCard: View {
     let sleepScore: Int?
     let recoverySubtitle: String
     let sleepSubtitle: String
+    let isLoading: Bool
     @EnvironmentObject var tabSelectionModel: TabSelectionModel
     
     var body: some View {
@@ -308,14 +356,18 @@ struct DailyReadinessCard: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
                     }
-                    if let score = recoveryScore {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .frame(height: 36)
+                    } else if let score = recoveryScore {
                         Text("\(score)")
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .foregroundColor(colorFor(score: score))
                     } else {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .tint(AppColors.primary)
+                        Text("—")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundColor(AppColors.textSecondary)
                     }
                     Text(recoverySubtitle)
                         .font(.caption)
@@ -346,14 +398,18 @@ struct DailyReadinessCard: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
                     }
-                    if let score = sleepScore {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .frame(height: 36)
+                    } else if let score = sleepScore {
                         Text("\(score)")
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .foregroundColor(colorFor(score: score))
                     } else {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .tint(AppColors.primary)
+                        Text("—")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundColor(AppColors.textSecondary)
                     }
                     Text(sleepSubtitle)
                         .font(.caption)

@@ -29,11 +29,22 @@ class RecoveryScoreCalculator {
     static let shared = RecoveryScoreCalculator()
     private let baselineEngine = DynamicBaselineEngine.shared
     
+    // Cache for static recovery scores - once calculated for a day, it doesn't change
+    private var recoveryScoreCache: [String: RecoveryScoreResult] = [:]
+    
     private init() {}
     
     /// Calculates the comprehensive Recovery Score for a given date using the FINAL CALIBRATED algorithm
     /// Total_Recovery_Score = (HRV_Component * 0.50) + (RHR_Component * 0.25) + (Sleep_Component * 0.15) + (Stress_Component * 0.10)
+    /// Recovery scores are static - once calculated for a day, they don't change
     func calculateRecoveryScore(for date: Date) async throws -> RecoveryScoreResult {
+        
+        // Check cache first - recovery scores should be static for each day
+        let cacheKey = cacheKey(for: date)
+        if let cachedResult = recoveryScoreCache[cacheKey] {
+            print("📋 Using cached recovery score for \(cacheKey)")
+            return cachedResult
+        }
         
         // Use the same date logic as SleepScoreCalculator - date is the wake date
         let sleepDate = date
@@ -88,7 +99,7 @@ class RecoveryScoreCalculator {
             stressComponent: stressComponent
         )
         
-        return RecoveryScoreResult(
+        let result = RecoveryScoreResult(
             finalScore: finalScore,
             hrvComponent: hrvComponent,
             rhrComponent: rhrComponent,
@@ -97,6 +108,11 @@ class RecoveryScoreCalculator {
             date: date,
             directive: directive
         )
+        
+        // Cache the result to make recovery scores static for each day
+        recoveryScoreCache[cacheKey] = result
+        
+        return result
     }
     
     // MARK: - Recalibrated Component Calculations
@@ -451,5 +467,19 @@ class RecoveryScoreCalculator {
         } else {
             return "Recovery needs attention. Focus on rest, nutrition, and stress management."
         }
+    }
+    
+    // MARK: - Cache Management
+    
+    private func cacheKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+    
+    /// Clear the recovery score cache (useful for testing or data refresh)
+    func clearCache() {
+        recoveryScoreCache.removeAll()
+        print("🗑️ Recovery score cache cleared")
     }
 } 

@@ -33,13 +33,14 @@ final class CompletedExercise {
 // Extension for computed properties to avoid SwiftData conflicts
 extension CompletedExercise {
     var totalVolume: Double {
-        // This will be calculated from WorkoutSet queries in views
-        // For now return 0, but views will calculate it properly
-        0.0
+        sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
     
     var bestSet: WorkoutSet? {
-        // This will be calculated from WorkoutSet queries in views
-        nil
+        sets.max { $0.e1RM < $1.e1RM }
+    }
+    
+    var setCount: Int {
+        sets.count
     }
 } 

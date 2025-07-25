@@ -35,11 +35,18 @@ final class WorkoutSession {
 // Extension for computed properties to avoid SwiftData conflicts
 extension WorkoutSession {
     var totalVolume: Double {
-        completedExercises.reduce(0) { $0 + $1.totalVolume }
+        sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
     
     var setCount: Int {
-        // This will be calculated from WorkoutSet queries
-        0 // Placeholder
+        sets.count
+    }
+    
+    var actualDuration: TimeInterval {
+        if isCompleted {
+            return duration
+        } else {
+            return Date().timeIntervalSince(date)
+        }
     }
 } 

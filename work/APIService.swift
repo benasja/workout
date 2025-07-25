@@ -75,7 +75,7 @@ final class APIService {
     static let shared = APIService()
     
     // private let baseURL = "http://localhost:3000/api"
-    private let baseURL = "http://172.20.10.2:3000/api"
+    private let baseURL = "https://sensor-api-c5arcwcxc7dsa7ce.polandcentral-01.azurewebsites.net/api"
     private let session: URLSession
     
     private init() {
