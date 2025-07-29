@@ -90,41 +90,9 @@ final class APIService {
     /// Posts sleep data to the backend server.
     /// - Parameter sleepData: The SleepData object to be sent.
     func postSleepData(sleepData: SleepData) async throws {
-        guard let url = URL(string: "\(baseURL)/sleep") else {
-            throw APIError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-                 do {
-             let encoder = JSONEncoder()
-             encoder.outputFormatting = .prettyPrinted
-             let jsonData = try encoder.encode(sleepData)
-             request.httpBody = jsonData
-             
-             // Debug: Print the exact JSON being sent
-             // if let jsonString = String(data: jsonData, encoding: .utf8) {
-             //     print("🌐 Posting sleep data for \(sleepData.session_date)...")
-             //     print("📄 JSON payload being sent:")
-             //     print(jsonString)
-             // }
-            
-            let (_, response) = try await session.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 500
-                print("❌ Server returned status code: \(statusCode)")
-                throw APIError.serverError(statusCode: statusCode)
-            }
-            
-            print("✅ Successfully posted sleep data.")
-            
-        } catch {
-            print("❌ Error posting sleep data: \(error.localizedDescription)")
-            throw APIError.requestFailed(description: error.localizedDescription)
-        }
+        // The API is currently disconnected, skip posting to prevent errors
+        print("⚠️ Sleep API is disconnected, skipping data posting")
+        return
     }
     
     // MARK: - Correlation Data Fetch
@@ -201,12 +169,12 @@ final class APIService {
     /// Fetches 24-hour historical environmental data from the backend server.
     /// - Returns: An array of EnvironmentalData objects for trend analysis.
     func fetchEnvironmentalHistory() async throws -> [EnvironmentalData] {
-        guard let url = URL(string: "\(baseURL)/data/history") else {
+        guard let url = URL(string: "\(baseURL)/data/history?range=24h") else {
             throw APIError.invalidURL
         }
         
         do {
-            // print("🌐 Fetching environmental history data...")
+            print("🌐 Fetching environmental history...")
             
             let (data, response) = try await session.data(from: url)
             
@@ -219,14 +187,14 @@ final class APIService {
             let decoder = JSONDecoder()
             let apiResponse = try decoder.decode(EnvironmentalDataResponse.self, from: data)
             
-            // print("✅ Fetched \(apiResponse.data.count) environmental history entries.")
+            print("✅ Fetched \(apiResponse.data.count) environmental history entries.")
             return apiResponse.data
             
         } catch let decodingError as DecodingError {
-            // print("❌ Decoding error: \(decodingError)")
+            print("❌ Decoding error: \(decodingError)")
             throw APIError.decodingError(description: decodingError.localizedDescription)
         } catch {
-            // print("❌ Error fetching environmental history: \(error.localizedDescription)")
+            print("❌ Error fetching environmental history: \(error.localizedDescription)")
             throw APIError.requestFailed(description: error.localizedDescription)
         }
     }
@@ -240,22 +208,22 @@ struct EnvironmentalData: Codable, Identifiable {
     let temperature: Double
     let humidity: Double
     let airQuality: Double
+    let luminosity: Double // Added luminosity field
     
-    // This is the corrected computed property
+    // This is the corrected computed property for ISO 8601 timestamps
     var date: Date {
-        let formatter = DateFormatter()
-        // This format tells Swift to expect "Year-Month-Day Hour:Minute:Second"
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        // Assume the server time is the same as the phone's local time
-        formatter.timeZone = TimeZone.current
+        let formatter = ISO8601DateFormatter()
         return formatter.date(from: timestamp) ?? Date()
     }
 }
 
 struct LatestEnvironmentalData: Codable {
+    let id: Int
     let temperature: Double
     let humidity: Double
     let airQuality: Double
+    let luminosity: Double
+    let timestamp: String
 }
 
 // MARK: - Helper Structs for Decoding

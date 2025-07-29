@@ -21,6 +21,7 @@ struct SettingsView: View {
     @Query(sort: \WeightEntry.date, order: .reverse) private var weightEntries: [WeightEntry]
     
     @State private var showingProfileEditor = false
+    @State private var showingNutritionGoals = false
     @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
     @State private var isSyncing = false
     
@@ -134,6 +135,34 @@ struct SettingsView: View {
                     .padding(.horizontal)
                     .padding(.top)
                     
+                    // Nutrition Goals Section
+                    ModernCard {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack {
+                                Image(systemName: "target")
+                                    .foregroundColor(.green)
+                                    .font(.title2)
+                                Text("Nutrition Goals")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            Button(action: { showingNutritionGoals = true }) {
+                                HStack {
+                                    Image(systemName: "gear")
+                                        .foregroundColor(.blue)
+                                    Text("Manage Nutrition Goals")
+                                        .foregroundColor(.blue)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top)
+                    
                     // About Section
                     ModernCard {
                         VStack(alignment: .leading, spacing: 16) {
@@ -169,6 +198,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingProfileEditor) {
                 ProfileEditorView(profile: userProfile.first ?? createDefaultProfile())
+            }
+            .sheet(isPresented: $showingNutritionGoals) {
+                NutritionGoalsSettingsView()
             }
             .alert("Save Failed", isPresented: $showingErrorAlert) {
                 Button("OK") { }
@@ -350,6 +382,181 @@ struct ProfileEditorView: View {
             errorMessage = error.localizedDescription
             showingErrorAlert = true
         }
+    }
+}
+
+// MARK: - Nutrition Goals Settings View
+
+struct NutritionGoalsSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var viewModel: NutritionGoalsViewModel
+    @State private var showingOnboarding = false
+    
+    init() {
+        // Initialize with a temporary repository, will be updated in onAppear
+        self._viewModel = StateObject(wrappedValue: NutritionGoalsViewModel(repository: FuelLogRepository(modelContext: ModelContext(try! ModelContainer(for: NutritionGoals.self)))))
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    if let goals = viewModel.nutritionGoals {
+                        // Show existing goals
+                        existingGoalsView(goals)
+                    } else {
+                        // Show setup option
+                        setupGoalsView
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Nutrition Goals")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if viewModel.nutritionGoals != nil {
+                        Button("Edit") {
+                            showingOnboarding = true
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showingOnboarding) {
+                FuelLogOnboardingView(repository: FuelLogRepository(modelContext: modelContext))
+            }
+        }
+    }
+    
+    private var setupGoalsView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "target")
+                .font(.system(size: 60))
+                .foregroundColor(.green)
+            
+            Text("Set Up Nutrition Goals")
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text("Configure your daily calorie and macronutrient targets based on your goals and activity level.")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Set Up Goals") {
+                showingOnboarding = true
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+    
+    private func existingGoalsView(_ goals: NutritionGoals) -> some View {
+        VStack(spacing: 20) {
+            // Daily Calories
+            NutritionGoalCard(
+                title: "Daily Calories",
+                value: "\(Int(goals.dailyCalories))",
+                unit: "calories",
+                icon: "flame.fill",
+                color: .orange
+            )
+            
+            // Protein
+            NutritionGoalCard(
+                title: "Protein",
+                value: "\(Int(goals.dailyProtein))",
+                unit: "grams",
+                icon: "dumbbell.fill",
+                color: .blue
+            )
+            
+            // Carbohydrates
+            NutritionGoalCard(
+                title: "Carbohydrates",
+                value: "\(Int(goals.dailyCarbohydrates))",
+                unit: "grams",
+                icon: "leaf.fill",
+                color: .green
+            )
+            
+            // Fat
+            NutritionGoalCard(
+                title: "Fat",
+                value: "\(Int(goals.dailyFat))",
+                unit: "grams",
+                icon: "drop.fill",
+                color: .purple
+            )
+            
+            // Activity Level and Goal
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Activity Level")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(goals.activityLevel.displayName)
+                        .font(.body)
+                        .fontWeight(.medium)
+                }
+                Spacer()
+                VStack(alignment: .trailing) {
+                    Text("Goal")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(goals.goal.displayName)
+                        .font(.body)
+                        .fontWeight(.medium)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+    }
+}
+
+// MARK: - Nutrition Goal Card Component
+
+struct NutritionGoalCard: View {
+    let title: String
+    let value: String
+    let unit: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(.title2)
+                .frame(width: 40)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    Text(unit)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 

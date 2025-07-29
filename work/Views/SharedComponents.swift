@@ -701,6 +701,47 @@ struct SimpleTrendView: View {
     }
 }
 
+// MARK: - Meal Type Button (Shared Component)
+struct MealTypeButton: View {
+    let mealType: MealType
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: {
+            action()
+            AccessibilityUtils.selectionFeedback()
+        }) {
+            VStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.sm)) {
+                Image(systemName: mealType.icon)
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .white : AppColors.primary)
+                    .accessibilityHidden(true)
+                
+                Text(mealType.displayName)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(isSelected ? .white : AccessibilityUtils.contrastAwareText())
+                    .dynamicTypeSize(maxSize: .accessibility2)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(AccessibilityUtils.scaledSpacing(AppSpacing.md))
+            .background(
+                isSelected ? 
+                AccessibilityUtils.contrastAwareColor(
+                    normal: AppColors.primary,
+                    highContrast: Color.blue
+                ) : 
+                AccessibilityUtils.contrastAwareBackground()
+            )
+            .cornerRadius(AppCornerRadius.md)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(mealType.displayName)
+        .accessibilityHint(AccessibilityUtils.selectMealTypeHint)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 // MARK: - Preview
 struct SharedComponents_Previews: PreviewProvider {
     static var previews: some View {

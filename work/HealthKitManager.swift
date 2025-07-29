@@ -21,7 +21,19 @@ final class HealthKitManager {
         HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
         HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage)!,
         HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!,
-        HKObjectType.quantityType(forIdentifier: .bodyMass)!
+        HKObjectType.quantityType(forIdentifier: .bodyMass)!,
+        // Nutrition-specific read types
+        HKObjectType.quantityType(forIdentifier: .height)!,
+        HKObjectType.characteristicType(forIdentifier: .dateOfBirth)!,
+        HKObjectType.characteristicType(forIdentifier: .biologicalSex)!
+    ]
+    
+    // Nutrition-specific write types
+    let nutritionWriteTypes: Set<HKSampleType> = [
+        HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed)!,
+        HKObjectType.quantityType(forIdentifier: .dietaryProtein)!,
+        HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates)!,
+        HKObjectType.quantityType(forIdentifier: .dietaryFatTotal)!
     ]
     
     // Helper function to safely get HealthKit types
@@ -147,11 +159,13 @@ final class HealthKitManager {
         }
         
         // print("🔐 Requesting HealthKit authorization...")
-        // Allow writing body mass so the app can save weight samples back to Apple Health
+        // Allow writing body mass and nutrition data to Apple Health
         var shareTypes: Set<HKSampleType> = []
         if let bodyMassType = HKObjectType.quantityType(forIdentifier: .bodyMass) {
             shareTypes.insert(bodyMassType)
         }
+        // Add nutrition write types
+        shareTypes.formUnion(nutritionWriteTypes)
 
         healthStore.requestAuthorization(toShare: shareTypes, read: readTypes) { success, error in
             if let _ = error {
@@ -1123,10 +1137,10 @@ extension HealthKitManager {
             // Store last sync timestamp
             UserDefaults.standard.set(Date(), forKey: "lastSleepDataSync")
             
-        } catch let error as SleepScoreError {
-            // print("❌ Failed to calculate sleep score for sync: \(error.localizedDescription)")
-        } catch let error as APIError {
-            // print("❌ Failed to sync sleep data to server: \(error.localizedDescription)")
+        } catch is SleepScoreError {
+            // print("❌ Failed to calculate sleep score for sync")
+        } catch is APIError {
+            // print("❌ Failed to sync sleep data to server")
         } catch {
             // print("❌ Unexpected error during sleep data sync: \(error.localizedDescription)")
         }
@@ -1249,5 +1263,220 @@ extension HealthKitManager {
         } catch {
             // No output if error
         }
+    }
+    
+    // MARK: - Nutrition HealthKit Integration
+    
+    /// Requests authorization for nutrition-specific HealthKit data types
+    func requestNutritionAuthorization() async throws -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw FuelLogError.healthKitNotAvailable
+        }
+        
+        // Combine existing write types with nutrition write types
+        var allWriteTypes: Set<HKSampleType> = []
+        if let bodyMassType = HKObjectType.quantityType(forIdentifier: .bodyMass) {
+            allWriteTypes.insert(bodyMassType)
+        }
+        allWriteTypes.formUnion(nutritionWriteTypes)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            healthStore.requestAuthorization(toShare: allWriteTypes, read: readTypes) { success, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: success)
+                }
+            }
+        }
+    }
+    
+    /// Fetches user physical data from HealthKit for nutrition calculations
+    func fetchUserPhysicalData() async throws -> UserPhysicalData {
+        async let weight = fetchLatestWeightAsync()
+        async let height = fetchLatestHeightAsync()
+        async let dateOfBirth = fetchDateOfBirthAsync()
+        async let biologicalSex = fetchBiologicalSexAsync()
+        
+        let (weightValue, heightValue, birthDate, sex) = await (weight, height, dateOfBirth, biologicalSex)
+        
+        // Calculate age from date of birth
+        let age: Int?
+        if let birthDate = birthDate {
+            let calendar = Calendar.current
+            let ageComponents = calendar.dateComponents([.year], from: birthDate, to: Date())
+            age = ageComponents.year
+        } else {
+            age = nil
+        }
+        
+        // Calculate BMR if we have all required data
+        let bmr: Double?
+        if let weight = weightValue, let height = heightValue, let age = age, let sex = sex {
+            bmr = calculateBMR(weight: weight, height: height, age: age, biologicalSex: sex)
+        } else {
+            bmr = nil
+        }
+        
+        return UserPhysicalData(
+            weight: weightValue,
+            height: heightValue,
+            age: age,
+            biologicalSex: sex,
+            bmr: bmr,
+            tdee: nil // TDEE will be calculated separately based on activity level
+        )
+    }
+    
+    /// Calculates BMR using Mifflin-St Jeor formula
+    func calculateBMR(weight: Double, height: Double, age: Int, biologicalSex: HKBiologicalSex) -> Double {
+        let baseRate: Double
+        switch biologicalSex {
+        case .male:
+            baseRate = (10 * weight) + (6.25 * height) - (5 * Double(age)) + 5
+        case .female:
+            baseRate = (10 * weight) + (6.25 * height) - (5 * Double(age)) - 161
+        default:
+            // Use average of male and female formulas for other/unknown
+            let maleRate = (10 * weight) + (6.25 * height) - (5 * Double(age)) + 5
+            let femaleRate = (10 * weight) + (6.25 * height) - (5 * Double(age)) - 161
+            baseRate = (maleRate + femaleRate) / 2
+        }
+        return max(baseRate, 1000) // Minimum 1000 calories BMR
+    }
+    
+    /// Writes nutrition data to HealthKit
+    func writeNutritionData(_ foodLog: FoodLog) async throws {
+        let samples = try createNutritionSamples(from: foodLog)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            healthStore.save(samples) { success, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+    
+    /// Creates HealthKit nutrition samples from a FoodLog entry
+    private func createNutritionSamples(from foodLog: FoodLog) throws -> [HKQuantitySample] {
+        var samples: [HKQuantitySample] = []
+        
+        // Energy consumed
+        if let energyType = HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed) {
+            let energyQuantity = HKQuantity(unit: .kilocalorie(), doubleValue: foodLog.calories)
+            let energySample = HKQuantitySample(
+                type: energyType,
+                quantity: energyQuantity,
+                start: foodLog.timestamp,
+                end: foodLog.timestamp
+            )
+            samples.append(energySample)
+        }
+        
+        // Protein
+        if let proteinType = HKObjectType.quantityType(forIdentifier: .dietaryProtein) {
+            let proteinQuantity = HKQuantity(unit: .gram(), doubleValue: foodLog.protein)
+            let proteinSample = HKQuantitySample(
+                type: proteinType,
+                quantity: proteinQuantity,
+                start: foodLog.timestamp,
+                end: foodLog.timestamp
+            )
+            samples.append(proteinSample)
+        }
+        
+        // Carbohydrates
+        if let carbType = HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates) {
+            let carbQuantity = HKQuantity(unit: .gram(), doubleValue: foodLog.carbohydrates)
+            let carbSample = HKQuantitySample(
+                type: carbType,
+                quantity: carbQuantity,
+                start: foodLog.timestamp,
+                end: foodLog.timestamp
+            )
+            samples.append(carbSample)
+        }
+        
+        // Fat
+        if let fatType = HKObjectType.quantityType(forIdentifier: .dietaryFatTotal) {
+            let fatQuantity = HKQuantity(unit: .gram(), doubleValue: foodLog.fat)
+            let fatSample = HKQuantitySample(
+                type: fatType,
+                quantity: fatQuantity,
+                start: foodLog.timestamp,
+                end: foodLog.timestamp
+            )
+            samples.append(fatSample)
+        }
+        
+        return samples
+    }
+    
+    // MARK: - Private Helper Methods for Physical Data
+    
+    private func fetchLatestHeight() async -> Double? {
+        guard let heightType = HKObjectType.quantityType(forIdentifier: .height) else {
+            return nil
+        }
+        
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: heightType,
+                predicate: nil,
+                limit: 1,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
+            ) { _, samples, _ in
+                let height = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: .meterUnit(with: .centi))
+                continuation.resume(returning: height)
+            }
+            healthStore.execute(query)
+        }
+    }
+    
+    private func fetchDateOfBirth() async -> Date? {
+        return await withCheckedContinuation { continuation in
+            do {
+                let dateOfBirth = try healthStore.dateOfBirthComponents()
+                continuation.resume(returning: Calendar.current.date(from: dateOfBirth))
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+    
+    private func fetchBiologicalSex() async -> HKBiologicalSex? {
+        return await withCheckedContinuation { continuation in
+            do {
+                let biologicalSex = try healthStore.biologicalSex()
+                continuation.resume(returning: biologicalSex.biologicalSex)
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+    
+    // MARK: - Async Wrapper Methods
+    
+    private func fetchLatestWeightAsync() async -> Double? {
+        return await withCheckedContinuation { continuation in
+            fetchLatestWeight { weight in
+                continuation.resume(returning: weight)
+            }
+        }
+    }
+    
+    private func fetchLatestHeightAsync() async -> Double? {
+        return await fetchLatestHeight()
+    }
+    
+    private func fetchDateOfBirthAsync() async -> Date? {
+        return await fetchDateOfBirth()
+    }
+    
+    private func fetchBiologicalSexAsync() async -> HKBiologicalSex? {
+        return await fetchBiologicalSex()
     }
 } 

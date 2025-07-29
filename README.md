@@ -229,6 +229,8 @@ All models are defined in `work/Models/` and use SwiftData for persistence.
 
 ## Known Issues & TODOs
 
+- **Fixed Issues:**
+  - ✅ Environment object crash when navigating to nutrition view from More section (PerformanceDateModel missing)
 - **Algorithm Bugs:**  
   - Some scoring edge cases (see SLEEP_AND_RECOVERY_FORMULAS.md issues section) may need further calibration.
   - REM sleep penalty may be too harsh; RHR scoring may be too generous.

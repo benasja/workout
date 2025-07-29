@@ -354,7 +354,7 @@ struct EnhancedPerformanceView: View {
             var oxygenSaturation: Double?
             var steps: Double?
             var activeEnergy: Double?
-            var vo2Max: Double?
+            let vo2Max: Double? = nil
             
             // Fetch all metrics
             group.enter()

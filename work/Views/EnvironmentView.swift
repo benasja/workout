@@ -55,9 +55,6 @@ struct EnvironmentView: View {
                     }
         .background(AppColors.background.ignoresSafeArea())
         .navigationBarHidden(true)
-        .refreshable {
-            await refreshData()
-        }
         .onAppear {
             Task { await loadInitialData() }
         }
@@ -94,18 +91,25 @@ struct EnvironmentView: View {
                     color: .cyan,
                     isLoading: isLoading
                 )
+                
+                // Air Quality Card
+                EnvMetricCard(
+                    title: "Air Quality",
+                    value: latestData != nil ? String(format: "%.0f ppm", latestData!.airQuality) : "--",
+                    icon: "wind",
+                    color: airQualityColor,
+                    isLoading: isLoading
+                )
+                
+                // Luminosity Card
+                EnvMetricCard(
+                    title: "Luminosity",
+                    value: latestData != nil ? String(format: "%.0f lux", latestData!.luminosity) : "--",
+                    icon: "sun.max.fill",
+                    color: .yellow,
+                    isLoading: isLoading
+                )
             }
-            .padding(.horizontal)
-            
-            // Air Quality Card (full width)
-            EnvMetricCard(
-                title: "Air Quality",
-                value: latestData != nil ? String(format: "%.0f ppm", latestData!.airQuality) : "--",
-                icon: "wind",
-                color: airQualityColor,
-                isLoading: isLoading,
-                isFullWidth: true
-            )
             .padding(.horizontal)
         }
     }
@@ -148,6 +152,17 @@ struct EnvironmentView: View {
                 valueKeyPath: \.airQuality,
                 color: .gray,
                 unit: "ppm",
+                isLoading: isLoading
+            )
+            .padding(.horizontal)
+            
+            // Luminosity Chart
+            TrendChart(
+                title: "Luminosity",
+                data: historicalData,
+                valueKeyPath: \.luminosity,
+                color: .yellow,
+                unit: "lux",
                 isLoading: isLoading
             )
             .padding(.horizontal)

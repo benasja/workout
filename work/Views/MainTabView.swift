@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     @StateObject private var tabSelectionModel = TabSelectionModel()
     @StateObject private var dateModel = PerformanceDateModel()
+    @EnvironmentObject var dataManager: DataManager
     @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
     @State private var showingHealthKitAlert = false
     @State private var healthKitAuthorized = false
@@ -30,6 +31,7 @@ struct MainTabView: View {
                 PerformanceView()
                     .environmentObject(dateModel)
                     .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)
             }
             .tabItem {
                 Image(systemName: "chart.line.uptrend.xyaxis")
@@ -42,6 +44,7 @@ struct MainTabView: View {
                 RecoveryDetailView()
                     .environmentObject(dateModel)
                     .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)
             }
             .tabItem {
                 Image(systemName: "heart.fill")
@@ -54,6 +57,7 @@ struct MainTabView: View {
                 SleepDetailView()
                     .environmentObject(dateModel)
                     .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)
             }
             .tabItem {
                 Image(systemName: "bed.double.fill")
@@ -66,6 +70,7 @@ struct MainTabView: View {
                 EnvironmentView()
                     .environmentObject(dateModel)
                     .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)
             }
             .tabItem {
                 Image(systemName: "leaf.fill")
@@ -73,17 +78,20 @@ struct MainTabView: View {
             }
             .tag(3)
             
+
+            
             // More Tab
             NavigationStack {
                 MoreView()
                     .environmentObject(dateModel)
                     .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)
             }
             .tabItem {
                 Image(systemName: "ellipsis.circle.fill")
                 Text("More")
             }
-            .tag(5)
+            .tag(4)
         }
         .accentColor(AppColors.primary)
         .preferredColorScheme(colorScheme)
@@ -139,10 +147,19 @@ struct MainTabView: View {
 struct MoreView: View {
     @EnvironmentObject var dateModel: PerformanceDateModel
     @EnvironmentObject var tabSelectionModel: TabSelectionModel
+    @EnvironmentObject var dataManager: DataManager
     
     var body: some View {
         List {
             Section("Health & Wellness") {
+                NavigationLink(destination: FuelLogDashboardView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)) {
+                    Label("Nutrition", systemImage: "fork.knife")
+                        .foregroundColor(.primary)
+                }
+                
                 NavigationLink(destination: WeightTrackerView()) {
                     Label("Weight Tracker", systemImage: "scalemass")
                         .foregroundColor(.primary)

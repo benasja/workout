@@ -9,5 +9,11 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs to connect to your local network to sync data with your bedside sensor server.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera to scan barcodes on food products for quick nutrition logging.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This app reads health data to provide personalized nutrition insights and track your fitness progress.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>This app writes nutrition data to HealthKit to keep your health information synchronized across all your devices.</string>
 </dict>
 </plist>

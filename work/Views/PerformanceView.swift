@@ -508,6 +508,7 @@ struct DailyReadinessDetailView: View {
 // MARK: - Refined Quick Actions (KEPT)
 
 struct QuickActionsView: View {
+    @EnvironmentObject var dateModel: PerformanceDateModel
     @EnvironmentObject var tabSelectionModel: TabSelectionModel
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -535,6 +536,16 @@ struct QuickActionsView: View {
                 .buttonStyle(PlainButtonStyle())
             }
             HStack(spacing: 16) {
+                NavigationLink(destination: FuelLogDashboardView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)) {
+                    QuickActionCard(
+                        title: "Nutrition",
+                        icon: "fork.knife",
+                        color: .green
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
                 NavigationLink(destination: SupplementsView()) {
                     QuickActionCard(
                         title: "Vitamins",
@@ -543,6 +554,8 @@ struct QuickActionsView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
+            }
+            HStack(spacing: 16) {
                 NavigationLink(destination: HydrationView()) {
                     QuickActionCard(
                         title: "Hydration",
@@ -551,12 +564,7 @@ struct QuickActionsView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
-                Button(action: {
-                    tabSelectionModel.selection = 5 // Switch to More tab
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        // Optionally, you could set a flag in tabSelectionModel to scroll to the Workout section if needed
-                    }
-                }) {
+                NavigationLink(destination: ActiveWorkoutView()) {
                     QuickActionCard(
                         title: "Workout",
                         icon: "dumbbell.fill",

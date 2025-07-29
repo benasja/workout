@@ -102,7 +102,7 @@ struct WorkoutHistoryView: View {
     }
     
     private func deleteSession(_ session: WorkoutSession) {
-        if let index = dataManager.workoutSessions.firstIndex(where: { $0.id == session.id }) {
+        if dataManager.workoutSessions.contains(where: { $0.id == session.id }) {
             let context = dataManager.modelContext
             context.delete(session)
             do {

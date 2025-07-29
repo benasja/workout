@@ -407,6 +407,123 @@ class DataManager: ObservableObject {
         return (bestSet, maxVolume, estimatedOneRepMax)
     }
 
+    // MARK: - Nutrition Methods
+    
+    func fetchNutritionGoals() -> NutritionGoals? {
+        let descriptor = FetchDescriptor<NutritionGoals>(
+            sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
+        )
+        
+        do {
+            let goals = try _modelContext.fetch(descriptor)
+            return goals.first
+        } catch {
+            print("❌ Failed to fetch nutrition goals: \(error)")
+            return nil
+        }
+    }
+    
+    func saveNutritionGoals(_ goals: NutritionGoals) throws {
+        _modelContext.insert(goals)
+        try save()
+    }
+    
+    func fetchFoodLogs(for date: Date) -> [FoodLog] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        
+        let predicate = #Predicate<FoodLog> { log in
+            log.timestamp >= startOfDay && log.timestamp < endOfDay
+        }
+        
+        let descriptor = FetchDescriptor<FoodLog>(
+            predicate: predicate,
+            sortBy: [
+                SortDescriptor(\.mealTypeRawValue),
+                SortDescriptor(\.timestamp)
+            ]
+        )
+        
+        do {
+            return try _modelContext.fetch(descriptor)
+        } catch {
+            print("❌ Failed to fetch food logs for \(date): \(error)")
+            return []
+        }
+    }
+    
+    func saveFoodLog(_ foodLog: FoodLog) throws {
+        _modelContext.insert(foodLog)
+        try save()
+    }
+    
+    func deleteFoodLog(_ foodLog: FoodLog) throws {
+        _modelContext.delete(foodLog)
+        try save()
+    }
+    
+    func fetchCustomFoods() -> [CustomFood] {
+        let descriptor = FetchDescriptor<CustomFood>(
+            sortBy: [
+                SortDescriptor(\.name),
+                SortDescriptor(\.createdDate, order: .reverse)
+            ]
+        )
+        
+        do {
+            return try _modelContext.fetch(descriptor)
+        } catch {
+            print("❌ Failed to fetch custom foods: \(error)")
+            return []
+        }
+    }
+    
+    func saveCustomFood(_ customFood: CustomFood) throws {
+        _modelContext.insert(customFood)
+        try save()
+    }
+    
+    func deleteCustomFood(_ customFood: CustomFood) throws {
+        _modelContext.delete(customFood)
+        try save()
+    }
+    
+    // MARK: - Data Management Methods
+    
+    /// Clears all cached nutrition data
+    func clearNutritionCache() async {
+        await FuelLogCacheManager.shared.clearAllCache()
+    }
+    
+    /// Gets nutrition data storage statistics
+    func getNutritionStorageStatistics() async -> StorageStatistics? {
+        let repository = FuelLogRepository(modelContext: _modelContext)
+        let dataSyncManager = FuelLogDataSyncManager(repository: repository)
+        return await dataSyncManager.getStorageStatistics()
+    }
+    
+    /// Performs nutrition data cleanup
+    func performNutritionDataCleanup() async throws {
+        let repository = FuelLogRepository(modelContext: _modelContext)
+        let dataSyncManager = FuelLogDataSyncManager(repository: repository)
+        try await dataSyncManager.performDataCleanup()
+    }
+    
+    /// Exports nutrition data
+    func exportNutritionData() async throws -> Data {
+        let repository = FuelLogRepository(modelContext: _modelContext)
+        let dataSyncManager = FuelLogDataSyncManager(repository: repository)
+        return try await dataSyncManager.exportNutritionData()
+    }
+    
+    /// Imports nutrition data
+    func importNutritionData(_ data: Data, mergeStrategy: ImportMergeStrategy = .skipExisting) async throws {
+        let repository = FuelLogRepository(modelContext: _modelContext)
+        let dataSyncManager = FuelLogDataSyncManager(repository: repository)
+        try await dataSyncManager.importNutritionData(data, mergeStrategy: mergeStrategy)
+    }
+
     // MARK: - Save Method
     
     func save() throws {

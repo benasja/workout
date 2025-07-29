@@ -28,7 +28,11 @@ private let sharedContainer: ModelContainer = {
             SupplementLog.self,
             DailySupplementRecord.self,
             HydrationLog.self,
-            ScoreHistory.self
+            ScoreHistory.self,
+            // Fuel Log models
+            FoodLog.self,
+            CustomFood.self,
+            NutritionGoals.self
         )
     } catch {
         fatalError("Failed to initialize ModelContainer: \(error)")
@@ -62,6 +66,9 @@ struct workApp: App {
                     
                     // Initialize baseline engine with your personal data
                     initializeBaselineEngine()
+                    
+                    // Check for database schema issues
+                    checkDatabaseSchema()
                 }
                 .preferredColorScheme(
                     AppearanceMode(rawValue: appearanceMode) == .light ? .light :
@@ -79,9 +86,21 @@ struct workApp: App {
     }
     
     private func resetDatabase() {
-        // print("Resetting database...")
-        // This will be called when the app launches
-        // The actual seeding will happen in the views when they access the model context
+        print("🔄 Resetting database due to schema issues...")
+        
+        // Delete the existing database file
+        let containerURL = sharedContainer.configurations.first?.url
+        if let url = containerURL {
+            do {
+                try FileManager.default.removeItem(at: url)
+                print("✅ Database file deleted successfully")
+            } catch {
+                print("❌ Failed to delete database file: \(error)")
+            }
+        }
+        
+        // Force app restart to recreate database
+        exit(0)
     }
     
     private func initializeBaselineEngine() {
@@ -102,6 +121,22 @@ struct workApp: App {
             } else {
                 // print("HealthKit authorization denied")
             }
+        }
+    }
+    
+    private func checkDatabaseSchema() {
+        // Test if the database can access FoodLog table
+        let context = sharedContainer.mainContext
+        var descriptor = FetchDescriptor<FoodLog>()
+        descriptor.fetchLimit = 1
+        
+        do {
+            _ = try context.fetch(descriptor)
+            print("✅ Database schema is valid")
+        } catch {
+            print("❌ Database schema error detected: \(error)")
+            print("🔄 Resetting database...")
+            resetDatabase()
         }
     }
     

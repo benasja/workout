@@ -372,24 +372,17 @@ struct SleepCorrelationCard: View {
             isLoadingScore = true
         }
         
-        do {
-            // Load real sleep score using HealthStatsViewModel
-            await healthStats.loadData(for: date)
-            
-            await MainActor.run {
-                if let sleepResult = healthStats.sleepResult {
-                    realSleepScore = sleepResult.finalScore
-                    print("✅ SleepLabView: Loaded real sleep score \(sleepResult.finalScore) for \(data.session_date) (was \(data.sleep_score))")
-                } else {
-                    print("⚠️ SleepLabView: Could not load real sleep score for \(data.session_date), using server value \(data.sleep_score)")
-                }
-                isLoadingScore = false
+        // Load real sleep score using HealthStatsViewModel
+        await healthStats.loadData(for: date)
+        
+        await MainActor.run {
+            if let sleepResult = healthStats.sleepResult {
+                realSleepScore = sleepResult.finalScore
+                print("✅ SleepLabView: Loaded real sleep score \(sleepResult.finalScore) for \(data.session_date) (was \(data.sleep_score))")
+            } else {
+                print("⚠️ SleepLabView: Could not load real sleep score for \(data.session_date), using server value \(data.sleep_score)")
             }
-        } catch {
-            print("❌ SleepLabView: Error loading real sleep score for \(data.session_date): \(error)")
-            await MainActor.run {
-                isLoadingScore = false
-            }
+            isLoadingScore = false
         }
     }
     
