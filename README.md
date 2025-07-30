@@ -207,6 +207,25 @@ Sleep_Score = (Duration * 0.30) +
 
 ---
 
+## 📊 Live Project Statistics
+
+<div align="center">
+
+![GitHub repo size](https://img.shields.io/github/repo-size/benasja/workout?style=for-the-badge&logo=github&logoColor=white)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/benasja/workout?style=for-the-badge&logo=git&logoColor=white)
+![GitHub last commit](https://img.shields.io/github/last-commit/benasja/workout?style=for-the-badge&logo=github&logoColor=white)
+![Lines of code](https://img.shields.io/tokei/lines/github/benasja/workout?style=for-the-badge&logo=code&logoColor=white)
+
+### Language Breakdown
+![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=benasja&repo=workout&layout=compact&theme=dark&hide_border=true)
+
+### Development Activity
+![GitHub Activity Graph](https://github-readme-activity-graph.vercel.app/graph?username=benasja&theme=react-dark&hide_border=true)
+
+</div>
+
+---
+
 ## Development History
 
 ### Version 2.0.0 - Complete Overhaul (2024)
