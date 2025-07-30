@@ -219,6 +219,12 @@ Sleep_Score = (Duration * 0.30) +
 ### Language Breakdown
 ![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=benasja&repo=workout&layout=compact&theme=dark&hide_border=true)
 
+### Additional Stats
+![GitHub contributors](https://img.shields.io/github/contributors/benasja/workout?style=for-the-badge&logo=github&logoColor=white)
+![GitHub forks](https://img.shields.io/github/forks/benasja/workout?style=for-the-badge&logo=github&logoColor=white)
+![GitHub stars](https://img.shields.io/github/stars/benasja/workout?style=for-the-badge&logo=github&logoColor=white)
+![GitHub issues](https://img.shields.io/github/issues/benasja/workout?style=for-the-badge&logo=github&logoColor=white)
+
 ### Development Activity
 ![GitHub Activity Graph](https://github-readme-activity-graph.vercel.app/graph?username=benasja&theme=react-dark&hide_border=true)
 
