@@ -191,7 +191,9 @@ private actor DiskImageCache {
     init() {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         cacheDirectory = documentsPath.appendingPathComponent("ImageCache")
-        createCacheDirectoryIfNeeded()
+        Task {
+            await createCacheDirectoryIfNeeded()
+        }
     }
     
     func image(for url: String) -> UIImage? {

@@ -15,17 +15,17 @@ final class ExerciseDefinition {
     var instructions: String
     var videoURL: String?
     var primaryMuscleGroup: String
-    var secondaryMuscleGroups: [String]
+    var secondaryMuscleGroups: [String]?
     var equipment: String
     var userCreated: Bool
     
-    init(id: UUID = UUID(), name: String, instructions: String, videoURL: String? = nil, primaryMuscleGroup: String, secondaryMuscleGroups: [String] = [], equipment: String, userCreated: Bool = false) {
+    init(id: UUID = UUID(), name: String, instructions: String, videoURL: String? = nil, primaryMuscleGroup: String, secondaryMuscleGroups: [String]? = nil, equipment: String, userCreated: Bool = false) {
         self.id = id
         self.name = name
         self.instructions = instructions
         self.videoURL = videoURL
         self.primaryMuscleGroup = primaryMuscleGroup
-        self.secondaryMuscleGroups = secondaryMuscleGroups
+        self.secondaryMuscleGroups = secondaryMuscleGroups ?? []
         self.equipment = equipment
         self.userCreated = userCreated
     }
@@ -55,4 +55,6 @@ enum Equipment: String, CaseIterable {
     case kettlebell = "Kettlebell"
     case resistanceBand = "Resistance Band"
     case smithMachine = "Smith Machine"
-} 
+}
+
+ 

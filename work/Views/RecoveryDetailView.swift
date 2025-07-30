@@ -53,7 +53,8 @@ struct RecoveryDetailView: View {
                                     ScoreBreakdownRow(
                                         component: component.name,
                                         score: component.score,
-                                        maxScore: component.maxScore
+                                        maxScore: component.maxScore,
+                                        description: component.description
                                     )
                                 }
                             }
@@ -62,58 +63,7 @@ struct RecoveryDetailView: View {
                         .background(AppColors.secondaryBackground)
                         .cornerRadius(16)
                         
-                        // Recovery Insights Card (Three-Layer Model)
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Headline
-                            Text(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).headline)
-                                .font(.headline)
-                                .foregroundColor(.primary)
 
-                            // Component Breakdown
-                            VStack(alignment: .leading, spacing: 12) {
-                                ForEach(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).componentBreakdown) { component in
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Image(systemName: "circle.fill")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(color(for: component.status))
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            HStack {
-                                                Text(component.metricName)
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.primary)
-                                                Spacer()
-                                                Text(component.userValue)
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            if !component.optimalRange.isEmpty {
-                                                Text(component.optimalRange)
-                                                    .font(.caption2)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            Text(component.analysis)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Recommendation Box
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: "bolt.fill")
-                                    .foregroundColor(AppColors.warning)
-                                Text(RecoveryAnalysisEngine.generateInsights(from: recoveryResult).recommendation)
-                                    .font(.subheadline)
-                                    .foregroundColor(.primary)
-                            }
-                            .padding()
-                            .background(AppColors.tertiaryBackground)
-                            .cornerRadius(12)
-                        }
-                        .padding(16)
-                        .background(AppColors.secondaryBackground)
-                        .cornerRadius(16)
                         
                         // Biomarkers Grid - Using Centralized Data
                         LazyVGrid(columns: [
@@ -168,25 +118,29 @@ struct RecoveryDetailView: View {
     private var recoveryBiomarkerCards: some View {
         let biomarkerTrends = healthStats.biomarkerTrends
         
-        if let hrvData = biomarkerTrends["hrv"] {
+        // Use HRV data from recovery score calculation for consistency
+        if let recoveryResult = healthStats.recoveryResult,
+           let hrvValue = recoveryResult.hrvComponent.currentValue {
             BiomarkerTrendCard(
                 title: "Resting HRV",
-                value: hrvData.currentValue,
-                unit: hrvData.unit,
-                percentageChange: hrvData.percentageChange,
-                trendData: hrvData.trend,
-                color: hrvData.color
+                value: hrvValue,
+                unit: "ms",
+                percentageChange: biomarkerTrends["hrv"]?.percentageChange,
+                trendData: biomarkerTrends["hrv"]?.trend ?? [],
+                color: .green
             )
         }
         
-        if let rhrData = biomarkerTrends["rhr"] {
+        // Use RHR data from recovery score calculation for consistency
+        if let recoveryResult = healthStats.recoveryResult,
+           let rhrValue = recoveryResult.rhrComponent.currentValue {
             BiomarkerTrendCard(
                 title: "Resting HR",
-                value: rhrData.currentValue,
-                unit: rhrData.unit,
-                percentageChange: rhrData.percentageChange,
-                trendData: rhrData.trend,
-                color: rhrData.color
+                value: rhrValue,
+                unit: "bpm",
+                percentageChange: biomarkerTrends["rhr"]?.percentageChange,
+                trendData: biomarkerTrends["rhr"]?.trend ?? [],
+                color: .blue
             )
         }
         
@@ -240,11 +194,11 @@ struct RecoveryDetailView: View {
     
     private func errorOverlay(_ error: String) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: "moon.zzz")
                 .font(.system(size: 40))
-                .foregroundColor(.orange)
+                .foregroundColor(.blue)
             
-            Text("Unable to load recovery data")
+            Text("Recovery Data Not Yet Available")
                 .font(.headline)
                 .fontWeight(.semibold)
             
@@ -252,6 +206,13 @@ struct RecoveryDetailView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+            
+            if error.contains("not yet available") {
+                Text("Your recovery score will be calculated once you complete your sleep session and wake up.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
             
             Button("Try Again") {
                 Task {

@@ -94,7 +94,7 @@ struct JournalView: View {
     
     private func updateUI(from entry: DailyJournal?) {
         if let entry = entry {
-            selectedTags = Set(entry.selectedTags)
+            selectedTags = Set(entry.selectedTags ?? [])
             notes = entry.notes ?? ""
         } else {
             selectedTags = []

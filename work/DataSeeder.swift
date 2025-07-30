@@ -10,13 +10,17 @@ import SwiftData
 
 class DataSeeder {
     static func seedExerciseLibrary(modelContext: ModelContext) {
+        print("🔍 Checking for existing exercises...")
         // Check if exercises already exist
         let descriptor = FetchDescriptor<ExerciseDefinition>()
         let existingExercises = try? modelContext.fetch(descriptor)
         
         if let existingExercises = existingExercises, !existingExercises.isEmpty {
+            print("⚠️ Exercises already exist (\(existingExercises.count) found), skipping seeding")
             return // Already seeded
         }
+        
+        print("📚 No existing exercises found, creating exercise library...")
         
         let exercises = [
             // Warm-up
@@ -642,19 +646,24 @@ class DataSeeder {
         
         do {
             try modelContext.save()
+            print("✅ Exercise library seeded successfully (\(exercises.count) exercises)")
         } catch {
             print("❌ Failed to seed exercise library: \(error)")
         }
     }
     
     static func seedSampleWorkoutPrograms(modelContext: ModelContext) {
+        print("🔍 Checking for existing workout programs...")
         // Check if workout programs already exist
         let descriptor = FetchDescriptor<WorkoutProgram>()
         let existingPrograms = try? modelContext.fetch(descriptor)
         
         if let existingPrograms = existingPrograms, !existingPrograms.isEmpty {
+            print("⚠️ Workout programs already exist (\(existingPrograms.count) found), skipping seeding")
             return // Already seeded
         }
+        
+        print("📋 No existing workout programs found, creating sample programs...")
         
         // Get some exercises for the programs
         let exerciseDescriptor = FetchDescriptor<ExerciseDefinition>()
@@ -702,19 +711,24 @@ class DataSeeder {
         
         do {
             try modelContext.save()
+            print("✅ Workout programs seeded successfully")
         } catch {
             print("❌ Failed to seed workout programs: \(error)")
         }
     }
     
     static func seedFakeWorkoutHistory(modelContext: ModelContext) {
+        print("🔍 Checking for existing workout history...")
         // Check if workout history already exists
         let sessionDescriptor = FetchDescriptor<WorkoutSession>()
         let existingSessions = try? modelContext.fetch(sessionDescriptor)
         
         if let existingSessions = existingSessions, !existingSessions.isEmpty {
+            print("⚠️ Workout history already exists (\(existingSessions.count) sessions found), skipping seeding")
             return // Already seeded
         }
+        
+        print("📊 No existing workout history found, creating fake workout history...")
         
         // Get exercises
         let exerciseDescriptor = FetchDescriptor<ExerciseDefinition>()
@@ -785,6 +799,7 @@ class DataSeeder {
         
         do {
             try modelContext.save()
+            print("✅ Workout history seeded successfully")
         } catch {
             print("❌ Failed to seed workout history: \(error)")
         }

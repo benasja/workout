@@ -263,21 +263,12 @@ struct DetailedMetricsCard: View {
                         color: .orange
                     )
                     
-                    if let hrDip = details.heartRateDipPercentage {
-                        MetricItem(
-                            title: "HR Recovery",
-                            value: "\(Double(round(10 * hrDip * 100) / 10))%",
-                            icon: "heart.fill",
-                            color: .red
-                        )
-                    } else {
-                        MetricItem(
-                            title: "HR Recovery",
-                            value: "N/A",
-                            icon: "heart.fill",
-                            color: .gray
-                        )
-                    }
+                    MetricItem(
+                        title: "Time in Bed",
+                        value: formatTimeInterval(details.timeInBed),
+                        icon: "bed.double.fill",
+                        color: .green
+                    )
                 }
                 
                 if let bedtime = details.bedtime, let wakeTime = details.wakeTime {
@@ -318,6 +309,12 @@ struct DetailedMetricsCard: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+    
+    private func formatTimeInterval(_ timeInterval: TimeInterval) -> String {
+        let hours = Int(timeInterval) / 3600
+        let minutes = Int(timeInterval) % 3600 / 60
+        return "\(hours)h \(minutes)m"
     }
 }
 

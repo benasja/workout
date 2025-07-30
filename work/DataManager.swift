@@ -60,17 +60,19 @@ class DataManager: ObservableObject {
             currentSupplementRecord = record
         }
         
-        if let index = record.takenSupplements.firstIndex(of: supplementName) {
-            record.takenSupplements.remove(at: index)
+        var supplements = record.takenSupplements ?? []
+        if let index = supplements.firstIndex(of: supplementName) {
+            supplements.remove(at: index)
         } else {
-            record.takenSupplements.append(supplementName)
+            supplements.append(supplementName)
         }
+        record.takenSupplements = supplements
         
         try save()
     }
 
     func isSupplementTaken(_ supplementName: String) -> Bool {
-        return currentSupplementRecord?.takenSupplements.contains(supplementName) ?? false
+        return currentSupplementRecord?.takenSupplements?.contains(supplementName) ?? false
     }
 
     // MARK: - Journal Methods
@@ -527,6 +529,14 @@ class DataManager: ObservableObject {
     // MARK: - Save Method
     
     func save() throws {
-        try _modelContext.save()
+        print("💾 Attempting to save to SwiftData...")
+        do {
+            try _modelContext.save()
+            print("✅ SwiftData save successful")
+        } catch {
+            print("❌ SwiftData save failed: \(error)")
+            print("❌ Error details: \(error.localizedDescription)")
+            throw error
+        }
     }
 } 

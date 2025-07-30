@@ -978,6 +978,254 @@ final class HealthKitManager {
         }
         healthStore.execute(query)
     }
+
+    // MARK: - Overnight Recovery Data Fetching
+    
+    /// Fetches the main sleep session for a given wake date
+    /// Returns the sleep session's start and end times for overnight data analysis
+    func fetchMainSleepSession(for wakeDate: Date, completion: @escaping (DateInterval?) -> Void) {
+        let calendar = Calendar.current
+        // Fetch sleep samples that end between previous day noon and this day noon
+        let startOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: calendar.date(byAdding: .day, value: -1, to: wakeDate)!))!
+        let endOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: wakeDate))!
+        
+        print("🔍 Sleep Session Detection: Looking for sleep between \(startOfWindow.formatted(date: .omitted, time: .shortened)) and \(endOfWindow.formatted(date: .omitted, time: .shortened))")
+        
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            print("❌ Sleep: HealthKit sleep type not available")
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfWindow, end: endOfWindow, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let sleepSamples = (samples as? [HKCategorySample]) ?? []
+            
+            if sleepSamples.isEmpty {
+                print("❌ Sleep: No sleep samples found in window")
+                completion(nil)
+                return
+            }
+            
+            print("✅ Sleep: Found \(sleepSamples.count) sleep samples")
+            
+            // Group sleep samples by session (continuous periods)
+            let sleepSessions = self.groupSleepSamplesIntoSessions(sleepSamples)
+            
+            if sleepSessions.isEmpty {
+                print("❌ Sleep: No sleep sessions created from samples")
+                completion(nil)
+                return
+            }
+            
+            print("✅ Sleep: Created \(sleepSessions.count) sleep sessions")
+            
+            // Find the main sleep session (longest one)
+            let mainSession = sleepSessions.max(by: { $0.totalDuration < $1.totalDuration }) ?? sleepSessions.first
+            
+            guard let session = mainSession else {
+                print("❌ Sleep: No main sleep session found")
+                completion(nil)
+                return
+            }
+            
+            let sleepInterval = DateInterval(start: session.startTime, end: session.endTime)
+            let durationHours = session.totalDuration / 3600
+            print("✅ Sleep: Main session found: \(session.startTime.formatted(date: .omitted, time: .shortened)) - \(session.endTime.formatted(date: .omitted, time: .shortened)) (duration: \(String(format: "%.1f", durationHours))h)")
+            completion(sleepInterval)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    /// Fetches HRV data within a specific date interval (for overnight recovery analysis)
+    func fetchHRVForInterval(_ interval: DateInterval, completion: @escaping (Double?) -> Void) {
+        guard let type = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]) { _, samples, error in
+            if let _ = error {
+                completion(nil)
+                return
+            }
+            
+            let hrvSamples = (samples as? [HKQuantitySample]) ?? []
+            
+            guard !hrvSamples.isEmpty else {
+                completion(nil)
+                return
+            }
+            
+            // Calculate the average of all HRV readings during the sleep interval
+            let hrvValues = hrvSamples.map { $0.quantity.doubleValue(for: HKUnit(from: "ms")) }
+            let averageHRV = hrvValues.reduce(0, +) / Double(hrvValues.count)
+            
+            completion(averageHRV)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    /// Fetches RHR data within a specific date interval (for overnight recovery analysis)
+    func fetchRHRForInterval(_ interval: DateInterval, completion: @escaping (Double?) -> Void) {
+        guard let type = HKObjectType.quantityType(forIdentifier: .restingHeartRate) else {
+            print("❌ RHR: HealthKit type not available")
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) } ?? []
+            
+            if values.isEmpty {
+                print("⚠️ RHR: No RHR data found during sleep session (\(interval.start.formatted(date: .omitted, time: .shortened)) - \(interval.end.formatted(date: .omitted, time: .shortened)))")
+                
+                // Fallback: Try to get RHR for the entire day
+                self.fetchRHRForDay(containing: interval.start) { fallbackRHR in
+                    if let fallbackRHR = fallbackRHR {
+                        print("✅ RHR: Using daily RHR as fallback: \(fallbackRHR) BPM")
+                        completion(fallbackRHR)
+                    } else {
+                        print("❌ RHR: No RHR data available for day either")
+                        completion(nil)
+                    }
+                }
+                return
+            }
+            
+            // For recovery score, we want the lowest RHR during sleep (best recovery state)
+            let lowestRHR = values.min()
+            print("✅ RHR: Found \(values.count) samples during sleep, lowest: \(lowestRHR ?? 0) BPM")
+            completion(lowestRHR)
+        }
+        healthStore.execute(query)
+    }
+    
+    /// Fallback method to fetch RHR for the entire day
+    private func fetchRHRForDay(containing date: Date, completion: @escaping (Double?) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        guard let type = HKObjectType.quantityType(forIdentifier: .restingHeartRate) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) } ?? []
+            let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(average)
+        }
+        healthStore.execute(query)
+    }
+    
+    /// Fetches walking heart rate data within a specific date interval
+    func fetchWalkingHeartRateForInterval(_ interval: DateInterval, completion: @escaping (Double?) -> Void) {
+        guard let type = HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) } ?? []
+            let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(average)
+        }
+        healthStore.execute(query)
+    }
+    
+    /// Fetches respiratory rate data within a specific date interval
+    func fetchRespiratoryRateForInterval(_ interval: DateInterval, completion: @escaping (Double?) -> Void) {
+        guard let type = HKObjectType.quantityType(forIdentifier: .respiratoryRate) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) } ?? []
+            let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(average)
+        }
+        healthStore.execute(query)
+    }
+    
+    /// Fetches oxygen saturation data within a specific date interval
+    func fetchOxygenSaturationForInterval(_ interval: DateInterval, completion: @escaping (Double?) -> Void) {
+        guard let type = HKObjectType.quantityType(forIdentifier: .oxygenSaturation) else {
+            completion(nil)
+            return
+        }
+        
+        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit.percent()) } ?? []
+            let average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            completion(average)
+        }
+        healthStore.execute(query)
+    }
+    
+    // MARK: - Sleep Session Helper Methods
+    
+    private func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
+        let sortedSamples = samples.sorted { $0.startDate < $1.startDate }
+        var sessions: [SleepSession] = []
+        var currentSessionSamples: [HKCategorySample] = []
+        var sessionStart: Date?
+        
+        for sample in sortedSamples {
+            let isSleepSample = self.isSleepStage(sample)
+            
+            if isSleepSample {
+                if sessionStart == nil {
+                    sessionStart = sample.startDate
+                }
+                currentSessionSamples.append(sample)
+            } else {
+                // If we have a gap longer than 30 minutes, start a new session
+                if let lastSample = currentSessionSamples.last,
+                   sample.startDate.timeIntervalSince(lastSample.endDate) > 30 * 60 {
+                    // End current session
+                    if let start = sessionStart, !currentSessionSamples.isEmpty {
+                        let session = self.createSleepSession(from: currentSessionSamples, startTime: start)
+                        sessions.append(session)
+                    }
+                    
+                    // Start new session
+                    sessionStart = sample.startDate
+                    currentSessionSamples = [sample]
+                } else {
+                    currentSessionSamples.append(sample)
+                }
+            }
+        }
+        
+        // Add the last session
+        if let start = sessionStart, !currentSessionSamples.isEmpty {
+            let session = self.createSleepSession(from: currentSessionSamples, startTime: start)
+            sessions.append(session)
+        }
+        
+        return sessions
+    }
+    
+    private func isSleepStage(_ sample: HKCategorySample) -> Bool {
+        let value = HKCategoryValueSleepAnalysis(rawValue: sample.value)
+        return value == .asleepUnspecified || value == .asleepDeep || value == .asleepREM || value == .asleepCore || value == .inBed
+    }
+    
+    private func createSleepSession(from samples: [HKCategorySample], startTime: Date) -> SleepSession {
+        let endTime = samples.max(by: { $0.endDate < $1.endDate })?.endDate ?? startTime
+        return SleepSession(startTime: startTime, endTime: endTime, samples: samples)
+    }
 }
 
 // MARK: - Data Models (now in SharedDataModels.swift)

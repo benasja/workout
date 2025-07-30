@@ -54,10 +54,52 @@ final class HealthStatsViewModel: ObservableObject {
     // MARK: - Initialization
     
     init() {
+        // Check if we need to force recalculate baselines due to the new circular averaging algorithm
+        let lastRecalculationKey = "circularAveragingRecalculated"
+        if !UserDefaults.standard.bool(forKey: lastRecalculationKey) {
+            Task {
+                await forceRecalculateBaselines()
+                UserDefaults.standard.set(true, forKey: lastRecalculationKey)
+            }
+        }
+        
         // Load today's data by default
         Task {
             await loadData(for: Date())
         }
+    }
+    
+    /// Forces a recalculation of baselines using the new circular averaging algorithm
+    private func forceRecalculateBaselines() async {
+        await MainActor.run {
+            self.isCalculatingBaseline = true
+        }
+        
+        await withCheckedContinuation { continuation in
+            baselineEngine.forceRecalculateBaselines {
+                continuation.resume()
+            }
+        }
+        
+        await MainActor.run {
+            self.isCalculatingBaseline = false
+        }
+        
+        print("✅ Baselines recalculated with new circular averaging algorithm")
+    }
+    
+    /// Public method to manually force baseline recalculation (for debugging)
+    func manualForceRecalculateBaselines() async {
+        print("🔄 Manual baseline recalculation triggered...")
+        
+        // Clear the flag to force recalculation
+        UserDefaults.standard.removeObject(forKey: "circularAveragingRecalculated")
+        
+        await forceRecalculateBaselines()
+        UserDefaults.standard.set(true, forKey: "circularAveragingRecalculated")
+        
+        // Reload data to use new baselines
+        await loadData(for: currentDate)
     }
     
     // MARK: - Primary Data Loading Function
@@ -77,6 +119,25 @@ final class HealthStatsViewModel: ObservableObject {
             self.isLoading = true
             self.errorMessage = nil
             self.currentDate = date
+        }
+        
+        // Check if it's today and before 8 AM - recovery data won't be available yet
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        
+        if calendar.isDateInToday(date) && currentHour < 8 {
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = "Recovery data is not yet available for today. It will be calculated once you have completed your sleep session."
+                // Clear any existing data to show the error state
+                self.recoveryResult = nil
+                self.sleepResult = nil
+                self.recoveryComponents = []
+                self.sleepComponents = []
+                self.biomarkerTrends = [:]
+            }
+            return
         }
         
         // Step 1: Fetch raw health data
@@ -145,9 +206,21 @@ final class HealthStatsViewModel: ObservableObject {
     
     private func calculateRecoveryScore(for date: Date) async -> RecoveryScoreResult? {
         do {
+            // The new RecoveryScoreCalculator will automatically check for stored scores first
+            // and only calculate new ones if none exist for that date
+            // Since both HealthStatsViewModel and RecoveryScoreCalculator are @MainActor, we can call directly
             return try await recoveryCalculator.calculateRecoveryScore(for: date)
+        } catch RecoveryScoreError.noSleepSessionFound {
+            print("⚠️ No sleep session found for recovery calculation")
+            await MainActor.run {
+                self.errorMessage = "No sleep session found for this date. Recovery data requires a completed sleep session."
+            }
+            return nil
         } catch {
             print("⚠️ Failed to calculate recovery score: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to calculate recovery score: \(error.localizedDescription)"
+            }
             return nil
         }
     }
@@ -206,44 +279,37 @@ final class HealthStatsViewModel: ObservableObject {
             sleepComponents = [
                 ComponentData(
                     name: "Sleep Duration",
-                    score: Double(sleep.finalScore) * 0.3, // Approximate duration contribution
-                    maxScore: 25,
-                    description: "Sleep duration: \(sleep.timeAsleep.formattedAsHoursAndMinutes())",
+                    score: (sleep.durationComponent.score / 30.0) * 100, // Convert 27/30 to 90/100
+                    maxScore: 100,
+                    description: sleep.durationComponent.description,
                     color: AppColors.primary
-                ),
-                ComponentData(
-                    name: "Sleep Efficiency",
-                    score: sleep.efficiencyComponent,
-                    maxScore: 25,
-                    description: "Sleep efficiency: \(String(format: "%.1f", sleep.sleepEfficiency * 100))%",
-                    color: AppColors.success
                 ),
                 ComponentData(
                     name: "Deep Sleep",
-                    score: Double(sleep.finalScore) * 0.2, // Approximate deep sleep contribution
-                    maxScore: 25,
-                    description: "Deep sleep: \(sleep.deepSleep.formattedAsHoursAndMinutes())",
-                    color: AppColors.primary
+                    score: (sleep.deepSleepComponent.score / 25.0) * 100, // Convert to percentage of max
+                    maxScore: 100,
+                    description: sleep.deepSleepComponent.description,
+                    color: AppColors.success
                 ),
                 ComponentData(
                     name: "REM Sleep",
-                    score: Double(sleep.finalScore) * 0.2, // Approximate REM contribution
-                    maxScore: 25,
-                    description: "REM sleep: \(sleep.remSleep.formattedAsHoursAndMinutes())",
+                    score: (sleep.remSleepComponent.score / 20.0) * 100, // Convert to percentage of max
+                    maxScore: 100,
+                    description: sleep.remSleepComponent.description,
                     color: AppColors.accent
                 ),
                 ComponentData(
-                    name: "Sleep Quality",
-                    score: sleep.qualityComponent,
-                    maxScore: 25,
-                    description: "Overall restoration quality",
+                    name: "Sleep Efficiency",
+                    score: (Double(sleep.efficiencyComponentScore ?? 0) / 15.0) * 100, // Convert to percentage of max
+                    maxScore: 100,
+                    description: sleep.efficiencyComponentDescription ?? "",
                     color: AppColors.warning
                 ),
                 ComponentData(
-                    name: "Sleep Timing",
-                    score: sleep.timingComponent,
-                    maxScore: 25,
-                    description: "Bedtime consistency",
+                    name: "Sleep Consistency",
+                    score: (sleep.consistencyComponent.score / 10.0) * 100, // Convert to percentage of max
+                    maxScore: 100,
+                    description: sleep.consistencyComponent.description,
                     color: AppColors.error
                 )
             ]

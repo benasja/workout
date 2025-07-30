@@ -29,6 +29,7 @@ private let sharedContainer: ModelContainer = {
             DailySupplementRecord.self,
             HydrationLog.self,
             ScoreHistory.self,
+            RecoveryScore.self,
             // Fuel Log models
             FoodLog.self,
             CustomFood.self,
@@ -43,7 +44,6 @@ private let sharedContainer: ModelContainer = {
 struct workApp: App {
     @StateObject private var dataManager = DataManager(modelContext: sharedContainer.mainContext)
     @State private var hasSeededData = false
-    @State private var shouldResetDatabase = false
     @AppStorage("appearanceMode") private var appearanceMode: String = AppearanceMode.system.rawValue
 
     var body: some Scene {
@@ -52,23 +52,18 @@ struct workApp: App {
                 .environmentObject(dataManager)
                 .onAppear {
                     // print("App launched")
-                    if shouldResetDatabase {
-                        resetDatabase()
-                        shouldResetDatabase = false
-                    }
+                    
+                    // Initialize ScoreHistoryStore with model context
+                    ScoreHistoryStore.shared.initialize(with: sharedContainer.mainContext)
+                    
+                    // Seed data if not seeded yet
                     if !hasSeededData {
                         seedDataIfNeeded()
                         hasSeededData = true
                     }
                     
-                    // Initialize ScoreHistoryStore with model context
-                    ScoreHistoryStore.shared.initialize(with: sharedContainer.mainContext)
-                    
                     // Initialize baseline engine with your personal data
                     initializeBaselineEngine()
-                    
-                    // Check for database schema issues
-                    checkDatabaseSchema()
                 }
                 .preferredColorScheme(
                     AppearanceMode(rawValue: appearanceMode) == .light ? .light :
@@ -80,28 +75,46 @@ struct workApp: App {
     }
     
     private func seedDataIfNeeded() {
-        // print("Seeding data if needed")
+        print("🌱 Starting data seeding...")
         // This will be called when the app launches
         // The actual seeding will happen in the views when they access the model context
+        
+        // Seed exercise library and workout data
+        let modelContext = sharedContainer.mainContext
+        
+        // Seed exercises first
+        print("📚 Seeding exercise library...")
+        DataSeeder.seedExerciseLibrary(modelContext: modelContext)
+        
+        // Then seed workout programs
+        print("📋 Seeding workout programs...")
+        DataSeeder.seedSampleWorkoutPrograms(modelContext: modelContext)
+        
+        // Finally seed fake workout history
+        print("📊 Seeding workout history...")
+        DataSeeder.seedFakeWorkoutHistory(modelContext: modelContext)
+        
+        // Also seed the legacy programs for compatibility
+        print("🔄 Seeding legacy programs...")
+        DataSeeder.seedSamplePrograms(modelContext: modelContext)
+        
+        print("✅ Data seeding completed!")
     }
     
-    private func resetDatabase() {
-        print("🔄 Resetting database due to schema issues...")
-        
-        // Delete the existing database file
-        let containerURL = sharedContainer.configurations.first?.url
-        if let url = containerURL {
-            do {
-                try FileManager.default.removeItem(at: url)
-                print("✅ Database file deleted successfully")
-            } catch {
-                print("❌ Failed to delete database file: \(error)")
-            }
-        }
-        
-        // Force app restart to recreate database
-        exit(0)
+    // MARK: - Manual Data Management
+    
+    /// Force seed all test data (useful for testing or recovery)
+    func forceSeedAllData() {
+        print("🔄 Force seeding all test data...")
+        hasSeededData = false
+        seedDataIfNeeded()
     }
+    
+
+    
+
+    
+
     
     private func initializeBaselineEngine() {
         // print("Initializing baseline engine...")
@@ -124,21 +137,7 @@ struct workApp: App {
         }
     }
     
-    private func checkDatabaseSchema() {
-        // Test if the database can access FoodLog table
-        let context = sharedContainer.mainContext
-        var descriptor = FetchDescriptor<FoodLog>()
-        descriptor.fetchLimit = 1
-        
-        do {
-            _ = try context.fetch(descriptor)
-            print("✅ Database schema is valid")
-        } catch {
-            print("❌ Database schema error detected: \(error)")
-            print("🔄 Resetting database...")
-            resetDatabase()
-        }
-    }
+
     
     /// Forces a complete reset of all data to ensure only personal data is used
     private func forceDataReset() {

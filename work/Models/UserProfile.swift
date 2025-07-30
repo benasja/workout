@@ -14,14 +14,14 @@ final class UserProfile {
     var height: Double // in cm
     var unitRawValue: String
     var experienceLevelRawValue: String
-    var goals: [String]
+    var goals: [String]?
     
-    init(name: String = "", height: Double = 0, unit: WeightUnit = .kg, experienceLevel: ExperienceLevel = .beginner, goals: [String] = []) {
+    init(name: String = "", height: Double = 0, unit: WeightUnit = .kg, experienceLevel: ExperienceLevel = .beginner, goals: [String]? = []) {
         self.name = name
         self.height = height
         self.unitRawValue = unit.rawValue
         self.experienceLevelRawValue = experienceLevel.rawValue
-        self.goals = goals
+        self.goals = goals ?? []
     }
     
     var unit: WeightUnit {
@@ -33,6 +33,8 @@ final class UserProfile {
         get { ExperienceLevel(rawValue: experienceLevelRawValue) ?? .beginner }
         set { experienceLevelRawValue = newValue.rawValue }
     }
+    
+
     
     // Computed property to get current weight from weight tracker
     var currentWeight: Double {

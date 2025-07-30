@@ -4,6 +4,7 @@ enum RecoveryScoreError: Error {
     case healthKitNotAuthorized
     case noDataAvailable
     case calculationFailed
+    case noSleepSessionFound
 }
 
 struct RecoveryScoreResult {
@@ -14,6 +15,8 @@ struct RecoveryScoreResult {
     let stressComponent: RecoveryComponent
     let date: Date
     let directive: String
+    let sleepSessionStart: Date
+    let sleepSessionEnd: Date
     
     struct RecoveryComponent {
         let score: Double
@@ -25,37 +28,76 @@ struct RecoveryScoreResult {
     }
 }
 
+@MainActor
 class RecoveryScoreCalculator {
     static let shared = RecoveryScoreCalculator()
     private let baselineEngine = DynamicBaselineEngine.shared
-    
-    // Cache for static recovery scores - once calculated for a day, it doesn't change
-    private var recoveryScoreCache: [String: RecoveryScoreResult] = [:]
+    private let scoreStore = ScoreHistoryStore.shared
     
     private init() {}
     
-    /// Calculates the comprehensive Recovery Score for a given date using the FINAL CALIBRATED algorithm
+    /// Calculates the comprehensive Recovery Score for a given date using overnight data only
+    /// This creates a static snapshot of physiological recovery that doesn't change throughout the day
     /// Total_Recovery_Score = (HRV_Component * 0.50) + (RHR_Component * 0.25) + (Sleep_Component * 0.15) + (Stress_Component * 0.10)
-    /// Recovery scores are static - once calculated for a day, they don't change
     func calculateRecoveryScore(for date: Date) async throws -> RecoveryScoreResult {
         
-        // Check cache first - recovery scores should be static for each day
-        let cacheKey = cacheKey(for: date)
-        if let cachedResult = recoveryScoreCache[cacheKey] {
-            print("📋 Using cached recovery score for \(cacheKey)")
-            return cachedResult
+        // Check if we already have a stored recovery score for this date
+        if let storedScore = scoreStore.getRecoveryScore(for: date) {
+            print("📋 Using stored recovery score for \(date)")
+            return RecoveryScoreResult(
+                finalScore: storedScore.score,
+                hrvComponent: RecoveryScoreResult.RecoveryComponent(
+                    score: storedScore.hrvScore,
+                    weight: 0.50,
+                    contribution: storedScore.hrvScore * 0.50,
+                    baseline: storedScore.baselineHRV,
+                    currentValue: storedScore.hrvValue,
+                    description: storedScore.hrvDescription
+                ),
+                rhrComponent: RecoveryScoreResult.RecoveryComponent(
+                    score: storedScore.rhrScore,
+                    weight: 0.25,
+                    contribution: storedScore.rhrScore * 0.25,
+                    baseline: storedScore.baselineRHR,
+                    currentValue: storedScore.rhrValue,
+                    description: storedScore.rhrDescription
+                ),
+                sleepComponent: RecoveryScoreResult.RecoveryComponent(
+                    score: storedScore.sleepScore,
+                    weight: 0.15,
+                    contribution: storedScore.sleepScore * 0.15,
+                    baseline: nil,
+                    currentValue: Double(storedScore.sleepScoreValue ?? 0),
+                    description: storedScore.sleepDescription
+                ),
+                stressComponent: RecoveryScoreResult.RecoveryComponent(
+                    score: storedScore.stressScore,
+                    weight: 0.10,
+                    contribution: storedScore.stressScore * 0.10,
+                    baseline: nil,
+                    currentValue: nil,
+                    description: storedScore.stressDescription
+                ),
+                date: date,
+                directive: storedScore.directive,
+                sleepSessionStart: storedScore.sleepSessionStart,
+                sleepSessionEnd: storedScore.sleepSessionEnd
+            )
         }
         
-        // Use the same date logic as SleepScoreCalculator - date is the wake date
-        let sleepDate = date
+        // No stored score exists - calculate a new one using overnight data
+        print("🔄 Calculating new recovery score for \(date) using overnight data")
         
-        // Fetch all required health data for the date
-        let metrics = try await fetchHealthMetrics(for: date, sleepDate: sleepDate)
+        // Step 1: Find the main sleep session for this wake date
+        let sleepSession = try await fetchMainSleepSession(for: date)
         
-        // Get baseline data
+        // Step 2: Fetch all health data during the sleep session only
+        let metrics = try await fetchOvernightHealthMetrics(for: sleepSession)
+        
+        // Step 3: Get baseline data
         baselineEngine.loadBaselines()
         
-        // Calculate each component using the FINAL CALIBRATED algorithm
+        // Step 4: Calculate each component using the FINAL CALIBRATED algorithm
         let hrvComponent = calculateHRVComponent(
             currentHRV: metrics.hrv,
             baselineHRV: baselineEngine.hrv60,
@@ -80,7 +122,7 @@ class RecoveryScoreCalculator {
             baselineOxygenSaturation: baselineEngine.oxygenSaturation14
         )
         
-        // Calculate final weighted score using the FINAL CALIBRATED formula
+        // Step 5: Calculate final weighted score using the FINAL CALIBRATED formula
         let totalRecoveryScore = 
             hrvComponent.contribution +
             rhrComponent.contribution +
@@ -90,7 +132,7 @@ class RecoveryScoreCalculator {
         // Apply final clamping to ensure score is between 0 and 100
         let finalScore = Int(round(clamp(totalRecoveryScore, min: 0, max: 100)))
         
-        // Generate directive
+        // Step 6: Generate directive
         let directive = generateDirective(
             finalScore: finalScore,
             hrvComponent: hrvComponent,
@@ -106,16 +148,161 @@ class RecoveryScoreCalculator {
             sleepComponent: sleepComponent,
             stressComponent: stressComponent,
             date: date,
-            directive: directive
+            directive: directive,
+            sleepSessionStart: sleepSession.start,
+            sleepSessionEnd: sleepSession.end
         )
         
-        // Cache the result to make recovery scores static for each day
-        recoveryScoreCache[cacheKey] = result
+        // Step 7: Store the result permanently so it doesn't change throughout the day
+        let recoveryScore = RecoveryScore(
+            date: date,
+            score: finalScore,
+            sleepSessionStart: sleepSession.start,
+            sleepSessionEnd: sleepSession.end,
+            hrvScore: hrvComponent.score,
+            rhrScore: rhrComponent.score,
+            sleepScore: sleepComponent.score,
+            stressScore: stressComponent.score,
+            hrvValue: metrics.hrv,
+            rhrValue: metrics.rhr,
+            sleepScoreValue: metrics.sleepScore,
+            walkingHRValue: metrics.walkingHeartRate,
+            respiratoryRateValue: metrics.respiratoryRate,
+            oxygenSaturationValue: metrics.oxygenSaturation,
+            baselineHRV: baselineEngine.hrv60,
+            baselineRHR: baselineEngine.rhr60,
+            baselineWalkingHR: baselineEngine.walkingHR14,
+            baselineRespiratoryRate: baselineEngine.respiratoryRate14,
+            baselineOxygenSaturation: baselineEngine.oxygenSaturation14,
+            directive: directive,
+            hrvDescription: hrvComponent.description,
+            rhrDescription: rhrComponent.description,
+            sleepDescription: sleepComponent.description,
+            stressDescription: stressComponent.description
+        )
+        
+        scoreStore.saveRecoveryScore(recoveryScore)
+        print("✅ Stored recovery score for \(date) - will remain static throughout the day")
         
         return result
     }
     
-    // MARK: - Recalibrated Component Calculations
+    // MARK: - Overnight Data Fetching
+    
+    private func fetchMainSleepSession(for wakeDate: Date) async throws -> DateInterval {
+        return try await withCheckedThrowingContinuation { continuation in
+            HealthKitManager.shared.fetchMainSleepSession(for: wakeDate) { sleepInterval in
+                if let interval = sleepInterval {
+                    continuation.resume(returning: interval)
+                } else {
+                    continuation.resume(throwing: RecoveryScoreError.noSleepSessionFound)
+                }
+            }
+        }
+    }
+    
+    private func fetchOvernightHealthMetrics(for sleepSession: DateInterval) async throws -> (
+        hrv: Double?,
+        rhr: Double?,
+        sleepScore: Int?,
+        walkingHeartRate: Double?,
+        respiratoryRate: Double?,
+        oxygenSaturation: Double?,
+        enhancedHRV: EnhancedHRVData?
+    ) {
+        return try await withCheckedThrowingContinuation { continuation in
+            let group = DispatchGroup()
+            var hrv: Double?; var rhr: Double?; var sleepScore: Int? = nil
+            var walkingHR: Double?; var respiratoryRate: Double?; var oxygenSaturation: Double?
+            var enhancedHRV: EnhancedHRVData?
+            
+            // Fetch HRV during sleep session only
+            group.enter()
+            HealthKitManager.shared.fetchHRVForInterval(sleepSession) { value in
+                hrv = value
+                group.leave()
+            }
+            
+            // Fetch RHR during sleep session only (lowest value during sleep)
+            group.enter()
+            HealthKitManager.shared.fetchRHRForInterval(sleepSession) { value in
+                rhr = value
+                group.leave()
+            }
+            
+            // Fetch Sleep Score for the wake date
+            group.enter()
+            Task {
+                do {
+                    let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: sleepSession.end)
+                    sleepScore = sleepResult.finalScore
+                } catch {
+                    sleepScore = nil
+                }
+                group.leave()
+            }
+            
+            // Fetch stress metrics during sleep session
+            group.enter()
+            HealthKitManager.shared.fetchWalkingHeartRateForInterval(sleepSession) { value in
+                walkingHR = value
+                group.leave()
+            }
+            
+            group.enter()
+            HealthKitManager.shared.fetchRespiratoryRateForInterval(sleepSession) { value in
+                respiratoryRate = value
+                group.leave()
+            }
+            
+            group.enter()
+            HealthKitManager.shared.fetchOxygenSaturationForInterval(sleepSession) { value in
+                oxygenSaturation = value
+                group.leave()
+            }
+            
+            // Create enhanced HRV data if we have HRV
+            group.enter()
+            if let hrvValue = hrv {
+                // For now, create a simplified enhanced HRV data structure
+                let calculatedMetrics = AdvancedHRVMetrics(
+                    meanRR: 1000.0, // Placeholder
+                    sdnn: hrvValue,
+                    rmssd: hrvValue * 0.8, // Approximate relationship
+                    pnn50: 20.0, // Placeholder
+                    triangularIndex: 15.0, // Placeholder
+                    stressIndex: 1000 / (hrvValue * 15.0), // Approximate
+                    autonomicBalance: 0.8, // Placeholder
+                    recoveryScore: min(100, max(0, hrvValue * 2)), // Simple recovery score
+                    autonomicBalanceScore: 80.0 // Placeholder
+                )
+                
+                enhancedHRV = EnhancedHRVData(
+                    sdnn: hrvValue,
+                    rmssd: hrvValue * 0.8,
+                    heartRateSamples: [], // Empty for now
+                    calculatedMetrics: calculatedMetrics,
+                    hasBeatToBeatData: false,
+                    stressLevel: max(0, min(100, 100 - hrvValue))
+                )
+            }
+            group.leave()
+            
+            group.notify(queue: .main) {
+                continuation.resume(returning: (
+                    hrv: hrv,
+                    rhr: rhr,
+                    sleepScore: sleepScore,
+                    walkingHeartRate: walkingHR,
+                    respiratoryRate: respiratoryRate,
+                    oxygenSaturation: oxygenSaturation,
+                    enhancedHRV: enhancedHRV
+                ))
+            }
+        }
+    }
+    
+    // MARK: - Component Calculations (unchanged from original)
     
     /// HRV Component (50% Weight) - The Core of Readiness
     /// Uses the average of all overnight HRV (SDNN) samples from the deep HealthKit query
@@ -139,16 +326,19 @@ class RecoveryScoreCalculator {
         let hrvScore = calculateHrvScore(hrvRatio: hrvRatio)
         let contribution = hrvScore * 0.50
         
-        // Generate description based on performance
+        // Calculate percentage difference from baseline
+        let percentDiff = (hrv - baseline) / baseline * 100
+        
+        // Generate comprehensive description with baseline comparison and calculation explanation
         let description: String
         if hrvRatio >= 1.2 {
-            description = "Excellent HRV - \(String(format: "%.1f", hrv))ms (baseline: \(String(format: "%.1f", baseline))ms, +\(String(format: "%.1f", (hrvRatio-1)*100))%)"
+            description = "HRV vs \(String(format: "%.0f", baseline)) ms baseline: your HRV of \(String(format: "%.0f", hrv)) ms is +\(String(format: "%.0f", abs(percentDiff)))% above baseline (excellent recovery). Score: \(String(format: "%.0f", hrvScore))/100 (calculated using logarithmic growth formula: baseline ratio of 1.0 = 75 points, higher ratios get bonus points up to 100)"
         } else if hrvRatio >= 1.0 {
-            description = "Good HRV - \(String(format: "%.1f", hrv))ms (baseline: \(String(format: "%.1f", baseline))ms, +\(String(format: "%.1f", (hrvRatio-1)*100))%)"
+            description = "HRV vs \(String(format: "%.0f", baseline)) ms baseline: your HRV of \(String(format: "%.0f", hrv)) ms is +\(String(format: "%.0f", abs(percentDiff)))% above baseline (good recovery). Score: \(String(format: "%.0f", hrvScore))/100 (calculated using logarithmic growth formula: baseline ratio of 1.0 = 75 points, higher ratios get bonus points)"
         } else if hrvRatio >= 0.8 {
-            description = "Reduced HRV - \(String(format: "%.1f", hrv))ms (baseline: \(String(format: "%.1f", baseline))ms, -\(String(format: "%.1f", (1-hrvRatio)*100))%)"
+            description = "HRV vs \(String(format: "%.0f", baseline)) ms baseline: your HRV of \(String(format: "%.0f", hrv)) ms is -\(String(format: "%.0f", abs(percentDiff)))% below baseline (reduced recovery). Score: \(String(format: "%.0f", hrvScore))/100 (calculated using exponential decay formula: baseline ratio of 1.0 = 75 points, lower ratios get penalty points)"
         } else {
-            description = "Low HRV - \(String(format: "%.1f", hrv))ms (baseline: \(String(format: "%.1f", baseline))ms, -\(String(format: "%.1f", (1-hrvRatio)*100))%)"
+            description = "HRV vs \(String(format: "%.0f", baseline)) ms baseline: your HRV of \(String(format: "%.0f", hrv)) ms is -\(String(format: "%.0f", abs(percentDiff)))% below baseline (poor recovery). Score: \(String(format: "%.0f", hrvScore))/100 (calculated using exponential decay formula: baseline ratio of 1.0 = 75 points, lower ratios get penalty points down to 0)"
         }
         
         return RecoveryScoreResult.RecoveryComponent(
@@ -180,7 +370,12 @@ class RecoveryScoreCalculator {
     /// RHR Component (25% Weight)
     /// FINAL CALIBRATED Formula: Piecewise function with baseline of 75
     private func calculateRHRComponent(currentRHR: Double?, baselineRHR: Double?) -> RecoveryScoreResult.RecoveryComponent {
+        print("🔍 RHR Component Calculation:")
+        print("  - Current RHR: \(currentRHR?.description ?? "nil")")
+        print("  - Baseline RHR: \(baselineRHR?.description ?? "nil")")
+        
         guard let rhr = currentRHR, let baseline = baselineRHR, baseline > 0, rhr > 0 else {
+            print("❌ RHR Component: Missing data - returning neutral score")
             return RecoveryScoreResult.RecoveryComponent(
                 score: 50.0, // Neutral score when data is missing
                 weight: 0.25,
@@ -191,6 +386,8 @@ class RecoveryScoreCalculator {
             )
         }
         
+        print("✅ RHR Component: Valid data - calculating score")
+        
         // Calculate the ratio of baseline RHR to today's RHR (lower RHR is better)
         let rhrRatio = baseline / rhr
         
@@ -198,17 +395,22 @@ class RecoveryScoreCalculator {
         let rhrScore = calculateRhrScore(rhrRatio: rhrRatio)
         let contribution = rhrScore * 0.25
         
-        // Generate description
+        // Calculate percentage difference from baseline (for RHR, lower is better)
+        let percentDiff = (rhr - baseline) / baseline * 100
+        
+        // Generate comprehensive description with baseline comparison and calculation explanation
         let description: String
         if rhrRatio >= 1.05 {
-            description = "Excellent RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, -\(String(format: "%.1f", (1-rhrRatio)*100))%)"
+            description = "RHR vs \(String(format: "%.0f", baseline)) BPM baseline: your RHR of \(String(format: "%.0f", rhr)) BPM is -\(String(format: "%.0f", abs(percentDiff)))% below baseline (excellent cardiovascular recovery). Score: \(String(format: "%.0f", rhrScore))/100 (calculated using logarithmic growth formula: baseline ratio of 1.0 = 75 points, lower RHR gets bonus points up to 100)"
         } else if rhrRatio >= 1.0 {
-            description = "Good RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, -\(String(format: "%.1f", (1-rhrRatio)*100))%)"
+            description = "RHR vs \(String(format: "%.0f", baseline)) BPM baseline: your RHR of \(String(format: "%.0f", rhr)) BPM is -\(String(format: "%.0f", abs(percentDiff)))% below baseline (good cardiovascular recovery). Score: \(String(format: "%.0f", rhrScore))/100 (calculated using logarithmic growth formula: baseline ratio of 1.0 = 75 points, lower RHR gets bonus points)"
         } else if rhrRatio >= 0.95 {
-            description = "Elevated RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, +\(String(format: "%.1f", (1/rhrRatio-1)*100))%)"
+            description = "RHR vs \(String(format: "%.0f", baseline)) BPM baseline: your RHR of \(String(format: "%.0f", rhr)) BPM is +\(String(format: "%.0f", abs(percentDiff)))% above baseline (elevated cardiovascular load). Score: \(String(format: "%.0f", rhrScore))/100 (calculated using exponential decay formula: baseline ratio of 1.0 = 75 points, higher RHR gets penalty points)"
         } else {
-            description = "High RHR - \(String(format: "%.0f", rhr)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM, +\(String(format: "%.1f", (1/rhrRatio-1)*100))%)"
+            description = "RHR vs \(String(format: "%.0f", baseline)) BPM baseline: your RHR of \(String(format: "%.0f", rhr)) BPM is +\(String(format: "%.0f", abs(percentDiff)))% above baseline (high cardiovascular stress). Score: \(String(format: "%.0f", rhrScore))/100 (calculated using exponential decay formula: baseline ratio of 1.0 = 75 points, higher RHR gets penalty points down to 0)"
         }
+        
+        print("✅ RHR Component: Score calculated: \(rhrScore)/100")
         
         return RecoveryScoreResult.RecoveryComponent(
             score: rhrScore,
@@ -249,21 +451,23 @@ class RecoveryScoreCalculator {
             )
         }
         
-        let contribution = Double(score) * 0.15
+        let sleepScoreDouble = Double(score)
+        let contribution = sleepScoreDouble * 0.15
         
+        // Generate comprehensive description with calculation explanation
         let description: String
         if score >= 85 {
-            description = "Excellent sleep quality (\(score)/100)"
+            description = "Sleep Quality: \(score)/100 (excellent). Score calculated from sleep efficiency (30%), deep/REM sleep percentages (30%), heart rate dip during sleep (25%), and consistency vs your 14-day average bedtime/wake time (15%). 85+ = excellent recovery contribution"
         } else if score >= 70 {
-            description = "Good sleep quality (\(score)/100)"
-        } else if score >= 50 {
-            description = "Fair sleep quality (\(score)/100)"
+            description = "Sleep Quality: \(score)/100 (good). Score calculated from sleep efficiency (30%), deep/REM sleep percentages (30%), heart rate dip during sleep (25%), and consistency vs your 14-day average bedtime/wake time (15%). 70-84 = good recovery contribution"
+        } else if score >= 55 {
+            description = "Sleep Quality: \(score)/100 (moderate). Score calculated from sleep efficiency (30%), deep/REM sleep percentages (30%), heart rate dip during sleep (25%), and consistency vs your 14-day average bedtime/wake time (15%). 55-69 = moderate recovery contribution"
         } else {
-            description = "Poor sleep quality (\(score)/100)"
+            description = "Sleep Quality: \(score)/100 (poor). Score calculated from sleep efficiency (30%), deep/REM sleep percentages (30%), heart rate dip during sleep (25%), and consistency vs your 14-day average bedtime/wake time (15%). Below 55 = poor recovery contribution"
         }
         
         return RecoveryScoreResult.RecoveryComponent(
-            score: Double(score),
+            score: sleepScoreDouble,
             weight: 0.15,
             contribution: contribution,
             baseline: nil,
@@ -273,8 +477,7 @@ class RecoveryScoreCalculator {
     }
     
     /// Stress Component (10% Weight)
-    /// Measures deviation from the norm using WalkingHeartRateAverage, RespiratoryRate, and OxygenSaturation
-    /// Uses your actual Apple Health baselines for accurate stress assessment
+    /// Analyzes deviations from personal baselines for walking HR, respiratory rate, and oxygen saturation
     private func calculateStressComponent(
         walkingHR: Double?,
         respiratoryRate: Double?,
@@ -292,7 +495,7 @@ class RecoveryScoreCalculator {
             let deviation = abs((walkHR - baseline) / baseline) * 100
             deviations.append(deviation * 1.2) // Weight walking HR slightly higher
             availableMetrics.append("Walking Heart Rate")
-            descriptions.append("Walking HR: \(String(format: "%.0f", walkHR)) BPM (baseline: \(String(format: "%.0f", baseline)) BPM)")
+            descriptions.append("Walking HR: \(String(format: "%.0f", walkHR)) BPM vs \(String(format: "%.0f", baseline)) BPM baseline (\(String(format: "%.0f", deviation))% deviation)")
         }
         
         // Calculate respiratory rate deviation using your baseline
@@ -300,7 +503,7 @@ class RecoveryScoreCalculator {
             let deviation = abs((respRate - baseline) / baseline) * 100
             deviations.append(deviation * 1.5) // Weight respiratory rate higher as it's more sensitive
             availableMetrics.append("Respiratory Rate")
-            descriptions.append("Resp Rate: \(String(format: "%.1f", respRate)) BPM (baseline: \(String(format: "%.1f", baseline)) BPM)")
+            descriptions.append("Resp Rate: \(String(format: "%.1f", respRate)) BPM vs \(String(format: "%.1f", baseline)) BPM baseline (\(String(format: "%.1f", deviation))% deviation)")
         }
         
         // Calculate oxygen saturation deviation using your baseline
@@ -308,7 +511,7 @@ class RecoveryScoreCalculator {
             let deviation = abs((oxSat - baseline) / baseline) * 100
             deviations.append(deviation * 2.0) // Weight oxygen saturation highest as it's most critical
             availableMetrics.append("Oxygen Saturation")
-            descriptions.append("O2 Sat: \(String(format: "%.1f", oxSat))% (baseline: \(String(format: "%.1f", baseline))%)")
+            descriptions.append("O2 Sat: \(String(format: "%.1f", oxSat))% vs \(String(format: "%.1f", baseline))% baseline (\(String(format: "%.1f", deviation))% deviation)")
         }
 
         // If no metrics available, return neutral score
@@ -346,101 +549,22 @@ class RecoveryScoreCalculator {
         let clampedStressScore = clamp(stressScore, min: 0, max: 100)
         let contribution = clampedStressScore * 0.10
         
-        // Generate comprehensive description
+        // Generate comprehensive description with baseline comparisons and calculation explanation
         let metricsDescription = descriptions.joined(separator: ", ")
         let deviationDescription = String(format: "%.1f", averageDeviation)
-        let description = "Stress indicators: \(metricsDescription) - \(deviationDescription)% avg deviation from baseline"
+        let description = "Stress vs personal baselines: \(metricsDescription). Average deviation: \(deviationDescription)%. Score: \(String(format: "%.0f", clampedStressScore))/100 (calculated from weighted deviations: walking HR ×1.2, respiratory rate ×1.5, oxygen saturation ×2.0. Lower deviation = higher score, 0-3% = excellent, 3-8% = good, 8-15% = elevated, 15%+ = high stress)"
         
         return RecoveryScoreResult.RecoveryComponent(
             score: clampedStressScore,
             weight: 0.10,
             contribution: contribution,
             baseline: nil,
-            currentValue: averageDeviation,
+            currentValue: nil,
             description: description
         )
     }
     
-    // MARK: - Helper Methods
-    
-    private func clamp(_ value: Double, min: Double, max: Double) -> Double {
-        return Swift.max(min, Swift.min(value, max))
-    }
-    
-    private func fetchHealthMetrics(for date: Date, sleepDate: Date) async throws -> (hrv: Double?, rhr: Double?, sleepScore: Int?, walkingHeartRate: Double?, respiratoryRate: Double?, oxygenSaturation: Double?, enhancedHRV: EnhancedHRVData?) {
-        // Check authorization first
-        guard HealthKitManager.shared.checkAuthorizationStatus() else {
-            throw RecoveryScoreError.healthKitNotAuthorized
-        }
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            let group = DispatchGroup()
-            var hrv: Double?; var rhr: Double?; var sleepScore: Int? = nil
-            var walkingHR: Double?; var respiratoryRate: Double?; var oxygenSaturation: Double?
-            var enhancedHRV: EnhancedHRVData?
-            
-            // Fetch Enhanced HRV (includes beat-to-beat analysis)
-            group.enter()
-            HealthKitManager.shared.fetchEnhancedHRV(for: date) { enhancedData in
-                enhancedHRV = enhancedData
-                hrv = enhancedData?.sdnn
-                group.leave()
-            }
-            
-            // Fetch RHR
-            group.enter()
-            HealthKitManager.shared.fetchRHR(for: date) { value in
-                rhr = value
-                group.leave()
-            }
-            
-            // Fetch Sleep Score - use the same date logic as SleepScoreCalculator
-            group.enter()
-            Task {
-                do {
-                    let sleepResult = try await SleepScoreCalculator.shared.calculateSleepScore(for: sleepDate)
-                    sleepScore = sleepResult.finalScore
-                } catch {
-                    // Don't set a random value - keep it nil so the sleep component can handle missing data
-                    sleepScore = nil
-                }
-                group.leave()
-            }
-            
-            // Fetch Walking Heart Rate
-            group.enter()
-            HealthKitManager.shared.fetchWalkingHeartRate(for: date) { value in
-                walkingHR = value
-                group.leave()
-            }
-            
-            // Fetch Respiratory Rate
-            group.enter()
-            HealthKitManager.shared.fetchRespiratoryRate(for: date) { value in
-                respiratoryRate = value
-                group.leave()
-            }
-            
-            // Fetch Oxygen Saturation
-            group.enter()
-            HealthKitManager.shared.fetchOxygenSaturation(for: date) { value in
-                oxygenSaturation = value
-                group.leave()
-            }
-            
-            group.notify(queue: .main) {
-                continuation.resume(returning: (
-                    hrv: hrv,
-                    rhr: rhr,
-                    sleepScore: sleepScore,
-                    walkingHeartRate: walkingHR,
-                    respiratoryRate: respiratoryRate,
-                    oxygenSaturation: oxygenSaturation,
-                    enhancedHRV: enhancedHRV
-                ))
-            }
-        }
-    }
+    // MARK: - Directive Generation
     
     private func generateDirective(
         finalScore: Int,
@@ -469,17 +593,15 @@ class RecoveryScoreCalculator {
         }
     }
     
-    // MARK: - Cache Management
+    // MARK: - Utility Functions
     
-    private func cacheKey(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
+    private func clamp(_ value: Double, min: Double, max: Double) -> Double {
+        return Swift.max(min, Swift.min(max, value))
     }
     
-    /// Clear the recovery score cache (useful for testing or data refresh)
-    func clearCache() {
-        recoveryScoreCache.removeAll()
-        print("🗑️ Recovery score cache cleared")
+    /// Clear all stored recovery scores (useful for testing or data refresh)
+    func clearAllStoredScores() {
+        // This would need to be implemented in ScoreHistoryStore
+        print("🗑️ Recovery score clearing not yet implemented")
     }
 } 

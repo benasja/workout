@@ -1,6 +1,14 @@
 import Foundation
 import HealthKit
 
+// MARK: - Sleep Component Structure
+struct SleepComponent {
+    let score: Double
+    let weight: Double
+    let contribution: Double
+    let description: String
+}
+
 // MARK: - Sleep Score Result Structure
 struct SleepScoreResult {
     let finalScore: Int
@@ -9,6 +17,14 @@ struct SleepScoreResult {
     let qualityComponent: Double
     let timingComponent: Double
     let details: SleepScoreDetails
+    
+    // New: Detailed component breakdowns
+    let durationComponent: SleepComponent
+    let deepSleepComponent: SleepComponent
+    let remSleepComponent: SleepComponent
+    let consistencyComponent: SleepComponent
+    let efficiencyComponentDescription: String?
+    let efficiencyComponentScore: Int? // Add this to store the actual efficiency points
     
     // Convenience properties for easier access
     var directive: String {
@@ -62,8 +78,6 @@ struct SleepScoreDetails {
     let sleepEfficiency: Double
     let deepSleepPercentage: Double
     let remSleepPercentage: Double
-    let heartRateDipPercentage: Double?
-    
     init(timeInBed: TimeInterval, timeAsleep: TimeInterval, deepSleepDuration: TimeInterval, remSleepDuration: TimeInterval, averageHeartRate: Double?, dailyRestingHeartRate: Double?, bedtime: Date?, wakeTime: Date?, sleepEfficiency: Double, deepSleepPercentage: Double, remSleepPercentage: Double) {
         self.timeInBed = timeInBed
         self.timeAsleep = timeAsleep
@@ -76,13 +90,6 @@ struct SleepScoreDetails {
         self.sleepEfficiency = sleepEfficiency
         self.deepSleepPercentage = deepSleepPercentage
         self.remSleepPercentage = remSleepPercentage
-        
-        // Calculate heart rate dip percentage safely
-        if let hr = averageHeartRate, let rhr = dailyRestingHeartRate, rhr > 0 {
-            self.heartRateDipPercentage = (1 - (hr / rhr))
-        } else {
-            self.heartRateDipPercentage = nil
-        }
     }
 }
 
@@ -130,7 +137,6 @@ final class SleepScoreCalculator {
         let heartRateData: Double?
         let restingHeartRate: Double?
         let baselineData: (bedtime: Date?, wakeTime: Date?)
-        let enhancedHRVData: EnhancedHRVData?
         
         do {
             sleepData = try await fetchDetailedSleepData(for: sleepDate)
@@ -160,12 +166,7 @@ final class SleepScoreCalculator {
             baselineData = (nil, nil)
         }
         
-        do {
-            enhancedHRVData = try await fetchEnhancedHRVData(for: date)
-        } catch {
-            // print("⚠️ Failed to fetch enhanced HRV data, using fallback: \(error)")
-            enhancedHRVData = nil
-        }
+
         
         // Validate sleep data
         guard sleepData.timeInBed > 0, sleepData.timeAsleep > 0 else {
@@ -195,15 +196,6 @@ final class SleepScoreCalculator {
         // print("   Sleep Efficiency: \((sleepData.timeAsleep / sleepData.timeInBed) * 100)%")
         
         // Calculate components using the NEW RE-CALIBRATED algorithm
-        let restorationComponent = calculateRestorationComponent(
-            timeAsleep: sleepData.timeAsleep,
-            deepSleepDuration: sleepData.deepSleepDuration,
-            remSleepDuration: sleepData.remSleepDuration,
-            averageHeartRate: adjustedHeartRate,
-            dailyRestingHeartRate: effectiveRHR,
-            enhancedHRV: enhancedHRVData
-        )
-        
         let efficiencyComponent = calculateEfficiencyComponent(
             timeInBed: sleepData.timeInBed,
             timeAsleep: sleepData.timeAsleep
@@ -217,28 +209,40 @@ final class SleepScoreCalculator {
         )
         
         // =============================
-        // PERSONALIZED PERFORMANCE SLEEP SCORE V3.0
+        // SLEEP SCORE V4.0 - CORRECTED SYSTEM
         // =============================
-        let performanceScore = calculatePerformanceScore(
-            timeAsleepInSeconds: sleepData.timeAsleep,
-            deepSleepInSeconds: sleepData.deepSleepDuration,
-            remSleepInSeconds: sleepData.remSleepDuration,
-            timeInBedInSeconds: sleepData.timeInBed,
-            actualBedtime: sleepData.bedtime ?? sleepDate,
-            targetBedtime: baselineData.bedtime ?? sleepData.bedtime ?? sleepDate // Fallback to baseline bedtime if available, else actual
-        )
-
-        let finalScore = performanceScore // Replace previous scoring model
+        
+        // Calculate individual component scores using V3.0 point system
+        let durationPoints = getDurationPoints(for: sleepData.timeAsleep)
+        let deepSleepPoints = getDeepSleepPoints(for: sleepData.deepSleepDuration)
+        let remSleepPoints = getREMPoints(for: sleepData.remSleepDuration)
+        let efficiencyPoints = getEfficiencyPoints(timeAsleep: sleepData.timeAsleep, timeInBed: sleepData.timeInBed)
+        let consistencyPoints = Int(consistencyComponent)
+        
+        // Calculate final score using V4.0 weights - convert to percentage scale for consistency
+        let durationScorePercent = (Double(durationPoints) / 30.0) * 100
+        let deepSleepScorePercent = (Double(deepSleepPoints) / 25.0) * 100
+        let remSleepScorePercent = (Double(remSleepPoints) / 20.0) * 100
+        let efficiencyScorePercent = (Double(efficiencyPoints) / 15.0) * 100
+        let consistencyScorePercent = (Double(consistencyPoints) / 10.0) * 100
+        
+        let finalScore = Int(round(
+            (durationScorePercent * 0.30) +      // 30% weight
+            (deepSleepScorePercent * 0.25) +     // 25% weight
+            (remSleepScorePercent * 0.20) +      // 20% weight
+            (efficiencyScorePercent * 0.15) +    // 15% weight
+            (consistencyScorePercent * 0.10)     // 10% weight
+        ))
 
         // =============================
-        // Debug: Print V3.0 Performance Score breakdown
-        // print("🌙 Performance Sleep Score V3.0 Debug:")
-        // print("   Duration Points: \(getDurationPoints(for: sleepData.timeAsleep))")
-        // print("   Deep Sleep Points: \(getDeepSleepPoints(for: sleepData.deepSleepDuration))")
-        // print("   REM Points: \(getREMPoints(for: sleepData.remSleepDuration))")
-        // print("   Efficiency Points: \(getEfficiencyPoints(timeAsleep: sleepData.timeAsleep, timeInBed: sleepData.timeInBed))")
-        // print("   Onset Consistency Points: \(getOnsetConsistencyPoints(actualBedtime: sleepData.bedtime ?? sleepDate, targetBedtime: baselineData.bedtime ?? sleepData.bedtime ?? sleepDate))")
-        // print("   Final Score: \(finalScore)")
+        // Debug: Print V4.0 Sleep Score breakdown
+        // print("🌙 Sleep Score V4.0 Debug:")
+        // print("   Duration: \(durationPoints)/30 (30% weight)")
+        // print("   Deep Sleep: \(deepSleepPoints)/25 (25% weight)")
+        // print("   REM Sleep: \(remSleepPoints)/20 (20% weight)")
+        // print("   Efficiency: \(efficiencyPoints)/15 (15% weight)")
+        // print("   Consistency: \(consistencyPoints)/10 (10% weight)")
+        // print("   Final Score: \(finalScore)/100")
         // print("   Time in Bed: \(sleepData.timeInBed / 3600) hours")
         // print("   Time Asleep: \(sleepData.timeAsleep / 3600) hours")
         // print("   Deep Sleep: \(sleepData.deepSleepDuration / 3600) hours")
@@ -248,20 +252,15 @@ final class SleepScoreCalculator {
         // print("   Baseline Bedtime: \(baselineData.bedtime?.description ?? "nil")")
         // print("   Baseline Wake: \(baselineData.wakeTime?.description ?? "nil")")
         
-        // Helper function to calculate heart rate dip percentage
-        func calculateHeartRateDipPercentage() -> Double? {
-            if let hr = adjustedHeartRate, let rhr = effectiveRHR, rhr > 0 {
-                return (1 - (hr / rhr))
-            } else {
-                return nil
-            }
-        }
+
         
         // Generate key findings
         let keyFindings = generateKeyFindings(
-            restorationComponent: restorationComponent,
-            efficiencyComponent: efficiencyComponent,
-            consistencyComponent: consistencyComponent,
+            durationPoints: durationPoints,
+            deepSleepPoints: deepSleepPoints,
+            remSleepPoints: remSleepPoints,
+            efficiencyPoints: efficiencyPoints,
+            consistencyPoints: consistencyPoints,
             details: SleepScoreDetails(
                 timeInBed: sleepData.timeInBed,
                 timeAsleep: sleepData.timeAsleep,
@@ -277,11 +276,41 @@ final class SleepScoreCalculator {
             )
         )
         
+        // Generate detailed component descriptions
+        let durationComponent = generateDurationComponentDescription(
+            timeAsleep: sleepData.timeAsleep,
+            durationScore: durationPoints
+        )
+        
+        let deepSleepComponent = generateDeepSleepComponentDescription(
+            deepSleepDuration: sleepData.deepSleepDuration,
+            timeAsleep: sleepData.timeAsleep,
+            deepSleepPoints: deepSleepPoints
+        )
+        
+        let remSleepComponent = generateREMComponentDescription(
+            remSleepDuration: sleepData.remSleepDuration,
+            timeAsleep: sleepData.timeAsleep,
+            remScore: Double(remSleepPoints)
+        )
+        
+        let consistencyComponentDesc = generateConsistencyComponentDescription(
+            bedtime: sleepData.bedtime,
+            wakeTime: sleepData.wakeTime,
+            baselineBedtime: baselineData.bedtime,
+            baselineWakeTime: baselineData.wakeTime,
+            consistencyScore: consistencyComponent
+        )
+        
+        let efficiencyComponentDesc = generateEfficiencyComponentDescription(
+            efficiencyPoints: efficiencyPoints,
+            sleepEfficiency: sleepData.timeAsleep / sleepData.timeInBed
+        )
         let result = SleepScoreResult(
             finalScore: finalScore,
             keyFindings: keyFindings,
             efficiencyComponent: efficiencyComponent,
-            qualityComponent: restorationComponent, // Renamed to restoration
+            qualityComponent: 0.0, // No longer used
             timingComponent: consistencyComponent, // Renamed to consistency
             details: SleepScoreDetails(
                 timeInBed: sleepData.timeInBed,
@@ -295,7 +324,13 @@ final class SleepScoreCalculator {
                 sleepEfficiency: sleepData.timeAsleep / sleepData.timeInBed,
                 deepSleepPercentage: sleepData.deepSleepDuration / sleepData.timeAsleep,
                 remSleepPercentage: sleepData.remSleepDuration / sleepData.timeAsleep
-            )
+            ),
+            durationComponent: durationComponent,
+            deepSleepComponent: deepSleepComponent,
+            remSleepComponent: remSleepComponent,
+            consistencyComponent: consistencyComponentDesc,
+            efficiencyComponentDescription: efficiencyComponentDesc.description,
+            efficiencyComponentScore: getEfficiencyPoints(timeAsleep: sleepData.timeAsleep, timeInBed: sleepData.timeInBed)
         )
         
         // Cache the result
@@ -583,115 +618,10 @@ final class SleepScoreCalculator {
         }
     }
     
-    /// Restoration Component (45% Weight) - The Core of Sleep Quality
-    /// RE-CALIBRATED: More forgiving for deep sleep values just below minimum threshold
-    private func calculateRestorationComponent(
-        timeAsleep: TimeInterval,
-        deepSleepDuration: TimeInterval,
-        remSleepDuration: TimeInterval,
-        averageHeartRate: Double?,
-        dailyRestingHeartRate: Double?,
-        enhancedHRV: EnhancedHRVData?
-    ) -> Double {
-        guard timeAsleep > 0 else { return 0 }
-        
-        // Deep Sleep Score (40% of restoration component) - MORE FORGIVING
-        let deepSleepPercentage = deepSleepDuration / timeAsleep
-        let deepScore = normalizeDeepSleepPercentageRecalibrated(deepSleepPercentage)
-        
-        // REM Sleep Score (40% of restoration component)
-        let remSleepPercentage = remSleepDuration / timeAsleep
-        let remScore = normalizeREMSleepPercentage(remSleepPercentage)
-        
-        // HR Dip score (20% of restoration component) - only calculate if we have both values
-        let hrDipScore: Double
-        if let avgHR = averageHeartRate, let rhr = dailyRestingHeartRate {
-            hrDipScore = calculateHeartRateDipScore(averageHeartRate: avgHR, dailyRestingHeartRate: rhr)
-        } else {
-            hrDipScore = 75.0 // Higher neutral score when heart rate data is missing
-        }
-        
-        // Calculate weighted average
-        let restorationScore = (deepScore * 0.40) + (remScore * 0.40) + (hrDipScore * 0.20)
-        
-        // print("🔍 RE-CALIBRATED Restoration Component Debug:")
-        // print("   Deep Sleep: \(deepSleepPercentage * 100)% -> \(deepScore)")
-        // print("   REM Sleep: \(remSleepPercentage * 100)% -> \(remScore)")
-        // print("   HR Dip: \(hrDipScore)")
-        // print("   Final Restoration Score: \(restorationScore)")
-        
-        return restorationScore
-    }
+
+
     
-    /// RE-CALIBRATED: Normalizes Deep Sleep percentage - MORE FORGIVING for values just below minimum
-    private func normalizeDeepSleepPercentageRecalibrated(_ percentage: Double) -> Double {
-        let idealMin = 0.13 // 13%
-        let idealMax = 0.23 // 23%
-        
-        if percentage >= idealMin && percentage <= idealMax {
-            return 100.0 // Perfect score for ideal range
-        } else if percentage < idealMin {
-            // MORE FORGIVING: Smoother curve for values below ideal
-            // Give more credit for values close to the minimum (like 10-12%)
-            if percentage >= 0.10 { // 10% or above gets significant credit
-                let ratio = percentage / idealMin
-                return 60 + (ratio * 40) // Maps 10% -> 91, 12% -> 97
-            } else {
-                // Still penalize very low values
-                let ratio = percentage / 0.10
-                return clamp(ratio * 60, min: 0, max: 60)
-            }
-        } else {
-            // Above ideal: linear decrease from 100 to 0
-            let excess = percentage - idealMax
-            let maxExcess = 0.30 - idealMax // Allow up to 30% before zero score
-            let ratio = 1.0 - (excess / maxExcess)
-            return clamp(ratio * 100, min: 0, max: 100)
-        }
-    }
-    
-    /// Normalizes REM Sleep percentage against ideal 20-25% range
-    private func normalizeREMSleepPercentage(_ percentage: Double) -> Double {
-        let idealMin = 0.20 // 20%
-        let idealMax = 0.25 // 25%
-        
-        if percentage >= idealMin && percentage <= idealMax {
-            return 100.0 // Perfect score for ideal range
-        } else if percentage < idealMin {
-            // Below ideal: linear decrease from 100 to 0
-            let ratio = percentage / idealMin
-            return clamp(ratio * 100, min: 0, max: 100)
-        } else {
-            // Above ideal: linear decrease from 100 to 0
-            let excess = percentage - idealMax
-            let maxExcess = 0.35 - idealMax // Allow up to 35% before zero score
-            let ratio = 1.0 - (excess / maxExcess)
-            return clamp(ratio * 100, min: 0, max: 100)
-        }
-    }
-    
-    /// Calculates Heart Rate Dip Score
-    /// Formula: 1 - (Average_Sleeping_HR / Daily_RHR)
-    private func calculateHeartRateDipScore(averageHeartRate: Double, dailyRestingHeartRate: Double) -> Double {
-        guard dailyRestingHeartRate > 0 else { return 75.0 } // Higher neutral score if no RHR data
-        
-        let hrDip = 1.0 - (averageHeartRate / dailyRestingHeartRate)
-        
-        // Normalize the dip to a 0-100 score
-        // A dip of 0.15 (15%) or more is excellent
-        // A dip of 0.05 (5%) or less is poor
-        if hrDip >= 0.15 {
-            return 100.0 // Excellent dip
-        } else if hrDip >= 0.10 {
-            return 80.0 + (hrDip - 0.10) * 400.0 // Good dip
-        } else if hrDip >= 0.05 {
-            return 60.0 + (hrDip - 0.05) * 400.0 // Fair dip
-        } else if hrDip >= 0.0 {
-            return 60.0 * (hrDip / 0.05) // Poor dip
-        } else {
-            return 0.0 // Negative dip (sleeping HR higher than RHR)
-        }
-    }
+
     
     /// Efficiency Component (30% Weight)
     /// Metric: Sleep_Efficiency = (Time_Asleep / Time_in_Bed)
@@ -720,43 +650,54 @@ final class SleepScoreCalculator {
         baselineBedtime: Date?,
         baselineWakeTime: Date?
     ) -> Double {
-        guard let bedtime = bedtime, let baselineBedtime = baselineBedtime else {
-            return 75.0 // Higher neutral score when baseline data is missing
-        }
+        guard let bedtime = bedtime else { return 0 }
+        
+        // Get reasonable target bedtime
+        let targetBedtime = getReasonableTargetBedtime(baselineBedtime: baselineBedtime, actualBedtime: bedtime)
         
         // Calculate deviation in minutes
-        let totalDeviationInMinutes = abs(bedtime.timeIntervalSince(baselineBedtime)) / 60.0
+        let calendar = Calendar.current
+        let bedtimeComponents = calendar.dateComponents([.hour, .minute], from: bedtime)
+        let targetComponents = calendar.dateComponents([.hour, .minute], from: targetBedtime)
         
-        // Apply the RE-CALIBRATED scoring formula
-        let consistencyScore = 100 * Foundation.exp(-0.005 * totalDeviationInMinutes)
+        let actualMinutes = (bedtimeComponents.hour ?? 0) * 60 + (bedtimeComponents.minute ?? 0)
+        let targetMinutes = (targetComponents.hour ?? 0) * 60 + (targetComponents.minute ?? 0)
         
-        // print("🔍 RE-CALIBRATED Consistency Component Debug:")
-        // print("   Bedtime: \(bedtime)")
-        // print("   Baseline Bedtime: \(baselineBedtime)")
-        // print("   Total Deviation: \(totalDeviationInMinutes) minutes")
-        // print("   Consistency Score: \(consistencyScore)")
+        // Calculate deviation - one-sided window: perfect score until target, then linear penalty
+        let deviationInMinutes: Double
+        if actualMinutes >= targetMinutes {
+            // Actual time is later than target - apply penalty
+            deviationInMinutes = Double(actualMinutes - targetMinutes)
+        } else {
+            // Actual time is earlier than target
+            let bedtimeComponents = calendar.dateComponents([.hour, .minute], from: bedtime)
+            let hour = bedtimeComponents.hour ?? 0
+            
+            if hour < 12 {
+                // After midnight (0-11 AM) - this is very late
+                deviationInMinutes = Double((24 * 60 - targetMinutes) + actualMinutes)
+            } else {
+                // Before midnight but earlier than target - perfect score
+                deviationInMinutes = 0.0
+            }
+        }
         
-        return consistencyScore
+        // New scoring system: one-sided window with linear penalty
+        // Perfect score (10 points): Any time before or at target (11:45 PM)
+        // Linear penalty: -1 point per 10 minutes after target
+        
+        if deviationInMinutes == 0 {
+            // Before or at target - perfect score
+            return 10.0
+        } else {
+            // After target - apply linear penalty
+            let penaltyPoints = deviationInMinutes / 10.0
+            let score = max(0, 10.0 - penaltyPoints)
+            return score
+        }
     }
     
-    // MARK: - Performance Sleep Score V3.0 Helpers
-
-    private func calculatePerformanceScore(
-        timeAsleepInSeconds: Double,
-        deepSleepInSeconds: Double,
-        remSleepInSeconds: Double,
-        timeInBedInSeconds: Double,
-        actualBedtime: Date,
-        targetBedtime: Date
-    ) -> Int {
-        let durationPts = getDurationPoints(for: timeAsleepInSeconds)
-        let deepPts = getDeepSleepPoints(for: deepSleepInSeconds)
-        let remPts = getREMPoints(for: remSleepInSeconds)
-        let efficiencyPts = getEfficiencyPoints(timeAsleep: timeAsleepInSeconds, timeInBed: timeInBedInSeconds)
-        let onsetPts = getOnsetConsistencyPoints(actualBedtime: actualBedtime, targetBedtime: targetBedtime)
-        let total = durationPts + deepPts + remPts + efficiencyPts + onsetPts
-        return max(0, min(100, total))
-    }
+    // MARK: - Sleep Score V4.0 Helpers
 
     private func getDurationPoints(for timeAsleepInSeconds: Double) -> Int {
         let minutes = timeAsleepInSeconds / 60
@@ -795,15 +736,13 @@ final class SleepScoreCalculator {
     private func getREMPoints(for remSleepInSeconds: Double) -> Int {
         let minutes = remSleepInSeconds / 60
         switch minutes {
-        case let m where m >= 120: return 22 // Bonus for 2h+
-        case 105..<120: return 20
-        case 90..<105: return 17
-        case 75..<90: return 14
-        case 60..<75: return 10
-        case 0..<60:
-            return Int((minutes / 60.0) * 5.0)
-        default:
-            return 0
+        case let m where m >= 120: return 20  // 2h+ (bonus, now capped at 20)
+        case 105..<120: return 18             // 1h 45m - 2h
+        case 90..<105: return 16              // 1h 30m - 1h 45m
+        case 75..<90: return 13               // 1h 15m - 1h 30m
+        case 60..<75: return 10               // 1h - 1h 15m
+        case 0..<60: return Int((minutes / 60.0) * 5.0)  // Proportional, up to 5
+        default: return 0
         }
     }
 
@@ -815,20 +754,6 @@ final class SleepScoreCalculator {
         case 92.5..<95: return 12
         case 90..<92.5: return 10
         case 85..<90: return 5
-        default: return 0
-        }
-    }
-
-    private func getOnsetConsistencyPoints(actualBedtime: Date, targetBedtime: Date) -> Int {
-        let calendar = Calendar.current
-        let componentsActual = calendar.dateComponents([.hour, .minute], from: actualBedtime)
-        let componentsTarget = calendar.dateComponents([.hour, .minute], from: targetBedtime)
-        guard let actualDate = calendar.date(from: componentsActual), let targetDate = calendar.date(from: componentsTarget) else { return 0 }
-        let diff = abs(actualDate.timeIntervalSince(targetDate))
-        switch diff {
-        case 0..<(15*60): return 10
-        case (15*60)..<(30*60): return 7
-        case (30*60)..<(45*60): return 4
         default: return 0
         }
     }
@@ -900,32 +825,14 @@ final class SleepScoreCalculator {
     }
     
     private func generateKeyFindings(
-        restorationComponent: Double,
-        efficiencyComponent: Double,
-        consistencyComponent: Double,
+        durationPoints: Int,
+        deepSleepPoints: Int,
+        remSleepPoints: Int,
+        efficiencyPoints: Int,
+        consistencyPoints: Int,
         details: SleepScoreDetails
     ) -> [String] {
         var findings: [String] = []
-        
-        // Restoration findings
-        let restorationScore = restorationComponent * 100
-        if restorationScore >= 80 {
-            findings.append("Excellent restorative sleep quality (\(Int(restorationScore))%)")
-        } else if restorationScore >= 60 {
-            findings.append("Good restorative sleep quality (\(Int(restorationScore))%)")
-        } else {
-            findings.append("Restorative sleep quality could improve (\(Int(restorationScore))%)")
-        }
-        
-        // Efficiency findings
-        let efficiency = details.sleepEfficiency * 100
-        if efficiency >= 90 {
-            findings.append("Excellent sleep efficiency (\(Int(efficiency))%)")
-        } else if efficiency >= 80 {
-            findings.append("Good sleep efficiency (\(Int(efficiency))%)")
-        } else {
-            findings.append("Sleep efficiency could improve (\(Int(efficiency))%)")
-        }
         
         // Duration findings
         let hoursAsleep = details.timeAsleep / 3600
@@ -963,21 +870,20 @@ final class SleepScoreCalculator {
             findings.append("REM sleep above optimal (\(remPercentageStr)%)")
         }
         
-        // Heart rate dip findings
-        if let hrDip = details.heartRateDipPercentage {
-            let dipPercent = hrDip * 100
-            let dipPercentStr = "\(Double(round(10 * dipPercent) / 10))"
-            if dipPercent >= 10 {
-                findings.append("Strong heart rate recovery during sleep (\(dipPercentStr)% dip)")
-            } else if dipPercent >= 5 {
-                findings.append("Moderate heart rate recovery during sleep (\(dipPercentStr)% dip)")
-            } else {
-                findings.append("Limited heart rate recovery during sleep (\(dipPercentStr)% dip)")
-            }
+        // Efficiency findings
+        let efficiency = details.sleepEfficiency * 100
+        if efficiency >= 90 {
+            findings.append("Excellent sleep efficiency (\(Int(efficiency))%)")
+        } else if efficiency >= 80 {
+            findings.append("Good sleep efficiency (\(Int(efficiency))%)")
+        } else {
+            findings.append("Sleep efficiency could improve (\(Int(efficiency))%)")
         }
         
+
+        
         // Consistency findings
-        let consistencyScore = consistencyComponent * 100
+        let consistencyScore = consistencyPoints
         if consistencyScore >= 80 {
             findings.append("Consistent sleep schedule maintained")
         } else if consistencyScore >= 60 {
@@ -1076,6 +982,200 @@ final class SleepScoreCalculator {
             totalDuration: totalDuration,
             timeAsleep: timeAsleep
         )
+    }
+
+    // MARK: - Component Description Generators
+
+    private func formatTimeInterval(_ timeInterval: TimeInterval) -> String {
+        let hours = Int(timeInterval) / 3600
+        let minutes = Int(timeInterval) % 3600 / 60
+        return "\(hours)h \(minutes)m"
+    }
+
+    private func generateDurationComponentDescription(timeAsleep: TimeInterval, durationScore: Int) -> SleepComponent {
+        let hoursAsleep = timeAsleep / 3600
+        let timeAsleepStr = formatTimeInterval(timeAsleep)
+        
+        let description: String
+        if hoursAsleep >= 7.5 && hoursAsleep <= 8.5 {
+            description = "Sleep Duration: \(timeAsleepStr) (optimal range 7h 30m - 8h 30m). Score: \(durationScore)/30 (30% of total). V4.0 scoring system."
+        } else if hoursAsleep >= 6.0 && hoursAsleep < 7.5 {
+            description = "Sleep Duration: \(timeAsleepStr) (below optimal range 7h 30m - 8h 30m). Score: \(durationScore)/30 (30% of total). V4.0 scoring system."
+        } else if hoursAsleep < 6.0 {
+            description = "Sleep Duration: \(timeAsleepStr) (significantly below recommended minimum). Score: \(durationScore)/30 (30% of total). V4.0 scoring system."
+        } else {
+            description = "Sleep Duration: \(timeAsleepStr) (above optimal range 7h 30m - 8h 30m). Score: \(durationScore)/30 (30% of total). V4.0 scoring system."
+        }
+        
+        return SleepComponent(score: Double(durationScore), weight: 30, contribution: Double(durationScore) * 0.3, description: description)
+    }
+
+    private func generateDeepSleepComponentDescription(
+        deepSleepDuration: TimeInterval,
+        timeAsleep: TimeInterval,
+        deepSleepPoints: Int
+    ) -> SleepComponent {
+        let deepTimeStr = formatTimeInterval(deepSleepDuration)
+        let deepPercentage = deepSleepDuration / timeAsleep
+        
+        let description: String
+        let deepMinutes = deepSleepDuration / 60
+        if deepMinutes >= 105 {
+            description = "Deep Sleep: \(deepTimeStr) (excellent). Score: \(deepSleepPoints)/25 (25% of total). V4.0 scoring system."
+        } else if deepPercentage >= 0.13 && deepPercentage <= 0.23 {
+            description = "Deep Sleep: \(deepTimeStr) (optimal range 13-23%). Score: \(deepSleepPoints)/25 (25% of total). V4.0 scoring system."
+        } else if deepPercentage < 0.13 {
+            description = "Deep Sleep: \(deepTimeStr) (below optimal range 13-23%). Score: \(deepSleepPoints)/25 (25% of total). V4.0 scoring system."
+        } else {
+            description = "Deep Sleep: \(deepTimeStr) (above optimal range 13-23%). Score: \(deepSleepPoints)/25 (25% of total). V4.0 scoring system."
+        }
+        return SleepComponent(score: Double(deepSleepPoints), weight: 25, contribution: Double(deepSleepPoints) * 0.25, description: description)
+    }
+
+    private func generateConsistencyComponentDescription(
+        bedtime: Date?,
+        wakeTime: Date?,
+        baselineBedtime: Date?,
+        baselineWakeTime: Date?,
+        consistencyScore: Double
+    ) -> SleepComponent {
+        guard let bedtime = bedtime else {
+            return SleepComponent(score: consistencyScore, weight: 10, contribution: consistencyScore * 0.10, description: "Sleep Consistency: \(Int(consistencyScore))/10 (10% of total, bedtime data unavailable).")
+        }
+        
+        // Get a more reasonable baseline using 7-day average with validation
+        let reasonableTargetBedtime = getReasonableTargetBedtime(baselineBedtime: baselineBedtime, actualBedtime: bedtime)
+        
+        // Fix the bedtime deviation calculation by comparing only the time components
+        let calendar = Calendar.current
+        let bedtimeComponents = calendar.dateComponents([.hour, .minute], from: bedtime)
+        let targetComponents = calendar.dateComponents([.hour, .minute], from: reasonableTargetBedtime)
+        
+        // Convert to minutes since midnight for easier comparison
+        let actualMinutes = (bedtimeComponents.hour ?? 0) * 60 + (bedtimeComponents.minute ?? 0)
+        let targetMinutes = (targetComponents.hour ?? 0) * 60 + (targetComponents.minute ?? 0)
+        
+        // Calculate deviation, handling midnight wrap-around
+        let deviationInMinutes: Double
+        let timingDirection: String
+        
+        if actualMinutes >= targetMinutes {
+            // Actual time is later than target (or same)
+            deviationInMinutes = Double(actualMinutes - targetMinutes)
+            timingDirection = "later"
+        } else {
+            // Actual time is earlier than target (crossed midnight)
+            // For example: target 23:45 (1415 min) vs actual 00:29 (29 min)
+            // Deviation = (1440 - 1415) + 29 = 25 + 29 = 54 minutes later
+            deviationInMinutes = Double((24 * 60 - targetMinutes) + actualMinutes)
+            timingDirection = "later"
+        }
+        
+        let consistencyScoreInt = Int(consistencyScore)
+        
+        // Format actual and target bedtimes
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        let actualBedtimeStr = timeFormatter.string(from: bedtime)
+        let targetBedtimeStr = timeFormatter.string(from: reasonableTargetBedtime)
+        
+        // Determine if early or late
+        // let timingDirection = actualTime > targetTime ? "later" : "earlier" // This line is no longer needed
+        
+        // Determine if using baseline or default
+        let sourceDescription: String
+        if let sevenDayBaseline = DynamicBaselineEngine.shared.bedtime7, isReasonableBedtime(sevenDayBaseline) {
+            sourceDescription = "7-day average"
+        } else if let baseline = baselineBedtime, isReasonableBedtime(baseline) {
+            sourceDescription = "recent average"
+        } else {
+            sourceDescription = "recommended range"
+        }
+        
+        let description = "Sleep Consistency: \(consistencyScoreInt)/10 (10% of total). You went to bed at \(actualBedtimeStr), but your target bedtime is \(targetBedtimeStr) (\(sourceDescription)). You were \(String(format: "%.0f", deviationInMinutes)) minutes \(timingDirection) than optimal. Score: Perfect (10/10) if before or at target, then -1 point per 10 minutes after target. V4.0 scoring system."
+        
+        return SleepComponent(score: consistencyScore, weight: 10, contribution: consistencyScore * 0.10, description: description)
+    }
+    
+    // Helper function to get a reasonable target bedtime
+    private func getReasonableTargetBedtime(baselineBedtime: Date?, actualBedtime: Date) -> Date {
+        // Use 7-day baseline from DynamicBaselineEngine if available and reasonable
+        let sevenDayBaseline = DynamicBaselineEngine.shared.bedtime7
+        
+        if let baseline = sevenDayBaseline ?? baselineBedtime, isReasonableBedtime(baseline) {
+            return baseline
+        }
+        
+        // If baseline is unreasonable (like 1:37 AM), create a smart default
+        let calendar = Calendar.current
+        let actualComponents = calendar.dateComponents([.hour, .minute], from: actualBedtime)
+        let actualHour = actualComponents.hour ?? 22
+        
+        // Smart default logic: If your actual bedtime is very late, suggest an earlier target
+        let defaultHour: Int
+        if actualHour >= 0 && actualHour <= 3 {
+            // If you're going to bed between midnight and 3 AM, suggest 11:45 PM as target
+            defaultHour = 23
+        } else if actualHour >= 20 && actualHour <= 23 {
+            // If you're going to bed between 8 PM and 11 PM, use that as target
+            defaultHour = actualHour
+        } else if actualHour >= 4 && actualHour <= 6 {
+            // If you're going to bed between 4 AM and 6 AM, suggest 11:45 PM as target
+            defaultHour = 23
+        } else {
+            // For any other unusual times, default to 11:45 PM
+            defaultHour = 23
+        }
+        
+        let today = calendar.startOfDay(for: actualBedtime)
+        let targetDate = calendar.date(bySettingHour: defaultHour, minute: 45, second: 0, of: today) ?? actualBedtime
+        return targetDate
+    }
+    
+    // Helper function to validate if a bedtime is reasonable
+    private func isReasonableBedtime(_ bedtime: Date) -> Bool {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.hour, .minute], from: bedtime)
+        guard let hour = components.hour else { return false }
+        
+        // Consider reasonable bedtime between 8 PM and 11:59 PM (not after midnight)
+        // This is more strict - we don't want to suggest going to bed after midnight as a target
+        return hour >= 20 && hour <= 23
+    }
+
+    private func generateREMComponentDescription(remSleepDuration: TimeInterval, timeAsleep: TimeInterval, remScore: Double) -> SleepComponent {
+        let remTimeStr = formatTimeInterval(remSleepDuration)
+        let remPercentage = remSleepDuration / timeAsleep
+        
+        let description: String
+        let remMinutes = remSleepDuration / 60
+        if remMinutes >= 120 {
+            description = "REM Sleep: \(remTimeStr) (excellent). Score: \(Int(remScore))/20 (20% of total). V4.0 scoring system."
+        } else if remPercentage >= 0.20 && remPercentage <= 0.25 {
+            description = "REM Sleep: \(remTimeStr) (optimal range 20-25%). Score: \(Int(remScore))/20 (20% of total). V4.0 scoring system."
+        } else if remPercentage < 0.20 {
+            description = "REM Sleep: \(remTimeStr) (below optimal range 20-25%). Score: \(Int(remScore))/20 (20% of total). V4.0 scoring system."
+        } else {
+            description = "REM Sleep: \(remTimeStr) (above optimal range 20-25%). Score: \(Int(remScore))/20 (20% of total). V4.0 scoring system."
+        }
+        return SleepComponent(score: remScore, weight: 20, contribution: remScore * 0.2, description: description)
+    }
+
+    private func generateEfficiencyComponentDescription(efficiencyPoints: Int, sleepEfficiency: Double) -> SleepComponent {
+        // sleepEfficiency is already a percentage (0-1), so multiply by 100 for display
+        let efficiency = sleepEfficiency * 100
+        
+        let description: String
+        if efficiency >= 95 {
+            description = "Sleep Efficiency: \(String(format: "%.1f", efficiency))% (excellent). Score: \(efficiencyPoints)/15 (15% of total). V4.0 scoring system."
+        } else if efficiency >= 90 {
+            description = "Sleep Efficiency: \(String(format: "%.1f", efficiency))% (good). Score: \(efficiencyPoints)/15 (15% of total). V4.0 scoring system."
+        } else if efficiency >= 85 {
+            description = "Sleep Efficiency: \(String(format: "%.1f", efficiency))% (fair). Score: \(efficiencyPoints)/15 (15% of total). V4.0 scoring system."
+        } else {
+            description = "Sleep Efficiency: \(String(format: "%.1f", efficiency))% (could improve). Score: \(efficiencyPoints)/15 (15% of total). V4.0 scoring system."
+        }
+        return SleepComponent(score: Double(efficiencyPoints), weight: 15, contribution: Double(efficiencyPoints) * 0.15, description: description)
     }
 }
 

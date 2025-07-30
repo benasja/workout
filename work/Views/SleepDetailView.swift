@@ -52,7 +52,8 @@ struct SleepDetailView: View {
                                 ScoreBreakdownRow(
                                     component: component.name,
                                     score: component.score,
-                                    maxScore: component.maxScore
+                                    maxScore: component.maxScore,
+                                    description: component.description
                                 )
                             }
                         }
@@ -61,54 +62,7 @@ struct SleepDetailView: View {
                     .background(AppColors.secondaryBackground)
                     .cornerRadius(16)
                     
-                    // Sleep Insights Card (Three-Layer Model)
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Headline
-                        Text(SleepAnalysisEngine.generateInsights(from: sleepResult).headline)
-                            .font(.headline)
-                            .foregroundColor(.primary)
-
-                        // Component Breakdown
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(SleepAnalysisEngine.generateInsights(from: sleepResult).componentBreakdown) { component in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "circle.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(color(for: component.status))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        HStack {
-                                            Text(component.metricName)
-                                                .font(.subheadline)
-                                                .foregroundColor(.primary)
-                                            Spacer()
-                                            Text(component.userValue)
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Text(component.analysis)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Actionable Recommendation
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "lightbulb.fill")
-                                .foregroundColor(.yellow)
-                            Text(SleepAnalysisEngine.generateInsights(from: sleepResult).recommendation)
-                                .font(.subheadline)
-                                .foregroundColor(.primary)
-                        }
-                        .padding()
-                        .background(AppColors.tertiaryBackground)
-                        .cornerRadius(12)
-                    }
-                    .padding(16)
-                    .background(AppColors.secondaryBackground)
-                    .cornerRadius(16)
                     
                     // Sleep Metrics Grid - Using Professional BiomarkerTrendCard
                     LazyVGrid(columns: [
