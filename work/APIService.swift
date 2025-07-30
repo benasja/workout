@@ -174,7 +174,7 @@ final class APIService {
         }
         
         do {
-            print("🌐 Fetching environmental history...")
+            // print("🌐 Fetching environmental history...")
             
             let (data, response) = try await session.data(from: url)
             
@@ -187,7 +187,7 @@ final class APIService {
             let decoder = JSONDecoder()
             let apiResponse = try decoder.decode(EnvironmentalDataResponse.self, from: data)
             
-            print("✅ Fetched \(apiResponse.data.count) environmental history entries.")
+            // print("✅ Fetched \(apiResponse.data.count) environmental history entries.")
             return apiResponse.data
             
         } catch let decodingError as DecodingError {

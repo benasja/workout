@@ -15,6 +15,15 @@ struct RecoveryDetailView: View {
     
     var selectedDate: Date { dateModel.selectedDate }
     
+    /// Helper to check if the selected date is today
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
+    }
+    
+    // Static arrays to avoid type-checking issues
+    private let pendingComponentNames = ["HRV Recovery", "RHR Recovery", "Sleep Quality", "Stress Indicators"]
+    private let pendingBiomarkerTitles = ["Resting HRV", "Resting HR", "Wrist Temp", "Respiratory Rate", "Oxygen Saturation"]
+    
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -26,52 +35,9 @@ struct RecoveryDetailView: View {
                     } else if let error = healthStats.errorMessage {
                         errorOverlay(error)
                     } else if let recoveryResult = healthStats.recoveryResult {
-                        // Main Score Card
-                        VStack(spacing: 8) {
-                            Text("Recovery Score")
-                                .font(.subheadline)
-                                .foregroundColor(AppColors.textSecondary)
-                            Text("\(recoveryResult.finalScore)")
-                                .font(.system(size: 48, weight: .bold, design: .rounded))
-                                .foregroundColor(AppColors.success)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(16)
-                        .background(AppColors.secondaryBackground)
-                        .cornerRadius(16)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Recovery Score: \(recoveryResult.finalScore)")
-                        
-                        // How It Was Calculated Card
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("How It Was Calculated")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            VStack(spacing: 8) {
-                                ForEach(healthStats.recoveryComponents) { component in
-                                    ScoreBreakdownRow(
-                                        component: component.name,
-                                        score: component.score,
-                                        maxScore: component.maxScore,
-                                        description: component.description
-                                    )
-                                }
-                            }
-                        }
-                        .padding(16)
-                        .background(AppColors.secondaryBackground)
-                        .cornerRadius(16)
-                        
-
-                        
-                        // Biomarkers Grid - Using Centralized Data
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 12) {
-                            recoveryBiomarkerCards
-                        }
+                        recoveryDataView(recoveryResult)
+                    } else if isToday {
+                        pendingStateView
                     } else {
                         EmptyStateView(
                             icon: "heart.text.square",
@@ -110,6 +76,122 @@ struct RecoveryDetailView: View {
                 scrollToTopTrigger.toggle()
             }
         }
+    }
+    
+    // MARK: - View Builders
+    
+    @ViewBuilder
+    private func recoveryDataView(_ recoveryResult: RecoveryScoreResult) -> some View {
+        // Main Score Card
+        VStack(spacing: 8) {
+            Text("Recovery Score")
+                .font(.subheadline)
+                .foregroundColor(AppColors.textSecondary)
+            Text("\(recoveryResult.finalScore)")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(AppColors.success)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(16)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Recovery Score: \(recoveryResult.finalScore)")
+        
+        // How It Was Calculated Card
+        VStack(alignment: .leading, spacing: 12) {
+            Text("How It Was Calculated")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            VStack(spacing: 8) {
+                ForEach(healthStats.recoveryComponents) { component in
+                    ScoreBreakdownRow(
+                        component: component.name,
+                        score: component.score,
+                        maxScore: component.maxScore,
+                        description: component.description
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(16)
+        
+        // Biomarkers Grid - Using Centralized Data
+        LazyVGrid(columns: [
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ], spacing: 12) {
+            recoveryBiomarkerCards
+        }
+    }
+    
+    @ViewBuilder
+    private var pendingStateView: some View {
+        // Main Score Card (pending)
+        VStack(spacing: 8) {
+            Text("Recovery Score")
+                .font(.subheadline)
+                .foregroundColor(AppColors.textSecondary)
+            Text("—")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(AppColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(16)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Recovery Score: pending")
+        
+        // How It Was Calculated Card (pending)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("How It Was Calculated")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            VStack(spacing: 8) {
+                ForEach(pendingComponentNames, id: \.self) { name in
+                    ScoreBreakdownRow(
+                        component: name,
+                        score: 0,
+                        maxScore: 100,
+                        description: nil
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(AppColors.secondaryBackground)
+        .cornerRadius(16)
+        
+        // Biomarkers Grid (pending)
+        LazyVGrid(columns: [
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ], spacing: 12) {
+            ForEach(pendingBiomarkerTitles, id: \.self) { title in
+                BiomarkerTrendCard(
+                    title: title,
+                    value: 0.0, // Placeholder value
+                    unit: "",
+                    percentageChange: nil,
+                    trendData: [],
+                    color: .gray
+                )
+            }
+        }
+        
+        // Pending message
+        EmptyStateView(
+            icon: "hourglass",
+            title: "Recovery Score Pending",
+            message: "Your recovery score will be calculated after your next sleep session is analyzed.",
+            actionTitle: nil,
+            action: nil
+        )
     }
     
     // MARK: - Recovery Biomarker Cards Using Centralized Data
@@ -194,11 +276,11 @@ struct RecoveryDetailView: View {
     
     private func errorOverlay(_ error: String) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "moon.zzz")
+            Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 40))
-                .foregroundColor(.blue)
+                .foregroundColor(.orange)
             
-            Text("Recovery Data Not Yet Available")
+            Text("Unable to load recovery data")
                 .font(.headline)
                 .fontWeight(.semibold)
             
@@ -206,13 +288,6 @@ struct RecoveryDetailView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-            
-            if error.contains("not yet available") {
-                Text("Your recovery score will be calculated once you complete your sleep session and wake up.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
             
             Button("Try Again") {
                 Task {

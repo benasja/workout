@@ -4,8 +4,8 @@ import Charts
 struct DailyPerformance: Identifiable {
     let id = UUID()
     let date: Date
-    let recoveryScore: Int?
-    let sleepScore: Int?
+    let recoveryScore: Int
+    let sleepScore: Int
     let hrv: Double?
     let rhr: Double?
     let sleepDuration: TimeInterval?
@@ -61,8 +61,8 @@ class PerformanceDashboardViewModel: ObservableObject {
                 let sleepDelta = (sleep != nil && baseline.sleepDuration14 != nil) ? (sleep!.duration - baseline.sleepDuration14!) / 3600 : nil
                 
                 // Use the comprehensive recovery and sleep score calculators
-                let recoveryScore: Int?
-                let sleepScore: Int?
+                let recoveryScore: Int
+                let sleepScore: Int
                 let directive: String
                 
                 do {
@@ -224,17 +224,12 @@ class PerformanceDashboardViewModel: ObservableObject {
     static nonisolated func minutesBetween(_ d1: Date, _ d2: Date) -> Double {
         abs(d1.timeIntervalSince1970 - d2.timeIntervalSince1970) / 60.0
     }
-    static nonisolated func generateDirective(recoveryScore: Int?, sleepScore: Int?) -> String {
-        // Handle case when scores are not yet available
-        if recoveryScore == nil || sleepScore == nil {
-            return "Data not yet available. Recovery and sleep scores will be calculated once you complete your sleep session."
-        }
-        
-        if recoveryScore! > 85 {
+    static nonisolated func generateDirective(recoveryScore: Int, sleepScore: Int) -> String {
+        if recoveryScore > 85 {
             return "Primed for peak performance. Your body is ready for a high-strain workout."
-        } else if recoveryScore! < 55 {
+        } else if recoveryScore < 55 {
             return "Nervous system under strain. Prioritize active recovery. A light walk or stretching is recommended."
-        } else if sleepScore! < 60 {
+        } else if sleepScore < 60 {
             return "Sleep was not restorative. Focus on your wind-down routine tonight."
         } else {
             return "Maintain your current habits for continued progress."
@@ -408,28 +403,20 @@ struct MetricDeltaView: View {
 }
 
 struct CircularScoreGauge: View {
-    let score: Int?
+    let score: Int
     let label: String
     let gradient: Gradient
     var body: some View {
         ZStack {
             Circle()
                 .stroke(Color.gray.opacity(0.2), lineWidth: 18)
-            if let score = score {
-                Circle()
-                    .trim(from: 0, to: CGFloat(score)/100)
-                    .stroke(AngularGradient(gradient: gradient, center: .center), style: StrokeStyle(lineWidth: 18, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
+            Circle()
+                .trim(from: 0, to: CGFloat(score)/100)
+                .stroke(AngularGradient(gradient: gradient, center: .center), style: StrokeStyle(lineWidth: 18, lineCap: .round))
+                .rotationEffect(.degrees(-90))
             VStack {
-                if let score = score {
-                    Text("\(score)")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                } else {
-                    Text("—")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                        .foregroundColor(.secondary)
-                }
+                Text("\(score)")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
                 Text(label)
                     .font(.headline)
                     .foregroundColor(.secondary)

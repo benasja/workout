@@ -85,12 +85,12 @@ final class HealthStatsViewModel: ObservableObject {
             self.isCalculatingBaseline = false
         }
         
-        print("✅ Baselines recalculated with new circular averaging algorithm")
+        // print("✅ Baselines recalculated with new circular averaging algorithm")
     }
     
     /// Public method to manually force baseline recalculation (for debugging)
     func manualForceRecalculateBaselines() async {
-        print("🔄 Manual baseline recalculation triggered...")
+        // print("🔄 Manual baseline recalculation triggered...")
         
         // Clear the flag to force recalculation
         UserDefaults.standard.removeObject(forKey: "circularAveragingRecalculated")
@@ -119,25 +119,6 @@ final class HealthStatsViewModel: ObservableObject {
             self.isLoading = true
             self.errorMessage = nil
             self.currentDate = date
-        }
-        
-        // Check if it's today and before 8 AM - recovery data won't be available yet
-        let calendar = Calendar.current
-        let now = Date()
-        let currentHour = calendar.component(.hour, from: now)
-        
-        if calendar.isDateInToday(date) && currentHour < 8 {
-            await MainActor.run {
-                self.isLoading = false
-                self.errorMessage = "Recovery data is not yet available for today. It will be calculated once you have completed your sleep session."
-                // Clear any existing data to show the error state
-                self.recoveryResult = nil
-                self.sleepResult = nil
-                self.recoveryComponents = []
-                self.sleepComponents = []
-                self.biomarkerTrends = [:]
-            }
-            return
         }
         
         // Step 1: Fetch raw health data
@@ -210,17 +191,8 @@ final class HealthStatsViewModel: ObservableObject {
             // and only calculate new ones if none exist for that date
             // Since both HealthStatsViewModel and RecoveryScoreCalculator are @MainActor, we can call directly
             return try await recoveryCalculator.calculateRecoveryScore(for: date)
-        } catch RecoveryScoreError.noSleepSessionFound {
-            print("⚠️ No sleep session found for recovery calculation")
-            await MainActor.run {
-                self.errorMessage = "No sleep session found for this date. Recovery data requires a completed sleep session."
-            }
-            return nil
         } catch {
-            print("⚠️ Failed to calculate recovery score: \(error)")
-            await MainActor.run {
-                self.errorMessage = "Failed to calculate recovery score: \(error.localizedDescription)"
-            }
+            // print("⚠️ Failed to calculate recovery score: \(error)")
             return nil
         }
     }
@@ -229,7 +201,7 @@ final class HealthStatsViewModel: ObservableObject {
         do {
             return try await sleepCalculator.calculateSleepScore(for: date)
         } catch {
-            print("⚠️ Failed to calculate sleep score: \(error)")
+            // print("⚠️ Failed to calculate sleep score: \(error)")
             return nil
         }
     }
@@ -570,7 +542,7 @@ final class HealthStatsViewModel: ObservableObject {
     func clearCache() {
         dataCache.removeAll()
         sleepCalculator.clearCache()
-        print("🗑️ HealthStatsViewModel: All caches cleared")
+        // print("🗑️ HealthStatsViewModel: All caches cleared")
     }
     
     /// Gets biomarker trend data for Sleep tab BiomarkerTrendCards

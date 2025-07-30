@@ -43,7 +43,7 @@ class RecoveryScoreCalculator {
         
         // Check if we already have a stored recovery score for this date
         if let storedScore = scoreStore.getRecoveryScore(for: date) {
-            print("📋 Using stored recovery score for \(date)")
+            // print("📋 Using stored recovery score for \(date)")
             return RecoveryScoreResult(
                 finalScore: storedScore.score,
                 hrvComponent: RecoveryScoreResult.RecoveryComponent(

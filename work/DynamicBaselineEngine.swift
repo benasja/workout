@@ -84,16 +84,16 @@ final class DynamicBaselineEngine {
             respiratoryRate14 = dict["respiratoryRate14"] as? Double
             oxygenSaturation14 = dict["oxygenSaturation14"] as? Double
             
-            // Debug: Print the bedtime values being loaded
-            let formatter = DateFormatter()
-            formatter.timeStyle = .short
-            print("📋 DEBUG: Baseline data loaded from UserDefaults:")
-            print("   Bedtime 14-day: \(bedtime14.map { formatter.string(from: $0) } ?? "nil")")
-            print("   Bedtime 7-day: \(bedtime7.map { formatter.string(from: $0) } ?? "nil")")
-            print("   Wake 14-day: \(wake14.map { formatter.string(from: $0) } ?? "nil")")
-            print("   Wake 7-day: \(wake7.map { formatter.string(from: $0) } ?? "nil")")
+            // Debug: Print loaded baseline data
+            // let formatter = DateFormatter()
+            // formatter.timeStyle = .short
+            // print("📋 DEBUG: Baseline data loaded from UserDefaults:")
+            // print("   Bedtime 14-day: \(bedtime14.map { formatter.string(from: $0) } ?? "nil")")
+            // print("   Bedtime 7-day: \(bedtime7.map { formatter.string(from: $0) } ?? "nil")")
+            // print("   Wake 14-day: \(wake14.map { formatter.string(from: $0) } ?? "nil")")
+            // print("   Wake 7-day: \(wake7.map { formatter.string(from: $0) } ?? "nil")")
         } else {
-            print("⚠️ DEBUG: No baseline data found in UserDefaults - will calculate from HealthKit")
+            // print("⚠️ DEBUG: No baseline data found in UserDefaults - will calculate from HealthKit")
         }
     }
     
@@ -228,11 +228,11 @@ final class DynamicBaselineEngine {
             // Debug: Print the raw bedtimes from HealthKit
             let formatter = DateFormatter()
             formatter.timeStyle = .short
-            print("🔍 DEBUG: Raw bedtimes from HealthKit (last \(days) days):")
-            for (index, bedtime) in bedtimes.enumerated() {
-                print("   Day \(index + 1): \(formatter.string(from: bedtime))")
-            }
-            print("   Total bedtimes found: \(bedtimes.count)")
+            // print("🔍 DEBUG: Raw bedtimes from HealthKit (last \(days) days):")
+            // for (index, bedtime) in bedtimes.enumerated() {
+            //     print("   Day \(index + 1): \(formatter.string(from: bedtime))")
+            // }
+            // print("   Total bedtimes found: \(bedtimes.count)")
             
             // Calculate average bedtime (time of day)
             let avgBedtime: Date?
@@ -294,10 +294,10 @@ final class DynamicBaselineEngine {
         formatter.timeStyle = .short
         
         // Debug: Print the input times
-        print("🔍 DEBUG: Circular averaging input times:")
-        for (index, time) in times.enumerated() {
-            print("   Time \(index + 1): \(formatter.string(from: time))")
-        }
+        // print("🔍 DEBUG: Circular averaging input times:")
+        // for (index, time) in times.enumerated() {
+        //     print("   Time \(index + 1): \(formatter.string(from: time))")
+        // }
         
         // Convert times to angles (0-360 degrees, where 0 = midnight)
         let angles = times.map { time -> Double in
@@ -308,10 +308,10 @@ final class DynamicBaselineEngine {
         }
         
         // Debug: Print the angles
-        print("🔍 DEBUG: Converted angles (degrees):")
-        for (index, angle) in angles.enumerated() {
-            print("   Angle \(index + 1): \(String(format: "%.1f", angle))°")
-        }
+        // print("🔍 DEBUG: Converted angles (degrees):")
+        // for (index, angle) in angles.enumerated() {
+        //     print("   Angle \(index + 1): \(String(format: "%.1f", angle))°")
+        // }
         
         // Calculate circular mean using trigonometry
         let sinSum = angles.reduce(0.0) { $0 + sin($1 * .pi / 180.0) }
@@ -320,10 +320,10 @@ final class DynamicBaselineEngine {
         let meanAngle = atan2(sinSum, cosSum) * 180.0 / .pi
         
         // Debug: Print intermediate calculations
-        print("🔍 DEBUG: Circular mean calculation:")
-        print("   sinSum: \(String(format: "%.3f", sinSum))")
-        print("   cosSum: \(String(format: "%.3f", cosSum))")
-        print("   meanAngle: \(String(format: "%.1f", meanAngle))°")
+        // print("🔍 DEBUG: Circular mean calculation:")
+        // print("   sinSum: \(String(format: "%.3f", sinSum))")
+        // print("   cosSum: \(String(format: "%.3f", cosSum))")
+        // print("   meanAngle: \(String(format: "%.1f", meanAngle))°")
         
         // Convert back to time (handle negative angles)
         let normalizedAngle = meanAngle < 0 ? meanAngle + 360 : meanAngle
@@ -335,10 +335,10 @@ final class DynamicBaselineEngine {
         let result = (hour: hour, minute: minute)
         
         // Debug: Print the result
-        print("🔍 DEBUG: Circular averaging result:")
-        print("   normalizedAngle: \(String(format: "%.1f", normalizedAngle))°")
-        print("   totalMinutes: \(totalMinutes)")
-        print("   Result: \(hour):\(String(format: "%02d", minute))")
+        // print("🔍 DEBUG: Circular averaging result:")
+        // print("   normalizedAngle: \(String(format: "%.1f", normalizedAngle))°")
+        // print("   totalMinutes: \(totalMinutes)")
+        // print("   Result: \(hour):\(String(format: "%02d", minute))")
         
         return result
     }
@@ -365,13 +365,13 @@ final class DynamicBaselineEngine {
         UserDefaults.standard.set(dict, forKey: baselineKey)
         
         // Debug: Print the bedtime values being stored
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        print("💾 DEBUG: Baseline data being persisted:")
-        print("   Bedtime 14-day: \(bedtime14.map { formatter.string(from: $0) } ?? "nil")")
-        print("   Bedtime 7-day: \(bedtime7.map { formatter.string(from: $0) } ?? "nil")")
-        print("   Wake 14-day: \(wake14.map { formatter.string(from: $0) } ?? "nil")")
-        print("   Wake 7-day: \(wake7.map { formatter.string(from: $0) } ?? "nil")")
+        // let formatter = DateFormatter()
+        // formatter.timeStyle = .short
+        // print("💾 DEBUG: Baseline data being persisted:")
+        // print("   Bedtime 14-day: \(bedtime14.map { formatter.string(from: $0) } ?? "nil")")
+        // print("   Bedtime 7-day: \(bedtime7.map { formatter.string(from: $0) } ?? "nil")")
+        // print("   Wake 14-day: \(wake14.map { formatter.string(from: $0) } ?? "nil")")
+        // print("   Wake 7-day: \(wake7.map { formatter.string(from: $0) } ?? "nil")")
     }
     
     func resetBaselines() {
@@ -392,7 +392,7 @@ final class DynamicBaselineEngine {
     }
     
     func forceRecalculateBaselines(completion: @escaping () -> Void = {}) {
-        print("🔄 Force recalculating baselines with new circular averaging...")
+        // print("🔄 Force recalculating baselines with new circular averaging...")
         resetBaselines()
         updateAndStoreBaselines(completion: completion)
     }

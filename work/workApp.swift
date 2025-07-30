@@ -75,7 +75,7 @@ struct workApp: App {
     }
     
     private func seedDataIfNeeded() {
-        print("🌱 Starting data seeding...")
+        // print("🌱 Starting data seeding...")
         // This will be called when the app launches
         // The actual seeding will happen in the views when they access the model context
         
@@ -83,22 +83,22 @@ struct workApp: App {
         let modelContext = sharedContainer.mainContext
         
         // Seed exercises first
-        print("📚 Seeding exercise library...")
+        // print("📚 Seeding exercise library...")
         DataSeeder.seedExerciseLibrary(modelContext: modelContext)
         
         // Then seed workout programs
-        print("📋 Seeding workout programs...")
+        // print("📋 Seeding workout programs...")
         DataSeeder.seedSampleWorkoutPrograms(modelContext: modelContext)
         
         // Finally seed fake workout history
-        print("📊 Seeding workout history...")
+        // print("📊 Seeding workout history...")
         DataSeeder.seedFakeWorkoutHistory(modelContext: modelContext)
         
         // Also seed the legacy programs for compatibility
-        print("🔄 Seeding legacy programs...")
+        // print("🔄 Seeding legacy programs...")
         DataSeeder.seedSamplePrograms(modelContext: modelContext)
         
-        print("✅ Data seeding completed!")
+        // print("✅ Data seeding completed!")
     }
     
     // MARK: - Manual Data Management

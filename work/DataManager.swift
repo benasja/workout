@@ -529,10 +529,10 @@ class DataManager: ObservableObject {
     // MARK: - Save Method
     
     func save() throws {
-        print("💾 Attempting to save to SwiftData...")
+        // print("💾 Attempting to save to SwiftData...")
         do {
             try _modelContext.save()
-            print("✅ SwiftData save successful")
+            // print("✅ SwiftData save successful")
         } catch {
             print("❌ SwiftData save failed: \(error)")
             print("❌ Error details: \(error.localizedDescription)")
