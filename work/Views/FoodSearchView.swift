@@ -10,12 +10,15 @@ struct FoodSearchView: View {
     @FocusState private var isSearchFieldFocused: Bool
     
     let onFoodSelected: (FoodLog) -> Void
+    let selectedDate: Date
     
     init(
         repository: FuelLogRepositoryProtocol,
+        selectedDate: Date,
         onFoodSelected: @escaping (FoodLog) -> Void
     ) {
         self._viewModel = StateObject(wrappedValue: FoodSearchViewModel(repository: repository))
+        self.selectedDate = selectedDate
         self.onFoodSelected = onFoodSelected
     }
     
@@ -242,7 +245,7 @@ struct FoodSearchView: View {
             if !localResults.isEmpty {
                 Section {
                     ForEach(localResults, id: \.id) { result in
-                        FoodSearchResultRow(result: result) { foodLog in
+                        FoodSearchResultRow(result: result, selectedDate: selectedDate) { foodLog in
                             onFoodSelected(foodLog)
                             dismiss()
                         }
@@ -280,7 +283,7 @@ struct FoodSearchView: View {
             if !apiResults.isEmpty {
                 Section {
                     ForEach(apiResults, id: \.id) { result in
-                        FoodSearchResultRow(result: result) { foodLog in
+                        FoodSearchResultRow(result: result, selectedDate: selectedDate) { foodLog in
                             onFoodSelected(foodLog)
                             dismiss()
                         }
@@ -323,10 +326,11 @@ struct FoodSearchView: View {
 
 struct FoodSearchResultRow: View {
     let result: FoodSearchResult
+    let selectedDate: Date
     let onFoodSelected: (FoodLog) -> Void
     
     var body: some View {
-        NavigationLink(destination: FoodDetailView(foodResult: result, onConfirm: onFoodSelected)) {
+        NavigationLink(destination: FoodDetailView(foodResult: result, selectedDate: selectedDate, onConfirm: onFoodSelected)) {
             HStack {
                 VStack(alignment: .leading, spacing: AccessibilityUtils.scaledSpacing(4)) {
                     Text(result.displayName)
@@ -399,34 +403,36 @@ extension FoodSearchResult {
     }
 }
 
+// MARK: - Preview Repository
+
+private struct PreviewRepository: FuelLogRepositoryProtocol {
+    nonisolated func fetchFoodLogs(for date: Date) async throws -> [FoodLog] { [] }
+    nonisolated func fetchFoodLogs(for date: Date, limit: Int, offset: Int) async throws -> [FoodLog] { [] }
+    nonisolated func saveFoodLog(_ foodLog: FoodLog) async throws { }
+    nonisolated func updateFoodLog(_ foodLog: FoodLog) async throws { }
+    nonisolated func deleteFoodLog(_ foodLog: FoodLog) async throws { }
+    nonisolated func fetchFoodLogsByDateRange(from startDate: Date, to endDate: Date) async throws -> [FoodLog] { [] }
+    nonisolated func fetchFoodLogsByDateRange(from startDate: Date, to endDate: Date, limit: Int) async throws -> [FoodLog] { [] }
+    nonisolated func fetchCustomFoods() async throws -> [CustomFood] { [] }
+    nonisolated func fetchCustomFoods(limit: Int, offset: Int, searchQuery: String?) async throws -> [CustomFood] { [] }
+    nonisolated func fetchCustomFood(by id: UUID) async throws -> CustomFood? { nil }
+    nonisolated func saveCustomFood(_ customFood: CustomFood) async throws { }
+    nonisolated func updateCustomFood(_ customFood: CustomFood) async throws { }
+    nonisolated func deleteCustomFood(_ customFood: CustomFood) async throws { }
+    nonisolated func searchCustomFoods(query: String) async throws -> [CustomFood] { [] }
+    nonisolated func fetchNutritionGoals() async throws -> NutritionGoals? { nil }
+    nonisolated func fetchNutritionGoals(for userId: String) async throws -> NutritionGoals? { nil }
+    nonisolated func saveNutritionGoals(_ goals: NutritionGoals) async throws { }
+    nonisolated func updateNutritionGoals(_ goals: NutritionGoals) async throws { }
+    nonisolated func deleteNutritionGoals(_ goals: NutritionGoals) async throws { }
+}
+
 // MARK: - Preview
 
 #Preview {
-    // Create a simple preview repository
-    struct PreviewRepository: FuelLogRepositoryProtocol {
-        nonisolated func fetchFoodLogs(for date: Date) async throws -> [FoodLog] { [] }
-        nonisolated func fetchFoodLogs(for date: Date, limit: Int, offset: Int) async throws -> [FoodLog] { [] }
-        nonisolated func saveFoodLog(_ foodLog: FoodLog) async throws { }
-        nonisolated func updateFoodLog(_ foodLog: FoodLog) async throws { }
-        nonisolated func deleteFoodLog(_ foodLog: FoodLog) async throws { }
-        nonisolated func fetchFoodLogsByDateRange(from startDate: Date, to endDate: Date) async throws -> [FoodLog] { [] }
-        nonisolated func fetchFoodLogsByDateRange(from startDate: Date, to endDate: Date, limit: Int) async throws -> [FoodLog] { [] }
-        nonisolated func fetchCustomFoods() async throws -> [CustomFood] { [] }
-        nonisolated func fetchCustomFoods(limit: Int, offset: Int, searchQuery: String?) async throws -> [CustomFood] { [] }
-        nonisolated func fetchCustomFood(by id: UUID) async throws -> CustomFood? { nil }
-        nonisolated func saveCustomFood(_ customFood: CustomFood) async throws { }
-        nonisolated func updateCustomFood(_ customFood: CustomFood) async throws { }
-        nonisolated func deleteCustomFood(_ customFood: CustomFood) async throws { }
-        nonisolated func searchCustomFoods(query: String) async throws -> [CustomFood] { [] }
-        nonisolated func fetchNutritionGoals() async throws -> NutritionGoals? { nil }
-        nonisolated func fetchNutritionGoals(for userId: String) async throws -> NutritionGoals? { nil }
-        nonisolated func saveNutritionGoals(_ goals: NutritionGoals) async throws { }
-        nonisolated func updateNutritionGoals(_ goals: NutritionGoals) async throws { }
-        nonisolated func deleteNutritionGoals(_ goals: NutritionGoals) async throws { }
-    }
-    
-    return FoodSearchView(
-        repository: PreviewRepository()
+    FoodSearchView(
+        repository: PreviewRepository(),
+        selectedDate: Date()
     ) { foodLog in
         print("Selected: \(foodLog.name)")
     }

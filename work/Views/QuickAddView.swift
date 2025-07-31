@@ -17,8 +17,10 @@ struct QuickAddView: View {
     @State private var isLoading = false
     
     let onQuickAdd: (FoodLog) -> Void
+    let selectedDate: Date
     
-    init(onQuickAdd: @escaping (FoodLog) -> Void) {
+    init(selectedDate: Date, onQuickAdd: @escaping (FoodLog) -> Void) {
+        self.selectedDate = selectedDate
         self.onQuickAdd = onQuickAdd
     }
     
@@ -199,9 +201,9 @@ struct QuickAddView: View {
         // Use calculated calories if not provided
         let finalCalories = caloriesValue > 0 ? caloriesValue : calculatedMacroCalories
         
-        // Create quick add food log entry
+        // Create quick add food log entry with the selected date
         let quickAddEntry = FoodLog(
-            timestamp: Date(),
+            timestamp: selectedDate,
             name: "Quick Add - \(selectedMealType.displayName)",
             calories: finalCalories,
             protein: proteinValue,
@@ -384,7 +386,7 @@ struct ValidationSummaryCard: View {
 }
 
 #Preview {
-    QuickAddView { foodLog in
+    QuickAddView(selectedDate: Date()) { foodLog in
         print("Quick add: \(foodLog.name)")
     }
 }

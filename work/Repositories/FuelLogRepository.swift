@@ -49,8 +49,7 @@ final class FuelLogRepository: FuelLogRepositoryProtocol {
         
         return try await MainActor.run {
             do {
-                let foodLogs = try modelContext.fetch(descriptor)
-                return foodLogs
+                return try modelContext.fetch(descriptor)
             } catch {
                 throw FuelLogError.persistenceError(error)
             }
@@ -292,10 +291,6 @@ final class FuelLogRepository: FuelLogRepositoryProtocol {
         return try await MainActor.run {
             do {
                 let goals = try modelContext.fetch(descriptor)
-                print("🔍 FuelLogRepository: Fetched \(goals.count) nutrition goals from database")
-                if let firstGoal = goals.first {
-                    print("🔍 FuelLogRepository: First goal - Calories: \(firstGoal.dailyCalories), Protein: \(firstGoal.dailyProtein)")
-                }
                 return goals.first
             } catch {
                 print("❌ FuelLogRepository: Error fetching nutrition goals: \(error)")

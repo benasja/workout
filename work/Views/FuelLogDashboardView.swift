@@ -18,6 +18,8 @@ struct FuelLogDashboardView: View {
     @State private var showingQuickEdit = false
     @State private var editingFoodLog: FoodLog?
     @State private var showingGoalsSetup = false
+    @State private var showingPersonalLibrary = false
+    @State private var showingDailyLogging = false
     @State private var isInitialized = false
     @State private var showingBarcodeResult = false
     @State private var barcodeResult: FoodSearchResult?
@@ -28,55 +30,7 @@ struct FuelLogDashboardView: View {
         NavigationView {
             Group {
                 if let viewModel = viewModel {
-                    ScrollView {
-                        LazyVStack(spacing: AppSpacing.lg) {
-                            // Date Navigation Header
-                            dateNavigationHeader
-                            
-                            if viewModel.isLoadingInitialData {
-                                LoadingView(message: "Loading nutrition data...")
-                                    .frame(height: 200)
-                            } else if !viewModel.hasNutritionGoals {
-                                // Onboarding state when no goals are set
-                                nutritionGoalsOnboardingCard
-                            } else {
-                                // Main dashboard content
-                                VStack(spacing: AppSpacing.lg) {
-                                    // Calorie Progress Circle
-                                    calorieProgressSection
-                                    
-                                    // Macro Progress Bars
-                                    macroProgressSection
-                                    
-                                    // Quick Action Buttons
-                                    quickActionButtons
-                                    
-                                    // Food Log by Meal Type
-                                    foodLogSection
-                                }
-                            }
-                        }
-                        .padding(.horizontal, AppSpacing.lg)
-                        .padding(.bottom, AppSpacing.xxxl)
-                    }
-                    .navigationTitle("Nutrition")
-                    .navigationBarTitleDisplayMode(.large)
-                    .refreshable {
-                        await viewModel.refresh()
-                    }
-                    .disabled(viewModel.isRefreshing)
-                    .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
-                        Button("OK") {
-                            viewModel.clearError()
-                        }
-                    } message: {
-                        if let errorMessage = viewModel.errorMessage {
-                            Text(errorMessage)
-                        }
-                    }
-                    .onChange(of: dateModel.selectedDate) { _, newDate in
-                        viewModel.selectedDate = newDate
-                    }
+                    mainContentView(viewModel: viewModel)
                 } else {
                     LoadingView(message: "Initializing...")
                 }
@@ -102,31 +56,7 @@ struct FuelLogDashboardView: View {
                 isInitialized = true
             }
             
-            // Temporary debug: Create test nutrition goals if none exist
-            Task {
-                if let viewModel = viewModel {
-                    let repository = FuelLogRepository(modelContext: dataManager.modelContext)
-                    let existingGoals = try? await repository.fetchNutritionGoals()
-                    if existingGoals == nil {
-                        print("🔧 Creating test nutrition goals for debugging...")
-                        let testGoals = NutritionGoals(
-                            dailyCalories: 2000,
-                            dailyProtein: 150,
-                            dailyCarbohydrates: 200,
-                            dailyFat: 67,
-                            activityLevel: .moderatelyActive,
-                            goal: .maintain,
-                            bmr: 1600,
-                            tdee: 2000
-                        )
-                        try? await repository.saveNutritionGoals(testGoals)
-                        print("🔧 Test nutrition goals created successfully")
-                        
-                        // Reload data to pick up the new goals
-                        await viewModel.loadInitialData()
-                    }
-                }
-            }
+
         }
         .sheet(isPresented: $showingGoalsSetup) {
             if let repository = viewModel?.repository as? FuelLogRepository {
@@ -135,7 +65,7 @@ struct FuelLogDashboardView: View {
         }
         .sheet(isPresented: $showingFoodSearch) {
             if let repository = viewModel?.repository {
-                FoodSearchView(repository: repository) { foodLog in
+                FoodSearchView(repository: repository, selectedDate: viewModel?.selectedDate ?? Date()) { foodLog in
                     Task {
                         await viewModel?.logFood(foodLog)
                     }
@@ -153,9 +83,30 @@ struct FuelLogDashboardView: View {
         //     }
         // }
         .sheet(isPresented: $showingQuickAdd) {
-            QuickAddView { foodLog in
+            QuickAddView(selectedDate: viewModel?.selectedDate ?? Date()) { foodLog in
                 Task {
                     await viewModel?.logFood(foodLog)
+                }
+            }
+        }
+        .sheet(isPresented: $showingPersonalLibrary) {
+            if let repository = viewModel?.repository {
+                PersonalFoodLibraryView(repository: repository) { foodLog in
+                    Task {
+                        await viewModel?.logFood(foodLog)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingDailyLogging) {
+            if let repository = viewModel?.repository {
+                DailyLoggingView(
+                    repository: repository,
+                    selectedDate: viewModel?.selectedDate ?? Date()
+                ) { foodLog in
+                    Task {
+                        await viewModel?.logFood(foodLog)
+                    }
                 }
             }
         }
@@ -181,6 +132,72 @@ struct FuelLogDashboardView: View {
         //         }
         //     }
         // }
+    }
+    
+    // MARK: - Main Content View
+    
+    @ViewBuilder
+    private func mainContentView(viewModel: FuelLogViewModel) -> some View {
+        ScrollView {
+            LazyVStack(spacing: AppSpacing.lg) {
+                // Date Navigation Header
+                dateNavigationHeader
+                
+                Group {
+                    if viewModel.isLoadingInitialData {
+                        LoadingView(message: "Loading nutrition data...")
+                            .frame(height: 200)
+                    } else if viewModel.nutritionGoals == nil {
+                        // Onboarding state when no goals are set
+                        nutritionGoalsOnboardingCard
+                    } else {
+                        // Main dashboard content
+                        VStack(spacing: AppSpacing.lg) {
+                            // Calorie Progress Circle
+                            calorieProgressSection
+                            
+                            // Macro Progress Bars
+                            macroProgressSection
+                            
+                            // Quick Action Buttons
+                            quickActionButtons
+                            
+                            // Food Log by Meal Type
+                            foodLogSection
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, AppSpacing.lg)
+            .padding(.bottom, AppSpacing.xxxl)
+        }
+        .navigationTitle("Nutrition")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if viewModel.nutritionGoals != nil {
+                    Button(action: {
+                        showingGoalsSetup = true
+                    }) {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
+        }
+        .refreshable {
+            await viewModel.refresh()
+        }
+        .disabled(viewModel.isRefreshing)
+        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+            Button("OK") {
+                viewModel.clearError()
+            }
+        } message: {
+            Text(viewModel.errorMessage ?? "An unknown error occurred")
+        }
+        .onChange(of: dateModel.selectedDate) { _, newDate in
+            viewModel.selectedDate = newDate
+        }
     }
     
     // MARK: - Date Navigation Header
@@ -436,98 +453,144 @@ struct FuelLogDashboardView: View {
     // MARK: - Quick Action Buttons
     
     private var quickActionButtons: some View {
-        HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
-            Button(action: { 
-                // Barcode scanning is temporarily disabled
-                // showingBarcodeScan = true
-                // AccessibilityUtils.selectionFeedback()
-            }) {
-                VStack(spacing: AppSpacing.xs) {
-                    Image(systemName: "barcode.viewfinder")
-                        .font(.title2)
-                    Text("Scan")
-                        .font(AppTypography.caption)
-                        .dynamicTypeSize(maxSize: .accessibility2)
-                }
-                .foregroundColor(.gray)
-                .frame(maxWidth: .infinity)
-                .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
-                .background(Color.gray.opacity(0.3))
-                .cornerRadius(AppCornerRadius.md)
-            }
-            .disabled(true)
-            .actionButtonAccessibility(
-                label: "Scan barcode (temporarily disabled)",
-                hint: "Barcode scanning is currently unavailable"
-            )
-            .accessibilityIdentifier(AccessibilityIdentifiers.scanBarcodeButton)
-            .keyboardNavigationSupport()
-            
-            Button(action: { 
-                showingFoodSearch = true
-                AccessibilityUtils.selectionFeedback()
-            }) {
-                VStack(spacing: AppSpacing.xs) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.title2)
-                        .scaleEffect(showingFoodSearch ? 1.1 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingFoodSearch)
-                    Text("Search")
-                        .font(AppTypography.caption)
-                        .dynamicTypeSize(maxSize: .accessibility2)
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
-                .background(
-                    AccessibilityUtils.contrastAwareColor(
-                        normal: AppColors.secondary,
-                        highContrast: Color.green
+        VStack(spacing: AppSpacing.md) {
+            // Primary action buttons
+            HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
+                Button(action: { 
+                    showingFoodSearch = true
+                    AccessibilityUtils.selectionFeedback()
+                }) {
+                    VStack(spacing: AppSpacing.xs) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title2)
+                            .scaleEffect(showingFoodSearch ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingFoodSearch)
+                        Text("Search")
+                            .font(AppTypography.caption)
+                            .dynamicTypeSize(maxSize: .accessibility2)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
+                    .background(
+                        AccessibilityUtils.contrastAwareColor(
+                            normal: AppColors.secondary,
+                            highContrast: Color.green
+                        )
                     )
-                )
-                .cornerRadius(AppCornerRadius.md)
-                .scaleEffect(showingFoodSearch ? 0.95 : 1.0)
-                .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingFoodSearch)
-            }
-            .actionButtonAccessibility(
-                label: "Search foods",
-                hint: AccessibilityUtils.searchFoodHint
-            )
-            .accessibilityIdentifier(AccessibilityIdentifiers.searchFoodButton)
-            .keyboardNavigationSupport()
-            
-            Button(action: { 
-                showingQuickAdd = true
-                AccessibilityUtils.selectionFeedback()
-            }) {
-                VStack(spacing: AppSpacing.xs) {
-                    Image(systemName: "plus.circle")
-                        .font(.title2)
-                        .scaleEffect(showingQuickAdd ? 1.1 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingQuickAdd)
-                    Text("Add New Meal")
-                        .font(AppTypography.caption)
-                        .dynamicTypeSize(maxSize: .accessibility2)
+                    .cornerRadius(AppCornerRadius.md)
+                    .scaleEffect(showingFoodSearch ? 0.95 : 1.0)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingFoodSearch)
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
-                .background(
-                    AccessibilityUtils.contrastAwareColor(
-                        normal: AppColors.accent,
-                        highContrast: Color.orange
-                    )
+                .actionButtonAccessibility(
+                    label: "Search foods",
+                    hint: AccessibilityUtils.searchFoodHint
                 )
-                .cornerRadius(AppCornerRadius.md)
-                .scaleEffect(showingQuickAdd ? 0.95 : 1.0)
-                .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingQuickAdd)
+                .accessibilityIdentifier(AccessibilityIdentifiers.searchFoodButton)
+                .keyboardNavigationSupport()
+                
+                Button(action: { 
+                    showingPersonalLibrary = true
+                    AccessibilityUtils.selectionFeedback()
+                }) {
+                    VStack(spacing: AppSpacing.xs) {
+                        Image(systemName: "heart.text.square")
+                            .font(.title2)
+                            .scaleEffect(showingPersonalLibrary ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingPersonalLibrary)
+                        Text("My Foods")
+                            .font(AppTypography.caption)
+                            .dynamicTypeSize(maxSize: .accessibility2)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
+                    .background(
+                        AccessibilityUtils.contrastAwareColor(
+                            normal: AppColors.accent,
+                            highContrast: Color.orange
+                        )
+                    )
+                    .cornerRadius(AppCornerRadius.md)
+                    .scaleEffect(showingPersonalLibrary ? 0.95 : 1.0)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingPersonalLibrary)
+                }
+                .actionButtonAccessibility(
+                    label: "My food library",
+                    hint: "Access your personal food library and meals"
+                )
+                .accessibilityIdentifier("personal_library_button")
+                .keyboardNavigationSupport()
             }
-            .actionButtonAccessibility(
-                label: "Add new meal",
-                hint: "Create a new meal with custom macronutrients"
-            )
-            .accessibilityIdentifier(AccessibilityIdentifiers.quickAddButton)
-            .keyboardNavigationSupport()
+            
+            // Secondary action buttons
+            HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
+                Button(action: { 
+                    showingQuickAdd = true
+                    AccessibilityUtils.selectionFeedback()
+                }) {
+                    VStack(spacing: AppSpacing.xs) {
+                        Image(systemName: "plus.circle")
+                            .font(.title2)
+                            .scaleEffect(showingQuickAdd ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingQuickAdd)
+                        Text("Quick Add")
+                            .font(AppTypography.caption)
+                            .dynamicTypeSize(maxSize: .accessibility2)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
+                    .background(
+                        AccessibilityUtils.contrastAwareColor(
+                            normal: AppColors.primary,
+                            highContrast: Color.blue
+                        )
+                    )
+                    .cornerRadius(AppCornerRadius.md)
+                    .scaleEffect(showingQuickAdd ? 0.95 : 1.0)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingQuickAdd)
+                }
+                .actionButtonAccessibility(
+                    label: "Quick add meal",
+                    hint: "Create a new meal with custom macronutrients"
+                )
+                .accessibilityIdentifier(AccessibilityIdentifiers.quickAddButton)
+                .keyboardNavigationSupport()
+                
+                Button(action: { 
+                    showingDailyLogging = true
+                    AccessibilityUtils.selectionFeedback()
+                }) {
+                    VStack(spacing: AppSpacing.xs) {
+                        Image(systemName: "list.bullet")
+                            .font(.title2)
+                            .scaleEffect(showingDailyLogging ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingDailyLogging)
+                        Text("Daily Log")
+                            .font(AppTypography.caption)
+                            .dynamicTypeSize(maxSize: .accessibility2)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
+                    .background(
+                        AccessibilityUtils.contrastAwareColor(
+                            normal: AppColors.warning,
+                            highContrast: Color.yellow
+                        )
+                    )
+                    .cornerRadius(AppCornerRadius.md)
+                    .scaleEffect(showingDailyLogging ? 0.95 : 1.0)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingDailyLogging)
+                }
+                .actionButtonAccessibility(
+                    label: "Daily food log",
+                    hint: "View and manage today's food entries"
+                )
+                .accessibilityIdentifier("daily_logging_button")
+                .keyboardNavigationSupport()
+            }
         }
     }
     
@@ -594,13 +657,13 @@ struct MacroProgressBar: View {
                 Spacer()
                 
                 HStack(spacing: AppSpacing.xs) {
-                    Text("\(Int(current))")
+                    Text("\(Int(round(current)))")
                         .font(AppTypography.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(AccessibilityUtils.contrastAwareText())
                         .dynamicTypeSize(maxSize: .accessibility2)
                     
-                    Text("/ \(Int(goal)) \(nutrient.unit)")
+                    Text("/ \(Int(round(goal))) \(nutrient.unit)")
                         .font(AppTypography.subheadline)
                         .foregroundColor(AppColors.textSecondary)
                         .dynamicTypeSize(maxSize: .accessibility2)
@@ -849,17 +912,17 @@ struct FoodLogRowView: View {
             Spacer()
             
             VStack(alignment: .trailing, spacing: AppSpacing.xs) {
-                Text("\(Int(foodLog.protein))g P")
+                Text("\(Int(round(foodLog.protein)))g P")
                     .font(AppTypography.caption2)
                     .foregroundColor(AppColors.textTertiary)
                     .dynamicTypeSize(maxSize: .accessibility2)
                 
-                Text("\(Int(foodLog.carbohydrates))g C")
+                Text("\(Int(round(foodLog.carbohydrates)))g C")
                     .font(AppTypography.caption2)
                     .foregroundColor(AppColors.textTertiary)
                     .dynamicTypeSize(maxSize: .accessibility2)
                 
-                Text("\(Int(foodLog.fat))g F")
+                Text("\(Int(round(foodLog.fat)))g F")
                     .font(AppTypography.caption2)
                     .foregroundColor(AppColors.textTertiary)
                     .dynamicTypeSize(maxSize: .accessibility2)

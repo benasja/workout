@@ -29,7 +29,7 @@ final class FuelLogViewModel: ObservableObject {
     @Published var dailyTotals: DailyNutritionTotals = DailyNutritionTotals()
     
     /// Currently selected date for viewing food logs
-    @Published var selectedDate: Date = Date() {
+    @Published var selectedDate: Date = Calendar.current.startOfDay(for: Date()) {
         didSet {
             if !Calendar.current.isDate(selectedDate, inSameDayAs: oldValue) {
                 Task {
@@ -99,9 +99,7 @@ final class FuelLogViewModel: ObservableObject {
     
     /// Whether nutrition goals are available
     var hasNutritionGoals: Bool {
-        let hasGoals = nutritionGoals != nil
-        print("🔍 FuelLogViewModel: hasNutritionGoals called - nutritionGoals is \(nutritionGoals != nil ? "not nil" : "nil"), returning \(hasGoals)")
-        return hasGoals
+        return nutritionGoals != nil
     }
     
     /// Whether any food has been logged for the selected date
@@ -148,7 +146,7 @@ final class FuelLogViewModel: ObservableObject {
             // Small delay to show completion
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
             
-            print("🔍 FuelLogViewModel: Initial data loaded successfully")
+
             
         } catch {
             print("❌ FuelLogViewModel: Error in loadInitialData: \(error)")
@@ -169,10 +167,9 @@ final class FuelLogViewModel: ObservableObject {
         isLoadingGoals = true
         
         do {
-            nutritionGoals = try await _repository.fetchNutritionGoals()
-            print("🔍 FuelLogViewModel: Loaded nutrition goals: \(nutritionGoals != nil ? "Found" : "Not found")")
-            if let goals = nutritionGoals {
-                print("🔍 FuelLogViewModel: Goals - Calories: \(goals.dailyCalories), Protein: \(goals.dailyProtein)")
+            let goals = try await _repository.fetchNutritionGoals()
+            await MainActor.run {
+                self.nutritionGoals = goals
             }
         } catch {
             print("❌ FuelLogViewModel: Error loading nutrition goals: \(error)")
@@ -191,17 +188,25 @@ final class FuelLogViewModel: ObservableObject {
     func loadFoodLogs(for date: Date) async {
         isLoading = true
         
+        // Ensure we're using the start of the day for consistent date handling
+        let startOfDay = Calendar.current.startOfDay(for: date)
+        
+        // Ensure nutrition goals are loaded if not already present
+        if nutritionGoals == nil {
+            await loadNutritionGoals()
+        }
+        
         let foodLogs = await PerformanceOptimizer.shared.measureExecutionTime(
             operation: PerformanceMetrics.loadFoodLogs
         ) {
             do {
-                return try await _repository.fetchFoodLogs(for: date)
+                return try await _repository.fetchFoodLogs(for: startOfDay)
             } catch {
                 errorHandler.handleError(
                     error,
-                    context: "Loading food logs for \(DateFormatter.shortDate.string(from: date))"
+                    context: "Loading food logs for \(DateFormatter.shortDate.string(from: startOfDay))"
                 ) { [weak self] in
-                    await self?.loadFoodLogs(for: date)
+                    await self?.loadFoodLogs(for: startOfDay)
                 }
                 return []
             }
@@ -236,6 +241,9 @@ final class FuelLogViewModel: ObservableObject {
             message: "Saving \(foodLog.name)..."
         )
         
+        // Ensure the food log has the correct timestamp for the selected date
+        let correctedFoodLog = ensureCorrectTimestamp(for: foodLog)
+        
         // Optimistic update - add to UI immediately
         let originalFoodLogs = todaysFoodLogs
         let originalDailyTotals = dailyTotals
@@ -243,14 +251,14 @@ final class FuelLogViewModel: ObservableObject {
         let originalGroupedLogs = foodLogsByMealType
         
         // Apply optimistic update
-        todaysFoodLogs.append(foodLog)
+        todaysFoodLogs.append(correctedFoodLog)
         groupFoodLogsByMealType()
         calculateDailyTotals()
         updateNutritionProgress()
         
         do {
             // Save to repository
-            try await _repository.saveFoodLog(foodLog)
+            try await _repository.saveFoodLog(correctedFoodLog)
             
             // Write to HealthKit if available and authorized
             if let healthKitManager = healthKitManager {
@@ -729,6 +737,33 @@ extension FuelLogViewModel {
         case .fat:
             return nutritionProgress.fatProgress
         }
+    }
+    
+    /// Ensures food log has the correct timestamp for the selected date
+    private func ensureCorrectTimestamp(for foodLog: FoodLog) -> FoodLog {
+        let calendar = Calendar.current
+        let startOfSelectedDay = calendar.startOfDay(for: selectedDate)
+        
+        // If the food log timestamp is not from the selected date, adjust it
+        if !calendar.isDate(foodLog.timestamp, inSameDayAs: selectedDate) {
+            // Create a new food log with the correct timestamp
+            let correctedFoodLog = FoodLog(
+                timestamp: startOfSelectedDay,
+                name: foodLog.name,
+                calories: foodLog.calories,
+                protein: foodLog.protein,
+                carbohydrates: foodLog.carbohydrates,
+                fat: foodLog.fat,
+                mealType: foodLog.mealType,
+                servingSize: foodLog.servingSize,
+                servingUnit: foodLog.servingUnit,
+                barcode: foodLog.barcode,
+                customFoodId: foodLog.customFoodId
+            )
+            return correctedFoodLog
+        }
+        
+        return foodLog
     }
 }
 

@@ -60,12 +60,19 @@ final class FoodLog: @unchecked Sendable {
         customFoodId == nil && barcode == nil
     }
     
-    /// Validates that macro calories are reasonably close to stated calories (within 10%)
+    /// Validates that macro calories are reasonably close to stated calories
     var hasValidMacros: Bool {
         guard calories > 0 else { return false }
         let difference = abs(calories - totalMacroCalories)
+        
+        // For very small calorie differences, be very lenient
+        if difference <= 25 {
+            return true // Allow up to 25 calorie difference regardless of percentage
+        }
+        
+        // For larger differences, check percentage (30% tolerance for real-world data)
         let percentDifference = difference / calories
-        return percentDifference <= 0.1 // Allow 10% variance
+        return percentDifference <= 0.3
     }
     
     /// Returns formatted serving size with unit

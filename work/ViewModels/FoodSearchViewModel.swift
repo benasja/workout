@@ -472,10 +472,11 @@ extension FoodSearchResult {
     func createFoodLog(
         mealType: MealType,
         servingMultiplier: Double = 1.0,
-        barcode: String? = nil
+        barcode: String? = nil,
+        timestamp: Date = Date()
     ) -> FoodLog {
         return FoodLog(
-            timestamp: Date(),
+            timestamp: timestamp,
             name: name,
             calories: calories * servingMultiplier,
             protein: protein * servingMultiplier,

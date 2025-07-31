@@ -5,6 +5,7 @@ import SwiftData
 
 struct FoodDetailView: View {
     let foodResult: FoodSearchResult
+    let selectedDate: Date
     let onConfirm: (FoodLog) -> Void
     
     @Environment(\.dismiss) private var dismiss
@@ -381,7 +382,8 @@ struct FoodDetailView: View {
     private func createFoodLog() -> FoodLog {
         return foodResult.createFoodLog(
             mealType: selectedMealType,
-            servingMultiplier: servingMultiplier
+            servingMultiplier: servingMultiplier,
+            timestamp: selectedDate
         )
     }
 }
@@ -402,7 +404,8 @@ struct FoodDetailView: View {
             servingUnit: "g",
             imageUrl: nil,
             source: .openFoodFacts
-        )
+        ),
+        selectedDate: Date()
     ) { foodLog in
         print("Confirmed: \(foodLog.name)")
     }

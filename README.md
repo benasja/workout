@@ -31,12 +31,18 @@
 - **Trend Analysis**: Historical data visualization and pattern recognition
 
 ### 🍎 Comprehensive Nutrition Tracking
+- **Goals Dashboard**: Four primary progress bars for Calories, Protein, Carbs, and Fat with current vs. daily goal display
+- **Personal Food Library**: Persistent, searchable library of individual food items and composite meals
+- **Custom Food Creation**: Create foods with Name, Serving Size, Calories, Protein, Carbs, and Fat
+- **Meal Creation**: Combine multiple foods from Personal Library with automatic macro calculation
+- **Daily Logging**: Simple view showing all foods and meals logged for the current day with quantity adjustment
 - **Food Database Integration**: OpenFoodFacts API with offline-first architecture
 - **Barcode Scanning**: Quick food logging via camera (temporarily disabled)
-- **Custom Foods**: Create and save personal recipes and meals
-- **Macro Tracking**: Calories, protein, carbohydrates, and fat with visual progress
+- **Macro Tracking**: Real-time progress visualization with goal completion celebrations and accurate rounding
 - **Meal Planning**: Organized by breakfast, lunch, dinner, and snacks
-- **Goal Setting**: Personalized nutrition targets based on activity level and goals
+- **Goal Setting**: Editable nutrition targets in settings (e.g., 3000 kcal, 200p, 350c, 100f)
+- **Date Navigation**: Consistent date handling with proper timestamp management
+- **Data Persistence**: Optimistic UI updates with reliable data persistence
 
 ### 💧 Hydration Monitoring
 - **Visual Progress**: Animated circular gauge with goal completion celebration
@@ -458,6 +464,24 @@ Track live workouts with smart set types (working, warm-up, drop sets), automati
 
 ### 🍎 Comprehensive Nutrition
 Full macro tracking with OpenFoodFacts integration, custom food creation, and meal planning. Visual progress indicators and goal completion celebrations keep you motivated.
+
+---
+
+## Recent Fixes & Improvements
+
+### 🐛 Nutrition Tracking Fixes (Latest)
+- **Fixed Date Assignment**: Food logs now correctly appear on the selected date instead of showing up on the wrong day
+- **Improved Macronutrient Display**: Fixed rounding issues where protein/fat values were showing as 0g instead of 1g due to improper rounding
+- **Enhanced Nutrition Goals Visibility**: Onboarding card now properly disappears after goals are set and stays hidden when navigating between dates
+- **Optimized Data Persistence**: Fixed issues where food logs would disappear after adding new items due to optimistic update problems
+- **Better Error Handling**: Improved error recovery and reduced unnecessary UI state reversions
+- **Consistent Date Handling**: All date operations now use start-of-day timestamps for consistent behavior
+
+### 🔧 Technical Improvements
+- **Timestamp Correction**: Added automatic timestamp correction to ensure food logs are assigned to the correct date
+- **Performance Optimization**: Enhanced food log loading with proper date filtering
+- **UI State Management**: Improved optimistic updates with better error recovery
+- **Data Validation**: Enhanced validation while maintaining reasonable tolerance for real-world nutrition data
 
 ---
 
