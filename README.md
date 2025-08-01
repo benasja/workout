@@ -31,6 +31,7 @@
 - **Trend Analysis**: Historical data visualization and pattern recognition
 
 ### 🍎 Comprehensive Nutrition Tracking
+- **🆕 Enhanced Nutrition Dashboard**: Beautiful radial progress chart with overlapping macro segments, interactive tabs, and modern card design
 - **Goals Dashboard**: Four primary progress bars for Calories, Protein, Carbs, and Fat with current vs. daily goal display
 - **Personal Food Library**: Persistent, searchable library of individual food items and composite meals
 - **Custom Food Creation**: Create foods with Name, Serving Size, Calories, Protein, Carbs, and Fat

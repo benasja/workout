@@ -810,13 +810,17 @@ struct FoodEditView: View {
     // MARK: - Helper Methods
     
     private func createUpdatedFoodLog() -> FoodLog {
-        var updatedFoodLog = foodLog
-        updatedFoodLog.mealType = selectedMealType
-        updatedFoodLog.servingSize = servingMultiplier // servingMultiplier represents the total servings
-        updatedFoodLog.calories = adjustedCalories
-        updatedFoodLog.protein = adjustedProtein
-        updatedFoodLog.carbohydrates = adjustedCarbohydrates
-        updatedFoodLog.fat = adjustedFat
+        let updatedFoodLog = FoodLog(
+            timestamp: foodLog.timestamp,
+            name: foodLog.name,
+            calories: adjustedCalories,
+            protein: adjustedProtein,
+            carbohydrates: adjustedCarbohydrates,
+            fat: adjustedFat,
+            mealType: selectedMealType,
+            servingSize: servingMultiplier,
+            servingUnit: foodLog.servingUnit
+        )
         return updatedFoodLog
     }
 }

@@ -33,7 +33,7 @@ struct FuelLogDashboardView: View {
                 if let viewModel = viewModel {
                     // CRITICAL FIX: Wrap in ObservableView to properly observe @Published properties
                     ObservableViewModelWrapper(viewModel: viewModel) { observedViewModel in
-                        mainContentView(viewModel: observedViewModel)
+                        mainContentView(observedViewModel: observedViewModel)
                     }
                 } else {
                     LoadingView(message: "Initializing...")
@@ -181,35 +181,40 @@ struct FuelLogDashboardView: View {
     // MARK: - Main Content View
     
     @ViewBuilder
-    private func mainContentView(viewModel: FuelLogViewModel) -> some View {
+    private func mainContentView(observedViewModel: FuelLogViewModel) -> some View {
         // Debug logging to track UI re-renders
         // let _ = print("🖥️ FuelLogDashboardView: Rendering main content with \(viewModel.todaysFoodLogs.count) food logs")
         ScrollView {
             LazyVStack(spacing: AppSpacing.lg) {
                 // Date Navigation Header
-                dateNavigationHeader
+                dateNavigationHeader(observedViewModel: observedViewModel)
                 
                 Group {
-                    if viewModel.isLoadingInitialData {
+                    if observedViewModel.isLoadingInitialData {
                         LoadingView(message: "Loading nutrition data...")
                             .frame(height: 200)
-                    } else if viewModel.nutritionGoals == nil && !viewModel.isLoadingGoals {
+                    } else if observedViewModel.nutritionGoals == nil && !observedViewModel.isLoadingGoals {
                         // Onboarding state when no goals are set
                         nutritionGoalsOnboardingCard
-                    } else if viewModel.nutritionGoals != nil {
+                    } else if observedViewModel.nutritionGoals != nil {
                         // Main dashboard content
                         VStack(spacing: AppSpacing.lg) {
-                            // Calorie Progress Circle
-                            calorieProgressSection
-                            
-                            // Macro Progress Bars
-                            macroProgressSection
+                            // Enhanced Nutrition View
+                            EnhancedNutritionView(
+                                caloriesRemaining: Int(observedViewModel.remainingNutrition.totalCalories),
+                                carbsCurrent: observedViewModel.dailyTotals.totalCarbohydrates,
+                                carbsGoal: observedViewModel.nutritionGoals?.dailyCarbohydrates ?? 0,
+                                proteinCurrent: observedViewModel.dailyTotals.totalProtein,
+                                proteinGoal: observedViewModel.nutritionGoals?.dailyProtein ?? 0,
+                                fatCurrent: observedViewModel.dailyTotals.totalFat,
+                                fatGoal: observedViewModel.nutritionGoals?.dailyFat ?? 0
+                            )
                             
                             // Quick Action Buttons
-                            quickActionButtons
+                            quickActionButtons(observedViewModel: observedViewModel)
                             
                             // Food Log by Meal Type
-                            foodLogSection
+                            foodLogSection(observedViewModel: observedViewModel)
                         }
                     } else {
                         // Loading goals state
@@ -225,7 +230,7 @@ struct FuelLogDashboardView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                if viewModel.nutritionGoals != nil {
+                if observedViewModel.nutritionGoals != nil {
                     Button(action: {
                         showingGoalsSetup = true
                     }) {
@@ -235,30 +240,28 @@ struct FuelLogDashboardView: View {
             }
         }
         .refreshable {
-            await viewModel.refresh()
+            await observedViewModel.refresh()
         }
-        .disabled(viewModel.isRefreshing)
-        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .disabled(observedViewModel.isRefreshing)
+        .alert("Error", isPresented: .constant(observedViewModel.errorMessage != nil)) {
             Button("OK") {
-                viewModel.clearError()
+                observedViewModel.clearError()
             }
         } message: {
-            Text(viewModel.errorMessage ?? "An unknown error occurred")
+            Text(observedViewModel.errorMessage ?? "An unknown error occurred")
         }
         .onChange(of: dateModel.selectedDate) { _, newDate in
-            viewModel.selectedDate = newDate
+            observedViewModel.selectedDate = newDate
         }
     }
     
     // MARK: - Date Navigation Header
     
-    private var dateNavigationHeader: some View {
+    private func dateNavigationHeader(observedViewModel: FuelLogViewModel) -> some View {
         HStack {
             Button(action: {
-                viewModel?.navigateToPreviousDay()
-                if let selectedDate = viewModel?.selectedDate {
-                    dateModel.selectedDate = selectedDate
-                }
+                observedViewModel.navigateToPreviousDay()
+                dateModel.selectedDate = observedViewModel.selectedDate
                 AccessibilityUtils.selectionFeedback()
             }) {
                 Image(systemName: "chevron.left")
@@ -275,34 +278,32 @@ struct FuelLogDashboardView: View {
             Spacer()
             
             VStack(spacing: AppSpacing.xs) {
-                Text(dateFormatter.string(from: viewModel?.selectedDate ?? dateModel.selectedDate))
+                Text(dateFormatter.string(from: observedViewModel.selectedDate))
                     .font(AppTypography.headline)
                     .foregroundColor(AccessibilityUtils.contrastAwareText())
                     .dynamicTypeSize(maxSize: .accessibility2)
                 
-                if viewModel?.isSelectedDateToday ?? Calendar.current.isDateInToday(dateModel.selectedDate) {
+                if observedViewModel.isSelectedDateToday {
                     Text("Today")
                         .font(AppTypography.caption)
                         .foregroundColor(AppColors.primary)
                         .dynamicTypeSize(maxSize: .accessibility2)
                 } else {
-                    Text(relativeDateFormatter.string(for: viewModel?.selectedDate ?? dateModel.selectedDate) ?? "")
+                    Text(relativeDateFormatter.string(for: observedViewModel.selectedDate) ?? "")
                         .font(AppTypography.caption)
                         .foregroundColor(AppColors.textSecondary)
                         .dynamicTypeSize(maxSize: .accessibility2)
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Selected date: \(dateFormatter.string(from: viewModel?.selectedDate ?? dateModel.selectedDate))")
+            .accessibilityLabel("Selected date: \(dateFormatter.string(from: observedViewModel.selectedDate))")
             .accessibilityIdentifier(AccessibilityIdentifiers.dateDisplay)
             
             Spacer()
             
             Button(action: {
-                viewModel?.navigateToNextDay()
-                if let selectedDate = viewModel?.selectedDate {
-                    dateModel.selectedDate = selectedDate
-                }
+                observedViewModel.navigateToNextDay()
+                dateModel.selectedDate = observedViewModel.selectedDate
                 AccessibilityUtils.selectionFeedback()
             }) {
                 Image(systemName: "chevron.right")
@@ -310,7 +311,7 @@ struct FuelLogDashboardView: View {
                     .foregroundColor(AppColors.primary)
             }
             .iconButton()
-            .disabled(Calendar.current.isDateInToday(viewModel?.selectedDate ?? dateModel.selectedDate))
+            .disabled(Calendar.current.isDateInToday(observedViewModel.selectedDate))
             .actionButtonAccessibility(
                 label: "Next day",
                 hint: "Navigate to next day's nutrition data"
@@ -502,7 +503,7 @@ struct FuelLogDashboardView: View {
     
     // MARK: - Quick Action Buttons
     
-    private var quickActionButtons: some View {
+    private func quickActionButtons(observedViewModel: FuelLogViewModel) -> some View {
         VStack(spacing: AppSpacing.md) {
             // Primary action buttons
             HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
@@ -648,24 +649,24 @@ struct FuelLogDashboardView: View {
     
     // MARK: - Food Log Section
     
-    private var foodLogSection: some View {
+    private func foodLogSection(observedViewModel: FuelLogViewModel) -> some View {
         // CRITICAL FIX: Force entire section to recreate when food logs change
         // let _ = print("🍽️ FoodLogSection: Rendering with \(viewModel?.todaysFoodLogs.count ?? 0) total food logs - \(viewModel?.foodLogsSummary ?? "")")
         // let _ = print("🍽️ FoodLogSection: Detailed content - \(viewModel?.foodLogsDetailedSummary ?? "No ViewModel")")
         
         return VStack(spacing: AppSpacing.lg) {
             ForEach(MealType.allCases, id: \.self) { mealType in
-                let mealFoodLogs = viewModel?.foodLogsByMealType[mealType] ?? []
+                let mealFoodLogs = observedViewModel.foodLogsByMealType[mealType] ?? []
                 // let _ = print("🍽️ FoodLogSection: \(mealType.displayName) has \(mealFoodLogs.count) items")
                 
                 MealSectionView(
                     mealType: mealType,
                     foodLogs: mealFoodLogs,
-                    nutritionTotals: viewModel?.nutritionTotals(for: mealType) ?? DailyNutritionTotals(),
-                    refreshTrigger: viewModel?.uiRefreshTrigger ?? UUID(),
+                    nutritionTotals: observedViewModel.nutritionTotals(for: mealType),
+                    refreshTrigger: observedViewModel.uiRefreshTrigger,
                     onDeleteFood: { foodLog in
                         Task {
-                            await viewModel?.deleteFood(foodLog)
+                            await observedViewModel.deleteFood(foodLog)
                         }
                     },
                     onEditFood: { foodLog in
@@ -679,10 +680,10 @@ struct FuelLogDashboardView: View {
                         showingFoodSearch = true
                     }
                 )
-                .id("\(mealType.rawValue)-\(viewModel?.uiRefreshTrigger.uuidString ?? "none")") // CRITICAL FIX: Use global refresh trigger
+                .id("\(mealType.rawValue)-\(observedViewModel.uiRefreshTrigger.uuidString)") // CRITICAL FIX: Use global refresh trigger
             }
         }
-        .id("foodLogSection-\(viewModel?.uiRefreshTrigger.uuidString ?? "none")") // CRITICAL FIX: Force recreation using refresh trigger
+        .id("foodLogSection-\(observedViewModel.uiRefreshTrigger.uuidString)") // CRITICAL FIX: Force recreation using refresh trigger
     }
     
     // MARK: - Formatters
