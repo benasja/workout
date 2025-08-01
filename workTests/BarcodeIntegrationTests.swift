@@ -146,19 +146,19 @@ final class BarcodeIntegrationTests: XCTestCase {
     func testMealTypeProperties() {
         // Test MealType enum properties
         XCTAssertEqual(MealType.breakfast.displayName, "Breakfast")
-        XCTAssertEqual(MealType.breakfast.icon, "sunrise.fill")
+        XCTAssertEqual(MealType.breakfast.icon, "cup.and.saucer.fill")
         XCTAssertEqual(MealType.breakfast.sortOrder, 0)
         
         XCTAssertEqual(MealType.lunch.displayName, "Lunch")
-        XCTAssertEqual(MealType.lunch.icon, "sun.max.fill")
+        XCTAssertEqual(MealType.lunch.icon, "fork.knife")
         XCTAssertEqual(MealType.lunch.sortOrder, 1)
         
         XCTAssertEqual(MealType.dinner.displayName, "Dinner")
-        XCTAssertEqual(MealType.dinner.icon, "sunset.fill")
+        XCTAssertEqual(MealType.dinner.icon, "moon.stars.fill")
         XCTAssertEqual(MealType.dinner.sortOrder, 2)
         
         XCTAssertEqual(MealType.snacks.displayName, "Snacks")
-        XCTAssertEqual(MealType.snacks.icon, "star.fill")
+        XCTAssertEqual(MealType.snacks.icon, "leaf.fill")
         XCTAssertEqual(MealType.snacks.sortOrder, 3)
     }
 }

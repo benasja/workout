@@ -199,7 +199,7 @@ struct FuelLogDashboardView: View {
                     } else if observedViewModel.nutritionGoals != nil {
                         // Main dashboard content
                         VStack(spacing: AppSpacing.lg) {
-                            // Enhanced Nutrition View
+                            // Enhanced Nutrition View with meal sections
                             EnhancedNutritionView(
                                 caloriesRemaining: Int(observedViewModel.remainingNutrition.totalCalories),
                                 carbsCurrent: observedViewModel.dailyTotals.totalCarbohydrates,
@@ -207,14 +207,25 @@ struct FuelLogDashboardView: View {
                                 proteinCurrent: observedViewModel.dailyTotals.totalProtein,
                                 proteinGoal: observedViewModel.nutritionGoals?.dailyProtein ?? 0,
                                 fatCurrent: observedViewModel.dailyTotals.totalFat,
-                                fatGoal: observedViewModel.nutritionGoals?.dailyFat ?? 0
+                                fatGoal: observedViewModel.nutritionGoals?.dailyFat ?? 0,
+                                foodLogsByMealType: observedViewModel.foodLogsByMealType,
+                                onAddFood: { mealType in
+                                    selectedMealTypeForSearch = mealType
+                                    showingFoodSearch = true
+                                },
+                                onEditFood: { foodLog in
+                                    editingFoodLog = foodLog
+                                    showingQuickEdit = true
+                                },
+                                onDeleteFood: { foodLog in
+                                    Task {
+                                        await observedViewModel.deleteFood(foodLog)
+                                    }
+                                }
                             )
                             
                             // Quick Action Buttons
                             quickActionButtons(observedViewModel: observedViewModel)
-                            
-                            // Food Log by Meal Type
-                            foodLogSection(observedViewModel: observedViewModel)
                         }
                     } else {
                         // Loading goals state

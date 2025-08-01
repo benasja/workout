@@ -334,10 +334,10 @@ final class NutritionModelsTests: XCTestCase {
         XCTAssertEqual(MealType.dinner.displayName, "Dinner")
         XCTAssertEqual(MealType.snacks.displayName, "Snacks")
         
-        XCTAssertEqual(MealType.breakfast.icon, "sunrise.fill")
-        XCTAssertEqual(MealType.lunch.icon, "sun.max.fill")
-        XCTAssertEqual(MealType.dinner.icon, "sunset.fill")
-        XCTAssertEqual(MealType.snacks.icon, "star.fill")
+        XCTAssertEqual(MealType.breakfast.icon, "cup.and.saucer.fill")
+        XCTAssertEqual(MealType.lunch.icon, "fork.knife")
+        XCTAssertEqual(MealType.dinner.icon, "moon.stars.fill")
+        XCTAssertEqual(MealType.snacks.icon, "leaf.fill")
         
         XCTAssertEqual(MealType.breakfast.sortOrder, 0)
         XCTAssertEqual(MealType.lunch.sortOrder, 1)
