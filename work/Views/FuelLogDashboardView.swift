@@ -13,6 +13,7 @@ struct FuelLogDashboardView: View {
     @EnvironmentObject var tabSelectionModel: TabSelectionModel
     @State private var viewModel: FuelLogViewModel?
     @State private var showingFoodSearch = false
+    @State private var selectedMealTypeForSearch: MealType = .breakfast
     @State private var showingBarcodeScan = false
     @State private var showingQuickAdd = false
     @State private var showingQuickEdit = false
@@ -30,7 +31,10 @@ struct FuelLogDashboardView: View {
         NavigationView {
             Group {
                 if let viewModel = viewModel {
-                    mainContentView(viewModel: viewModel)
+                    // CRITICAL FIX: Wrap in ObservableView to properly observe @Published properties
+                    ObservableViewModelWrapper(viewModel: viewModel) { observedViewModel in
+                        mainContentView(viewModel: observedViewModel)
+                    }
                 } else {
                     LoadingView(message: "Initializing...")
                 }
@@ -65,7 +69,7 @@ struct FuelLogDashboardView: View {
         }
         .sheet(isPresented: $showingFoodSearch) {
             if let repository = viewModel?.repository {
-                FoodSearchView(repository: repository, selectedDate: viewModel?.selectedDate ?? Date()) { foodLog in
+                FoodSearchView(repository: repository, selectedDate: viewModel?.selectedDate ?? Date(), defaultMealType: selectedMealTypeForSearch) { foodLog in
                     Task {
                         await viewModel?.logFood(foodLog)
                     }
@@ -138,6 +142,8 @@ struct FuelLogDashboardView: View {
     
     @ViewBuilder
     private func mainContentView(viewModel: FuelLogViewModel) -> some View {
+        // Debug logging to track UI re-renders
+        // let _ = print("🖥️ FuelLogDashboardView: Rendering main content with \(viewModel.todaysFoodLogs.count) food logs")
         ScrollView {
             LazyVStack(spacing: AppSpacing.lg) {
                 // Date Navigation Header
@@ -147,10 +153,10 @@ struct FuelLogDashboardView: View {
                     if viewModel.isLoadingInitialData {
                         LoadingView(message: "Loading nutrition data...")
                             .frame(height: 200)
-                    } else if viewModel.nutritionGoals == nil {
+                    } else if viewModel.nutritionGoals == nil && !viewModel.isLoadingGoals {
                         // Onboarding state when no goals are set
                         nutritionGoalsOnboardingCard
-                    } else {
+                    } else if viewModel.nutritionGoals != nil {
                         // Main dashboard content
                         VStack(spacing: AppSpacing.lg) {
                             // Calorie Progress Circle
@@ -165,6 +171,10 @@ struct FuelLogDashboardView: View {
                             // Food Log by Meal Type
                             foodLogSection
                         }
+                    } else {
+                        // Loading goals state
+                        LoadingView(message: "Loading nutrition goals...")
+                            .frame(height: 200)
                     }
                 }
             }
@@ -457,6 +467,8 @@ struct FuelLogDashboardView: View {
             // Primary action buttons
             HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
                 Button(action: { 
+                    // Default to breakfast for general search button
+                    selectedMealTypeForSearch = .breakfast
                     showingFoodSearch = true
                     AccessibilityUtils.selectionFeedback()
                 }) {
@@ -597,12 +609,20 @@ struct FuelLogDashboardView: View {
     // MARK: - Food Log Section
     
     private var foodLogSection: some View {
-        VStack(spacing: AppSpacing.lg) {
+        // CRITICAL FIX: Force entire section to recreate when food logs change
+        // let _ = print("🍽️ FoodLogSection: Rendering with \(viewModel?.todaysFoodLogs.count ?? 0) total food logs - \(viewModel?.foodLogsSummary ?? "")")
+        // let _ = print("🍽️ FoodLogSection: Detailed content - \(viewModel?.foodLogsDetailedSummary ?? "No ViewModel")")
+        
+        return VStack(spacing: AppSpacing.lg) {
             ForEach(MealType.allCases, id: \.self) { mealType in
+                let mealFoodLogs = viewModel?.foodLogsByMealType[mealType] ?? []
+                // let _ = print("🍽️ FoodLogSection: \(mealType.displayName) has \(mealFoodLogs.count) items")
+                
                 MealSectionView(
                     mealType: mealType,
-                    foodLogs: viewModel?.foodLogs(for: mealType) ?? [],
+                    foodLogs: mealFoodLogs,
                     nutritionTotals: viewModel?.nutritionTotals(for: mealType) ?? DailyNutritionTotals(),
+                    refreshTrigger: viewModel?.uiRefreshTrigger ?? UUID(),
                     onDeleteFood: { foodLog in
                         Task {
                             await viewModel?.deleteFood(foodLog)
@@ -613,12 +633,15 @@ struct FuelLogDashboardView: View {
                         showingQuickEdit = true
                     },
                     onAddFood: {
-                        // TODO: Navigate to food selection for specific meal type
+                        // CRITICAL FIX: Set the meal type before showing food search
+                        selectedMealTypeForSearch = mealType
                         showingFoodSearch = true
                     }
                 )
+                .id("\(mealType.rawValue)-\(viewModel?.uiRefreshTrigger.uuidString ?? "none")") // CRITICAL FIX: Use global refresh trigger
             }
         }
+        .id("foodLogSection-\(viewModel?.uiRefreshTrigger.uuidString ?? "none")") // CRITICAL FIX: Force recreation using refresh trigger
     }
     
     // MARK: - Formatters
@@ -633,6 +656,18 @@ struct FuelLogDashboardView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.dateTimeStyle = .named
         return formatter
+    }
+}
+
+// MARK: - Observable ViewModel Wrapper
+
+/// Wrapper to properly observe a ViewModel's @Published properties
+struct ObservableViewModelWrapper<Content: View>: View {
+    @ObservedObject var viewModel: FuelLogViewModel
+    let content: (FuelLogViewModel) -> Content
+    
+    var body: some View {
+        content(viewModel)
     }
 }
 
@@ -757,11 +792,16 @@ struct MealSectionView: View {
     let mealType: MealType
     let foodLogs: [FoodLog]
     let nutritionTotals: DailyNutritionTotals
+    let refreshTrigger: UUID
     let onDeleteFood: (FoodLog) -> Void
     let onEditFood: (FoodLog) -> Void
     let onAddFood: () -> Void
     
     var body: some View {
+        // Debug logging to track UI rendering
+        // let _ = print("🎨 MealSectionView: Rendering \(mealType.displayName) with \(foodLogs.count) food logs")
+        // let _ = foodLogs.isEmpty ? print("🎨 MealSectionView: \(mealType.displayName) is empty") : print("🎨 MealSectionView: \(mealType.displayName) items: \(foodLogs.map { $0.name }.joined(separator: ", "))")
+        
         ModernCard {
             VStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
                 // Meal header
@@ -796,6 +836,7 @@ struct MealSectionView: View {
                 
                 // Food items or empty state
                 if foodLogs.isEmpty {
+                    // let _ = print("🎨 MealSectionView: Showing empty state for \(mealType.displayName)")
                     VStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.sm)) {
                         Text("No food logged")
                             .font(AppTypography.subheadline)
@@ -817,8 +858,9 @@ struct MealSectionView: View {
                     }
                     .padding(.vertical, AppSpacing.md)
                 } else {
+                    // let _ = print("🎨 MealSectionView: Rendering \(foodLogs.count) food items for \(mealType.displayName)")
                     VStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.sm)) {
-                        ForEach(foodLogs) { foodLog in
+                        ForEach(foodLogs, id: \.id) { foodLog in
                             FoodLogRowView(
                                 foodLog: foodLog,
                                 onDelete: { 
@@ -830,6 +872,7 @@ struct MealSectionView: View {
                                     AccessibilityUtils.selectionFeedback()
                                 } : nil
                             )
+                            .id("\(foodLog.id)-\(refreshTrigger.uuidString)") // CRITICAL FIX: Use global refresh trigger
                         }
                         
                         // Add more food button
@@ -883,6 +926,9 @@ struct FoodLogRowView: View {
     let onEdit: (() -> Void)?
     
     var body: some View {
+        // Debug logging to track what data the row view receives
+        // let _ = print("🍎 FoodLogRowView: Rendering food item '\(foodLog.name)' with ID \(foodLog.id)")
+        
         HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(foodLog.name)

@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class FoodLog: @unchecked Sendable {
+final class FoodLog: @unchecked Sendable, Identifiable {
     var id: UUID
     var timestamp: Date
     var name: String
@@ -30,6 +30,8 @@ final class FoodLog: @unchecked Sendable {
         customFoodId: UUID? = nil
     ) {
         self.id = UUID()
+        // CRITICAL FIX: Do NOT normalize timestamp here - preserve the exact timestamp passed in
+        // This allows the ViewModel to control the exact date/time when food is logged
         self.timestamp = timestamp
         self.name = name
         self.calories = calories
@@ -37,6 +39,10 @@ final class FoodLog: @unchecked Sendable {
         self.carbohydrates = carbohydrates
         self.fat = fat
         self.mealTypeRawValue = mealType.rawValue
+        
+        // Debug logging commented out - issue was in UI meal type selection
+        // print("🍽️ FOODLOG INIT DEBUG: Creating food '\(name)' with meal type: \(mealType.displayName) (\(mealType.rawValue))")
+        // print("🍽️ FOODLOG INIT DEBUG: Stored raw value: \(mealType.rawValue)")
         self.servingSize = servingSize
         self.servingUnit = servingUnit
         self.barcode = barcode
@@ -46,8 +52,18 @@ final class FoodLog: @unchecked Sendable {
     // MARK: - Computed Properties
     
     var mealType: MealType {
-        get { MealType(rawValue: mealTypeRawValue) ?? .breakfast }
-        set { mealTypeRawValue = newValue.rawValue }
+        get { 
+            let result = MealType(rawValue: mealTypeRawValue) ?? .breakfast
+            // Debug logging commented out - issue was in UI meal type selection
+            // if result == .breakfast && mealTypeRawValue != "breakfast" {
+            //     print("⚠️ MEAL TYPE WARNING: Raw value '\(mealTypeRawValue)' defaulted to breakfast for food ID \(id)")
+            // }
+            return result
+        }
+        set { 
+            // print("🍽️ MEAL TYPE SET DEBUG: Setting meal type for food ID \(id) to \(newValue.displayName) (\(newValue.rawValue))")
+            mealTypeRawValue = newValue.rawValue 
+        }
     }
     
     /// Calculates total calories from macronutrients (4 cal/g protein, 4 cal/g carbs, 9 cal/g fat)
@@ -77,6 +93,44 @@ final class FoodLog: @unchecked Sendable {
     
     /// Returns formatted serving size with unit
     var formattedServing: String {
+        // Handle common serving units more intelligently
+        let cleanUnit = servingUnit.lowercased()
+        
+        // For weight-based servings, show the actual amount
+        if cleanUnit.contains("g") || cleanUnit.contains("gram") || 
+           cleanUnit.contains("oz") || cleanUnit.contains("ounce") ||
+           cleanUnit.contains("lb") || cleanUnit.contains("pound") {
+            if servingSize.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(servingSize))\(servingUnit)"
+            } else {
+                return String(format: "%.1f", servingSize) + servingUnit
+            }
+        }
+        
+        // For volume-based servings, show the actual amount
+        if cleanUnit.contains("ml") || cleanUnit.contains("l") || cleanUnit.contains("liter") ||
+           cleanUnit.contains("cup") || cleanUnit.contains("tbsp") || cleanUnit.contains("tsp") ||
+           cleanUnit.contains("fl oz") {
+            if servingSize.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(servingSize)) \(servingUnit)"
+            } else {
+                return String(format: "%.1f", servingSize) + " \(servingUnit)"
+            }
+        }
+        
+        // For count-based items (pieces, slices, etc.), be more descriptive
+        if cleanUnit.contains("piece") || cleanUnit.contains("slice") || 
+           cleanUnit.contains("item") || cleanUnit == "serving" {
+            if servingSize == 1.0 {
+                return "1 \(servingUnit)"
+            } else if servingSize.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(servingSize)) \(servingUnit)s"
+            } else {
+                return String(format: "%.1f", servingSize) + " \(servingUnit)s"
+            }
+        }
+        
+        // Default formatting
         if servingSize == 1.0 {
             return "1 \(servingUnit)"
         } else if servingSize.truncatingRemainder(dividingBy: 1) == 0 {

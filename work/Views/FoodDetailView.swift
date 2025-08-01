@@ -9,9 +9,16 @@ struct FoodDetailView: View {
     let onConfirm: (FoodLog) -> Void
     
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedMealType: MealType = .breakfast
+    @State private var selectedMealType: MealType
     @State private var servingMultiplier: Double = 1.0
     @State private var showingMealTypePicker = false
+    
+    init(foodResult: FoodSearchResult, selectedDate: Date, defaultMealType: MealType = .breakfast, onConfirm: @escaping (FoodLog) -> Void) {
+        self.foodResult = foodResult
+        self.selectedDate = selectedDate
+        self.onConfirm = onConfirm
+        self._selectedMealType = State(initialValue: defaultMealType)
+    }
     
     var body: some View {
         NavigationStack {

@@ -28,12 +28,21 @@ final class FuelLogViewModel: ObservableObject {
     /// Calculated daily nutrition totals
     @Published var dailyTotals: DailyNutritionTotals = DailyNutritionTotals()
     
-    /// Currently selected date for viewing food logs
+    /// Currently selected date for viewing food logs (using HydrationLog pattern)
     @Published var selectedDate: Date = Calendar.current.startOfDay(for: Date()) {
         didSet {
-            if !Calendar.current.isDate(selectedDate, inSameDayAs: oldValue) {
+            // Use the same pattern as HydrationLog - compare startOfDay dates
+            let calendar = Calendar.current
+            let normalizedOldDate = calendar.startOfDay(for: oldValue)
+            let normalizedNewDate = calendar.startOfDay(for: selectedDate)
+            
+            if normalizedOldDate != normalizedNewDate {
+                // print("📅 FuelLogViewModel: Selected date changed (HydrationLog pattern)")
+                // print("📅 FuelLogViewModel: From: \(DateFormatter.shortDate.string(from: normalizedOldDate))")
+                // print("📅 FuelLogViewModel: To: \(DateFormatter.shortDate.string(from: normalizedNewDate))")
+                
                 Task {
-                    await loadFoodLogs(for: selectedDate)
+                    await loadFoodLogs(for: normalizedNewDate)
                 }
             }
         }
@@ -70,6 +79,30 @@ final class FuelLogViewModel: ObservableObject {
     /// Food logs grouped by meal type for UI display
     @Published var foodLogsByMealType: [MealType: [FoodLog]] = [:]
     
+    /// Computed property to force UI reactivity when food logs change
+    var foodLogsSummary: String {
+        let total = todaysFoodLogs.count
+        let breakdown = MealType.allCases.map { mealType in
+            let count = foodLogsByMealType[mealType]?.count ?? 0
+            return "\(mealType.displayName): \(count)"
+        }.joined(separator: ", ")
+        return "Total: \(total) (\(breakdown))"
+    }
+    
+    /// Detailed food content for debugging UI caching issues
+    var foodLogsDetailedSummary: String {
+        let details = MealType.allCases.compactMap { mealType -> String? in
+            let logs = foodLogsByMealType[mealType] ?? []
+            guard !logs.isEmpty else { return nil }
+            let items = logs.map { "\($0.name)(\($0.id.uuidString.prefix(8)))" }.joined(separator: ",")
+            return "\(mealType.displayName): \(items)"
+        }.joined(separator: " | ")
+        return details.isEmpty ? "No food" : details
+    }
+    
+    /// Global refresh trigger to force complete UI recreation
+    @Published var uiRefreshTrigger: UUID = UUID()
+    
     // MARK: - Private Properties
     
     private let _repository: FuelLogRepositoryProtocol
@@ -92,9 +125,12 @@ final class FuelLogViewModel: ObservableObject {
         return dailyTotals.remaining(against: goals)
     }
     
-    /// Whether the selected date is today
+    /// Whether the selected date is today (using HydrationLog pattern)
     var isSelectedDateToday: Bool {
-        Calendar.current.isDateInToday(selectedDate)
+        let calendar = Calendar.current
+        let todayStartOfDay = calendar.startOfDay(for: Date())
+        let selectedStartOfDay = calendar.startOfDay(for: selectedDate)
+        return todayStartOfDay == selectedStartOfDay
     }
     
     /// Whether nutrition goals are available
@@ -170,6 +206,11 @@ final class FuelLogViewModel: ObservableObject {
             let goals = try await _repository.fetchNutritionGoals()
             await MainActor.run {
                 self.nutritionGoals = goals
+                if goals != nil {
+                    // print("✅ FuelLogViewModel: Loaded nutrition goals successfully")
+                } else {
+                    // print("ℹ️ FuelLogViewModel: No nutrition goals found - user needs to set them up")
+                }
             }
         } catch {
             print("❌ FuelLogViewModel: Error loading nutrition goals: \(error)")
@@ -188,8 +229,11 @@ final class FuelLogViewModel: ObservableObject {
     func loadFoodLogs(for date: Date) async {
         isLoading = true
         
-        // Ensure we're using the start of the day for consistent date handling
-        let startOfDay = Calendar.current.startOfDay(for: date)
+        // CRITICAL FIX: Normalize the date to start of day for consistent querying
+        let calendar = Calendar.current
+        let normalizedDate = calendar.startOfDay(for: date)
+        
+        // print("🔄 FuelLogViewModel: Loading food logs for \(DateFormatter.shortDate.string(from: normalizedDate))")
         
         // Ensure nutrition goals are loaded if not already present
         if nutritionGoals == nil {
@@ -200,40 +244,57 @@ final class FuelLogViewModel: ObservableObject {
             operation: PerformanceMetrics.loadFoodLogs
         ) {
             do {
-                return try await _repository.fetchFoodLogs(for: startOfDay)
+                return try await _repository.fetchFoodLogs(for: normalizedDate)
             } catch {
+                print("❌ FuelLogViewModel: Error loading food logs for \(DateFormatter.shortDate.string(from: normalizedDate)): \(error)")
                 errorHandler.handleError(
                     error,
-                    context: "Loading food logs for \(DateFormatter.shortDate.string(from: startOfDay))"
+                    context: "Loading food logs for \(DateFormatter.shortDate.string(from: normalizedDate))"
                 ) { [weak self] in
-                    await self?.loadFoodLogs(for: startOfDay)
+                    await self?.loadFoodLogs(for: normalizedDate)
                 }
                 return []
             }
         }
         
-        // Update published properties
-        todaysFoodLogs = foodLogs
+        // print("✅ FuelLogViewModel: Loaded \(foodLogs.count) food logs for \(DateFormatter.shortDate.string(from: normalizedDate))")
         
-        // Perform calculations in background
-        await updateUIWithFoodLogs(foodLogs)
+        // CRITICAL FIX: Update all UI state on main thread in correct order
+        await MainActor.run {
+            // print("🔄 FuelLogViewModel: Updating UI state with \(foodLogs.count) food logs from repository")
+            
+            // Force UI update notification
+            objectWillChange.send()
+            
+            // 1. Update the primary data source
+            todaysFoodLogs = foodLogs
+            // print("🔄 FuelLogViewModel: Set todaysFoodLogs to \(todaysFoodLogs.count) items")
+            
+            // 2. Group food logs by meal type for UI display
+            groupFoodLogsByMealType()
+            
+            // 3. Calculate daily totals
+            calculateDailyTotals()
+            
+            // 4. Update nutrition progress
+            updateNutritionProgress()
+            
+            // print("🔄 FuelLogViewModel: UI state updated - \(todaysFoodLogs.count) food logs, \(foodLogsByMealType.values.flatMap { $0 }.count) grouped items")
+            
+            // CRITICAL FIX: Force complete UI recreation by updating refresh trigger
+            uiRefreshTrigger = UUID()
+            // print("🔄 FuelLogViewModel: Triggered UI refresh with new UUID: \(uiRefreshTrigger)")
+            
+            // Force another UI update after all changes
+            objectWillChange.send()
+        }
         
         isLoading = false
     }
     
-    /// Updates UI with food logs using background processing
-    private func updateUIWithFoodLogs(_ foodLogs: [FoodLog]) async {
-        // Group food logs by meal type
-        groupFoodLogsByMealType()
-        
-        // Calculate daily totals in background
-        dailyTotals = await PerformanceOptimizer.shared.calculateNutritionTotals(from: foodLogs)
-        
-        // Update nutrition progress
-        updateNutritionProgress()
-    }
+
     
-    /// Logs a new food entry with optimistic UI updates
+    /// Logs a new food entry with proper date handling
     func logFood(_ foodLog: FoodLog) async {
         isSavingFood = true
         loadingManager.startLoading(
@@ -241,20 +302,11 @@ final class FuelLogViewModel: ObservableObject {
             message: "Saving \(foodLog.name)..."
         )
         
-        // Ensure the food log has the correct timestamp for the selected date
-        let correctedFoodLog = ensureCorrectTimestamp(for: foodLog)
+        // Create a new food log with the correct timestamp for the selected date
+        let correctedFoodLog = createFoodLogForSelectedDate(from: foodLog)
         
-        // Optimistic update - add to UI immediately
-        let originalFoodLogs = todaysFoodLogs
-        let originalDailyTotals = dailyTotals
-        let originalProgress = nutritionProgress
-        let originalGroupedLogs = foodLogsByMealType
-        
-        // Apply optimistic update
-        todaysFoodLogs.append(correctedFoodLog)
-        groupFoodLogsByMealType()
-        calculateDailyTotals()
-        updateNutritionProgress()
+        // print("🍎 FuelLogViewModel: Logging food '\(correctedFoodLog.name)' for selected date \(DateFormatter.shortDate.string(from: selectedDate))")
+        // print("🍎 FuelLogViewModel: Food will be saved with timestamp: \(correctedFoodLog.timestamp)")
         
         do {
             // Save to repository
@@ -263,36 +315,37 @@ final class FuelLogViewModel: ObservableObject {
             // Write to HealthKit if available and authorized
             if let healthKitManager = healthKitManager {
                 do {
-                    try await healthKitManager.writeNutritionData(foodLog)
+                    try await healthKitManager.writeNutritionData(correctedFoodLog)
                 } catch {
                     // HealthKit write failure shouldn't prevent food logging
-                    print("HealthKit write failed: \(error.localizedDescription)")
+                    print("⚠️ HealthKit write failed: \(error.localizedDescription)")
                 }
             }
             
             // Sync to HealthKit via data sync manager if available
             if let dataSyncManager = dataSyncManager {
                 do {
-                    try await dataSyncManager.syncFoodLogToHealthKit(foodLog)
+                    try await dataSyncManager.syncFoodLogToHealthKit(correctedFoodLog)
                 } catch {
                     // Sync failure shouldn't prevent food logging
-                    print("Data sync failed: \(error.localizedDescription)")
+                    print("⚠️ Data sync failed: \(error.localizedDescription)")
                 }
             }
+            
+            // Reload data for the selected date to ensure consistency
+            // print("🔄 FuelLogViewModel: Reloading food logs for selected date \(DateFormatter.shortDate.string(from: selectedDate))")
+            await loadFoodLogs(for: selectedDate)
             
             // Provide haptic feedback for successful logging
             await provideFeedbackForGoalCompletion()
             
-        } catch {
-            // Revert optimistic update on failure
-            todaysFoodLogs = originalFoodLogs
-            dailyTotals = originalDailyTotals
-            nutritionProgress = originalProgress
-            foodLogsByMealType = originalGroupedLogs
+            // print("✅ FuelLogViewModel: Successfully logged food '\(correctedFoodLog.name)' to \(DateFormatter.shortDate.string(from: selectedDate))")
             
+        } catch {
+            print("❌ FuelLogViewModel: Failed to log food '\(correctedFoodLog.name)': \(error)")
             errorHandler.handleError(
                 error,
-                context: "Logging food: \(foodLog.name)"
+                context: "Logging food: \(correctedFoodLog.name)"
             ) { [weak self] in
                 await self?.logFood(foodLog)
             }
@@ -329,7 +382,7 @@ final class FuelLogViewModel: ObservableObject {
         loadingManager.stopLoading(taskId: "update-food")
     }
     
-    /// Deletes a food log entry with optimistic UI updates
+    /// Deletes a food log entry and updates UI properly
     func deleteFood(_ foodLog: FoodLog) async {
         isDeletingFood = true
         loadingManager.startLoading(
@@ -337,28 +390,28 @@ final class FuelLogViewModel: ObservableObject {
             message: "Deleting \(foodLog.name)..."
         )
         
-        // Optimistic update - remove from UI immediately
-        let originalFoodLogs = todaysFoodLogs
-        let originalDailyTotals = dailyTotals
-        let originalProgress = nutritionProgress
-        let originalGroupedLogs = foodLogsByMealType
+        let calendar = Calendar.current
+        let foodDate = calendar.startOfDay(for: foodLog.timestamp)
+        let selectedDateNormalized = calendar.startOfDay(for: selectedDate)
         
-        // Apply optimistic update
-        todaysFoodLogs.removeAll { $0.id == foodLog.id }
-        groupFoodLogsByMealType()
-        calculateDailyTotals()
-        updateNutritionProgress()
+        print("🗑️ FuelLogViewModel: Deleting food '\(foodLog.name)' with ID \(foodLog.id)")
+        print("🗑️ FuelLogViewModel: Food original date: \(DateFormatter.shortDate.string(from: foodDate))")
+        print("🗑️ FuelLogViewModel: Currently viewing date: \(DateFormatter.shortDate.string(from: selectedDateNormalized))")
         
         do {
+            // Delete from repository first
             try await _repository.deleteFoodLog(foodLog)
             
-        } catch {
-            // Revert optimistic update on failure
-            todaysFoodLogs = originalFoodLogs
-            dailyTotals = originalDailyTotals
-            nutritionProgress = originalProgress
-            foodLogsByMealType = originalGroupedLogs
+            print("🔄 FuelLogViewModel: Food deleted from repository, reloading data...")
             
+            // CRITICAL FIX: Just reload the data from repository instead of manual UI updates
+            // This ensures the UI state matches the database state exactly
+            await loadFoodLogs(for: selectedDate)
+            
+            print("✅ FuelLogViewModel: Successfully deleted food '\(foodLog.name)' and updated UI")
+            
+        } catch {
+            print("❌ FuelLogViewModel: Failed to delete food '\(foodLog.name)': \(error)")
             errorHandler.handleError(
                 error,
                 context: "Deleting food: \(foodLog.name)"
@@ -459,17 +512,48 @@ final class FuelLogViewModel: ObservableObject {
     
     /// Navigates to the previous day
     func navigateToPreviousDay() {
-        selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+        let calendar = Calendar.current
+        selectedDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
     }
     
     /// Navigates to the next day
     func navigateToNextDay() {
-        selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+        let calendar = Calendar.current
+        selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
     }
     
     /// Navigates to today
     func navigateToToday() {
-        selectedDate = Date()
+        let today = Date()
+        print("🏠 FuelLogViewModel: Navigating to today: \(DateFormatter.shortDate.string(from: today))")
+        selectedDate = today
+    }
+    
+    /// Debug method to validate current state
+    func debugCurrentState() {
+        let calendar = Calendar.current
+        let normalizedSelectedDate = calendar.startOfDay(for: selectedDate)
+        
+        print("🔍 FuelLogViewModel Debug State:")
+        print("🔍 Selected date: \(DateFormatter.shortDate.string(from: selectedDate))")
+        print("🔍 Normalized selected date: \(DateFormatter.shortDate.string(from: normalizedSelectedDate))")
+        print("🔍 Is today: \(calendar.isDateInToday(selectedDate))")
+        print("🔍 Food logs count: \(todaysFoodLogs.count)")
+        
+        for (index, foodLog) in todaysFoodLogs.enumerated() {
+            let foodDate = calendar.startOfDay(for: foodLog.timestamp)
+            let isCorrectDate = foodDate == normalizedSelectedDate
+            print("🔍 Food \(index + 1): '\(foodLog.name)' - Date: \(DateFormatter.shortDate.string(from: foodDate)) - Correct: \(isCorrectDate)")
+        }
+    }
+    
+    /// Force refresh the UI state by recalculating everything
+    func forceRefreshUI() {
+        print("🔄 FuelLogViewModel: Force refreshing UI state")
+        groupFoodLogsByMealType()
+        calculateDailyTotals()
+        updateNutritionProgress()
+        print("🔄 FuelLogViewModel: UI state refreshed - \(todaysFoodLogs.count) food logs")
     }
     
     /// Clears the current error message
@@ -639,6 +723,8 @@ final class FuelLogViewModel: ObservableObject {
     
     /// Groups food logs by meal type for organized display
     private func groupFoodLogsByMealType() {
+        // print("🍽️ FuelLogViewModel: Grouping \(todaysFoodLogs.count) food logs by meal type")
+        
         foodLogsByMealType = Dictionary(grouping: todaysFoodLogs) { $0.mealType }
         
         // Ensure all meal types have entries (even if empty)
@@ -647,6 +733,14 @@ final class FuelLogViewModel: ObservableObject {
                 foodLogsByMealType[mealType] = []
             }
         }
+        
+        // Debug logging to track UI state
+        // print("🍽️ FuelLogViewModel: Grouped \(todaysFoodLogs.count) food logs by meal type:")
+        // for mealType in MealType.allCases {
+        //     let count = foodLogsByMealType[mealType]?.count ?? 0
+        //     let items = foodLogsByMealType[mealType]?.map { $0.name }.joined(separator: ", ") ?? "none"
+        //     print("🍽️ FuelLogViewModel: \(mealType.displayName): \(count) items (\(items))")
+        // }
     }
     
     /// Provides haptic feedback when nutrition goals are completed
@@ -680,15 +774,7 @@ final class FuelLogViewModel: ObservableObject {
     }
 }
 
-// MARK: - DateFormatter Extension
 
-extension DateFormatter {
-    static let shortDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        return formatter
-    }()
-}
 
 // MARK: - Extensions
 
@@ -739,31 +825,41 @@ extension FuelLogViewModel {
         }
     }
     
-    /// Ensures food log has the correct timestamp for the selected date
-    private func ensureCorrectTimestamp(for foodLog: FoodLog) -> FoodLog {
-        let calendar = Calendar.current
-        let startOfSelectedDay = calendar.startOfDay(for: selectedDate)
+    /// Creates a new food log with the correct date for the selected calendar day
+    private func createFoodLogForSelectedDate(from originalFoodLog: FoodLog) -> FoodLog {
+        // CRITICAL FIX: Use the new date utility for consistent timestamp creation
+        let targetTimestamp = Date.timestampForCalendarDay(selectedDate, withCurrentTime: true)
         
-        // If the food log timestamp is not from the selected date, adjust it
-        if !calendar.isDate(foodLog.timestamp, inSameDayAs: selectedDate) {
-            // Create a new food log with the correct timestamp
-            let correctedFoodLog = FoodLog(
-                timestamp: startOfSelectedDay,
-                name: foodLog.name,
-                calories: foodLog.calories,
-                protein: foodLog.protein,
-                carbohydrates: foodLog.carbohydrates,
-                fat: foodLog.fat,
-                mealType: foodLog.mealType,
-                servingSize: foodLog.servingSize,
-                servingUnit: foodLog.servingUnit,
-                barcode: foodLog.barcode,
-                customFoodId: foodLog.customFoodId
-            )
-            return correctedFoodLog
-        }
+        // Create a completely new FoodLog with the corrected timestamp
+        let correctedFoodLog = FoodLog(
+            timestamp: targetTimestamp,
+            name: originalFoodLog.name,
+            calories: originalFoodLog.calories,
+            protein: originalFoodLog.protein,
+            carbohydrates: originalFoodLog.carbohydrates,
+            fat: originalFoodLog.fat,
+            mealType: originalFoodLog.mealType,
+            servingSize: originalFoodLog.servingSize,
+            servingUnit: originalFoodLog.servingUnit,
+            barcode: originalFoodLog.barcode,
+            customFoodId: originalFoodLog.customFoodId
+        )
         
-        return foodLog
+        // Validate the timestamp is correct
+        assert(targetTimestamp.belongsToCalendarDay(selectedDate), "Food log timestamp must belong to selected calendar day")
+        
+        // print("🕐 FuelLogViewModel: Created food log with proper date handling")
+        // print("🕐 FuelLogViewModel: Selected date: \(DateFormatter.shortDate.string(from: selectedDate))")
+        // print("🕐 FuelLogViewModel: Target timestamp: \(DateFormatter.debugDateTime.string(from: targetTimestamp))")
+        // print("🕐 FuelLogViewModel: Timestamp validation: \(targetTimestamp.belongsToCalendarDay(selectedDate) ? "✅ CORRECT" : "❌ INCORRECT")")
+        
+        // Debug logging commented out - issue was in UI meal type selection
+        // print("🍽️ MEAL TYPE DEBUG: Original meal type: \(originalFoodLog.mealType.displayName) (\(originalFoodLog.mealType.rawValue))")
+        // print("🍽️ MEAL TYPE DEBUG: Original raw value: \(originalFoodLog.mealTypeRawValue)")
+        // print("🍽️ MEAL TYPE DEBUG: Corrected meal type: \(correctedFoodLog.mealType.displayName) (\(correctedFoodLog.mealType.rawValue))")
+        // print("🍽️ MEAL TYPE DEBUG: Corrected raw value: \(correctedFoodLog.mealTypeRawValue)")
+        
+        return correctedFoodLog
     }
 }
 

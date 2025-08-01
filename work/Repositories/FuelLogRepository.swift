@@ -45,12 +45,46 @@ final class FuelLogRepository: FuelLogRepositoryProtocol {
     
     /// Fetches all food logs for a specific date, sorted by meal type and timestamp
     nonisolated func fetchFoodLogs(for date: Date) async throws -> [FoodLog] {
-        let descriptor = await PerformanceOptimizer.shared.createOptimizedFoodLogDescriptor(for: date)
+        // CRITICAL FIX: Use consistent date range queries with proper predicate syntax
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        
+        let predicate = #Predicate<FoodLog> { foodLog in
+            foodLog.timestamp >= startOfDay && foodLog.timestamp < endOfDay
+        }
+        
+        let descriptor = FetchDescriptor<FoodLog>(
+            predicate: predicate,
+            sortBy: [
+                SortDescriptor(\.mealTypeRawValue),
+                SortDescriptor(\.timestamp)
+            ]
+        )
         
         return try await MainActor.run {
             do {
-                return try modelContext.fetch(descriptor)
+                let foodLogs = try modelContext.fetch(descriptor)
+                
+                // print("📊 FuelLogRepository: Fetched \(foodLogs.count) food logs for \(DateFormatter.shortDate.string(from: date))")
+                // print("📊 FuelLogRepository: Query range - Start: \(DateFormatter.debugDateTime.string(from: startOfDay)), End: \(DateFormatter.debugDateTime.string(from: endOfDay))")
+                
+                // Debug: Verify each food log belongs to the correct calendar day using the new utility
+                // for (index, foodLog) in foodLogs.enumerated() {
+                //     let belongsToDay = foodLog.timestamp.belongsToCalendarDay(date)
+                //     print("📊 FuelLogRepository: Food \(index + 1): '\(foodLog.name)' - timestamp: \(DateFormatter.debugDateTime.string(from: foodLog.timestamp)), belongs to day: \(belongsToDay ? "✅" : "❌")")
+                //     
+                //     // Additional validation to catch any data inconsistencies
+                //     if !belongsToDay {
+                //         print("⚠️ FuelLogRepository: WARNING - Food log timestamp doesn't belong to query date!")
+                //         print("⚠️ FuelLogRepository: Query date: \(DateFormatter.shortDate.string(from: date))")
+                //         print("⚠️ FuelLogRepository: Food timestamp: \(DateFormatter.debugDateTime.string(from: foodLog.timestamp))")
+                //     }
+                // }
+                
+                return foodLogs
             } catch {
+                print("❌ FuelLogRepository: Error fetching food logs for \(DateFormatter.shortDate.string(from: date)): \(error)")
                 throw FuelLogError.persistenceError(error)
             }
         }
@@ -83,11 +117,16 @@ final class FuelLogRepository: FuelLogRepositoryProtocol {
         // Validate food log before saving
         try validateFoodLog(foodLog)
         
+        // print("💾 FuelLogRepository: Saving food log '\(foodLog.name)' with timestamp \(foodLog.timestamp)")
+        // print("💾 FuelLogRepository: Food will be saved to date: \(DateFormatter.shortDate.string(from: foodLog.timestamp))")
+        
         try await MainActor.run {
             do {
                 modelContext.insert(foodLog)
                 try modelContext.save()
+                // print("✅ FuelLogRepository: Successfully saved food log '\(foodLog.name)' to \(DateFormatter.shortDate.string(from: foodLog.timestamp))")
             } catch {
+                print("❌ FuelLogRepository: Failed to save food log '\(foodLog.name)': \(error)")
                 throw FuelLogError.persistenceError(error)
             }
         }
@@ -109,11 +148,15 @@ final class FuelLogRepository: FuelLogRepositoryProtocol {
     
     /// Deletes a food log entry
     nonisolated func deleteFoodLog(_ foodLog: FoodLog) async throws {
+        // print("🗑️ FuelLogRepository: Deleting food log '\(foodLog.name)' from date \(DateFormatter.shortDate.string(from: foodLog.timestamp))")
+        
         try await MainActor.run {
             do {
                 modelContext.delete(foodLog)
                 try modelContext.save()
+                // print("✅ FuelLogRepository: Successfully deleted food log '\(foodLog.name)' from database")
             } catch {
+                print("❌ FuelLogRepository: Failed to delete food log '\(foodLog.name)': \(error)")
                 throw FuelLogError.persistenceError(error)
             }
         }
@@ -442,3 +485,4 @@ final class FuelLogRepository: FuelLogRepositoryProtocol {
         }
     }
 }
+
