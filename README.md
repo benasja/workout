@@ -43,6 +43,11 @@
 - **Goal Setting**: Editable nutrition targets in settings (e.g., 3000 kcal, 200p, 350c, 100f)
 - **Date Navigation**: Consistent date handling with proper timestamp management
 - **Data Persistence**: Optimistic UI updates with reliable data persistence
+- **🆕 Interactive Food Editing**: Tap any food item to edit serving size and meal type
+- **🆕 European Decimal Support**: Use comma (,) as decimal separator for serving amounts
+- **🆕 Percentage Display**: Shows what percentage of daily goals each food represents
+- **🆕 Smart Serving Display**: Always shows 100g/100ml values for accurate nutrition info
+- **🆕 Quick Serving Buttons**: Preset options (0.5x, 1x, 1.5x, 2x) for common adjustments
 
 ### 💧 Hydration Monitoring
 - **Visual Progress**: Animated circular gauge with goal completion celebration

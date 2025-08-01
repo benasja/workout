@@ -73,7 +73,9 @@ final class FoodLog: @unchecked Sendable, Identifiable {
     
     /// Indicates if this is a quick add entry (no specific food item)
     var isQuickAdd: Bool {
-        customFoodId == nil && barcode == nil
+        // Quick add entries are manually created entries with generic names
+        // They typically start with "Quick Add -" and don't represent specific foods
+        name.hasPrefix("Quick Add -")
     }
     
     /// Validates that macro calories are reasonably close to stated calories

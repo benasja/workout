@@ -12,16 +12,19 @@ struct FoodSearchView: View {
     let onFoodSelected: (FoodLog) -> Void
     let selectedDate: Date
     let defaultMealType: MealType
+    let nutritionGoals: NutritionGoals?
     
     init(
         repository: FuelLogRepositoryProtocol,
         selectedDate: Date,
         defaultMealType: MealType = .breakfast,
+        nutritionGoals: NutritionGoals? = nil,
         onFoodSelected: @escaping (FoodLog) -> Void
     ) {
         self._viewModel = StateObject(wrappedValue: FoodSearchViewModel(repository: repository))
         self.selectedDate = selectedDate
         self.defaultMealType = defaultMealType
+        self.nutritionGoals = nutritionGoals
         self.onFoodSelected = onFoodSelected
     }
     
@@ -248,7 +251,7 @@ struct FoodSearchView: View {
             if !localResults.isEmpty {
                 Section {
                     ForEach(localResults, id: \.id) { result in
-                        FoodSearchResultRow(result: result, selectedDate: selectedDate, defaultMealType: defaultMealType) { foodLog in
+                        FoodSearchResultRow(result: result, selectedDate: selectedDate, defaultMealType: defaultMealType, nutritionGoals: nutritionGoals) { foodLog in
                             onFoodSelected(foodLog)
                             dismiss()
                         }
@@ -286,7 +289,7 @@ struct FoodSearchView: View {
             if !apiResults.isEmpty {
                 Section {
                     ForEach(apiResults, id: \.id) { result in
-                        FoodSearchResultRow(result: result, selectedDate: selectedDate, defaultMealType: defaultMealType) { foodLog in
+                        FoodSearchResultRow(result: result, selectedDate: selectedDate, defaultMealType: defaultMealType, nutritionGoals: nutritionGoals) { foodLog in
                             onFoodSelected(foodLog)
                             dismiss()
                         }
@@ -331,10 +334,11 @@ struct FoodSearchResultRow: View {
     let result: FoodSearchResult
     let selectedDate: Date
     let defaultMealType: MealType
+    let nutritionGoals: NutritionGoals?
     let onFoodSelected: (FoodLog) -> Void
     
     var body: some View {
-        NavigationLink(destination: FoodDetailView(foodResult: result, selectedDate: selectedDate, defaultMealType: defaultMealType, onConfirm: onFoodSelected)) {
+        NavigationLink(destination: FoodDetailView(foodResult: result, selectedDate: selectedDate, nutritionGoals: nutritionGoals, defaultMealType: defaultMealType, onConfirm: onFoodSelected)) {
             HStack {
                 VStack(alignment: .leading, spacing: AccessibilityUtils.scaledSpacing(4)) {
                     Text(result.displayName)

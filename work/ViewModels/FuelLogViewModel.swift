@@ -390,25 +390,25 @@ final class FuelLogViewModel: ObservableObject {
             message: "Deleting \(foodLog.name)..."
         )
         
-        let calendar = Calendar.current
-        let foodDate = calendar.startOfDay(for: foodLog.timestamp)
-        let selectedDateNormalized = calendar.startOfDay(for: selectedDate)
+        // let calendar = Calendar.current
+       // let foodDate = calendar.startOfDay(for: foodLog.timestamp)
+       // let selectedDateNormalized = calendar.startOfDay(for: selectedDate)
         
-        print("🗑️ FuelLogViewModel: Deleting food '\(foodLog.name)' with ID \(foodLog.id)")
-        print("🗑️ FuelLogViewModel: Food original date: \(DateFormatter.shortDate.string(from: foodDate))")
-        print("🗑️ FuelLogViewModel: Currently viewing date: \(DateFormatter.shortDate.string(from: selectedDateNormalized))")
+        // print("🗑️ FuelLogViewModel: Deleting food '\(foodLog.name)' with ID \(foodLog.id)")
+        // print("🗑️ FuelLogViewModel: Food original date: \(DateFormatter.shortDate.string(from: foodDate))")
+        // print("🗑️ FuelLogViewModel: Currently viewing date: \(DateFormatter.shortDate.string(from: selectedDateNormalized))")
         
         do {
             // Delete from repository first
             try await _repository.deleteFoodLog(foodLog)
             
-            print("🔄 FuelLogViewModel: Food deleted from repository, reloading data...")
+            // print("🔄 FuelLogViewModel: Food deleted from repository, reloading data...")
             
             // CRITICAL FIX: Just reload the data from repository instead of manual UI updates
             // This ensures the UI state matches the database state exactly
             await loadFoodLogs(for: selectedDate)
             
-            print("✅ FuelLogViewModel: Successfully deleted food '\(foodLog.name)' and updated UI")
+            // print("✅ FuelLogViewModel: Successfully deleted food '\(foodLog.name)' and updated UI")
             
         } catch {
             print("❌ FuelLogViewModel: Failed to delete food '\(foodLog.name)': \(error)")
@@ -863,34 +863,4 @@ extension FuelLogViewModel {
     }
 }
 
-// MARK: - Supporting Types
 
-/// Enum for different nutrient types
-enum NutrientType: CaseIterable {
-    case calories
-    case protein
-    case carbohydrates
-    case fat
-    
-    var displayName: String {
-        switch self {
-        case .calories:
-            return "Calories"
-        case .protein:
-            return "Protein"
-        case .carbohydrates:
-            return "Carbs"
-        case .fat:
-            return "Fat"
-        }
-    }
-    
-    var unit: String {
-        switch self {
-        case .calories:
-            return "kcal"
-        case .protein, .carbohydrates, .fat:
-            return "g"
-        }
-    }
-}

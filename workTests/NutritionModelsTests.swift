@@ -67,7 +67,7 @@ final class NutritionModelsTests: XCTestCase {
         )
         
         let quickAdd = FoodLog(
-            name: "Quick Add",
+            name: "Quick Add - Snacks",
             calories: 200,
             protein: 10,
             carbohydrates: 20,

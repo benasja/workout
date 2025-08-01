@@ -69,7 +69,7 @@ struct FuelLogDashboardView: View {
         }
         .sheet(isPresented: $showingFoodSearch) {
             if let repository = viewModel?.repository {
-                FoodSearchView(repository: repository, selectedDate: viewModel?.selectedDate ?? Date(), defaultMealType: selectedMealTypeForSearch) { foodLog in
+                FoodSearchView(repository: repository, selectedDate: viewModel?.selectedDate ?? Date(), defaultMealType: selectedMealTypeForSearch, nutritionGoals: viewModel?.nutritionGoals) { foodLog in
                     Task {
                         await viewModel?.logFood(foodLog)
                     }
@@ -116,11 +116,51 @@ struct FuelLogDashboardView: View {
         }
         .sheet(isPresented: $showingQuickEdit) {
             if let editingFoodLog = editingFoodLog {
-                QuickEditView(foodLog: editingFoodLog) { updatedFoodLog in
-                    Task {
-                        await viewModel?.updateFoodLog(editingFoodLog, with: updatedFoodLog)
+                if editingFoodLog.isQuickAdd {
+                    QuickEditView(foodLog: editingFoodLog) { updatedFoodLog in
+                        Task {
+                            await viewModel?.updateFoodLog(editingFoodLog, with: updatedFoodLog)
+                        }
+                    }
+                } else {
+                    if editingFoodLog.name.isEmpty {
+                        // Fallback for invalid food log
+                        VStack {
+                            Text("Invalid Food Item")
+                                .font(.title2)
+                                .padding()
+                            Button("Close") {
+                                showingQuickEdit = false
+                            }
+                        }
+                    } else {
+                        if let viewModel = viewModel {
+                            FoodEditView(
+                                foodLog: editingFoodLog,
+                                nutritionGoals: viewModel.nutritionGoals
+                            ) { updatedFoodLog in
+                                Task {
+                                    await viewModel.updateFoodLog(editingFoodLog, with: updatedFoodLog)
+                                }
+                            }
+                        } else {
+                            // Fallback if viewModel is not ready
+                            VStack {
+                                Text("Loading...")
+                                    .font(.title2)
+                                    .padding()
+                                Button("Close") {
+                                    showingQuickEdit = false
+                                }
+                            }
+                        }
                     }
                 }
+            }
+        }
+        .onChange(of: showingQuickEdit) { _, isShowing in
+            if !isShowing {
+                editingFoodLog = nil
             }
         }
         // Barcode result sheet is disabled since barcode scanning is disabled
@@ -629,6 +669,7 @@ struct FuelLogDashboardView: View {
                         }
                     },
                     onEditFood: { foodLog in
+                        print("🔄 Setting editingFoodLog: \(foodLog.name), id: \(foodLog.id)")
                         editingFoodLog = foodLog
                         showingQuickEdit = true
                     },
@@ -867,10 +908,10 @@ struct MealSectionView: View {
                                     onDeleteFood(foodLog)
                                     AccessibilityUtils.announceFoodDeleted(foodLog.name)
                                 },
-                                onEdit: foodLog.isQuickAdd ? { 
+                                onEdit: { 
                                     onEditFood(foodLog)
                                     AccessibilityUtils.selectionFeedback()
-                                } : nil
+                                }
                             )
                             .id("\(foodLog.id)-\(refreshTrigger.uuidString)") // CRITICAL FIX: Use global refresh trigger
                         }
@@ -929,7 +970,13 @@ struct FoodLogRowView: View {
         // Debug logging to track what data the row view receives
         // let _ = print("🍎 FoodLogRowView: Rendering food item '\(foodLog.name)' with ID \(foodLog.id)")
         
-        HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
+        Button(action: {
+            if let onEdit = onEdit {
+                onEdit()
+                AccessibilityUtils.selectionFeedback()
+            }
+        }) {
+            HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(foodLog.name)
                     .font(AppTypography.subheadline)
@@ -987,12 +1034,19 @@ struct FoodLogRowView: View {
                         )
                     )
             }
+            .buttonStyle(PlainButtonStyle())
             .actionButtonAccessibility(
                 label: "Delete \(foodLog.name)",
                 hint: AccessibilityUtils.deleteFoodHint
             )
             .keyboardNavigationSupport()
+            }
         }
+        .buttonStyle(PlainButtonStyle())
+        .background(
+            RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                .fill(AppColors.tertiaryBackground)
+        )
         .padding(.vertical, AppSpacing.xs)
         .foodLogAccessibility(
             name: foodLog.name,
@@ -1006,7 +1060,7 @@ struct FoodLogRowView: View {
             canDelete: true
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            if let onEdit = onEdit, foodLog.isQuickAdd {
+            if let onEdit = onEdit {
                 Button("Edit") {
                     onEdit()
                     AccessibilityUtils.selectionFeedback()
