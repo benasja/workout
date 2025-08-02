@@ -86,7 +86,7 @@ class RecoveryScoreCalculator {
         }
         
         // No stored score exists - calculate a new one using overnight data
-        print("🔄 Calculating new recovery score for \(date) using overnight data")
+        // print("🔄 Calculating new recovery score for \(date) using overnight data")
         
         // Step 1: Find the main sleep session for this wake date
         let sleepSession = try await fetchMainSleepSession(for: date)
@@ -182,7 +182,7 @@ class RecoveryScoreCalculator {
         )
         
         scoreStore.saveRecoveryScore(recoveryScore)
-        print("✅ Stored recovery score for \(date) - will remain static throughout the day")
+        // print("✅ Stored recovery score for \(date) - will remain static throughout the day")
         
         return result
     }
@@ -370,12 +370,12 @@ class RecoveryScoreCalculator {
     /// RHR Component (25% Weight)
     /// FINAL CALIBRATED Formula: Piecewise function with baseline of 75
     private func calculateRHRComponent(currentRHR: Double?, baselineRHR: Double?) -> RecoveryScoreResult.RecoveryComponent {
-        print("🔍 RHR Component Calculation:")
-        print("  - Current RHR: \(currentRHR?.description ?? "nil")")
-        print("  - Baseline RHR: \(baselineRHR?.description ?? "nil")")
+        // print("🔍 RHR Component Calculation:")
+        // print("  - Current RHR: \(currentRHR?.description ?? "nil")")
+        // print("  - Baseline RHR: \(baselineRHR?.description ?? "nil")")
         
         guard let rhr = currentRHR, let baseline = baselineRHR, baseline > 0, rhr > 0 else {
-            print("❌ RHR Component: Missing data - returning neutral score")
+            // print("❌ RHR Component: Missing data - returning neutral score")
             return RecoveryScoreResult.RecoveryComponent(
                 score: 50.0, // Neutral score when data is missing
                 weight: 0.25,
@@ -386,7 +386,7 @@ class RecoveryScoreCalculator {
             )
         }
         
-        print("✅ RHR Component: Valid data - calculating score")
+        // print("✅ RHR Component: Valid data - calculating score")
         
         // Calculate the ratio of baseline RHR to today's RHR (lower RHR is better)
         let rhrRatio = baseline / rhr
@@ -410,7 +410,7 @@ class RecoveryScoreCalculator {
             description = "RHR vs \(String(format: "%.0f", baseline)) BPM baseline: your RHR of \(String(format: "%.0f", rhr)) BPM is +\(String(format: "%.0f", abs(percentDiff)))% above baseline (high cardiovascular stress). Score: \(String(format: "%.0f", rhrScore))/100 (calculated using exponential decay formula: baseline ratio of 1.0 = 75 points, higher RHR gets penalty points down to 0)"
         }
         
-        print("✅ RHR Component: Score calculated: \(rhrScore)/100")
+        // print("✅ RHR Component: Score calculated: \(rhrScore)/100")
         
         return RecoveryScoreResult.RecoveryComponent(
             score: rhrScore,
@@ -602,6 +602,23 @@ class RecoveryScoreCalculator {
     /// Clear all stored recovery scores (useful for testing or data refresh)
     func clearAllStoredScores() {
         // This would need to be implemented in ScoreHistoryStore
-        print("🗑️ Recovery score clearing not yet implemented")
+        // print("🗑️ Recovery score clearing not yet implemented")
+    }
+    
+    /// Forces recalculation of recovery score for a specific date by clearing cached data
+    /// This is used by the reactive system when new HealthKit data becomes available
+    func forceRecalculateRecoveryScore(for date: Date) async throws -> RecoveryScoreResult {
+        // print("🔄 Force recalculating recovery score for \(date)")
+        
+        // Clear any existing stored score for this date
+        scoreStore.deleteRecoveryScore(for: date)
+        
+        // Calculate fresh score with new data
+        return try await calculateRecoveryScore(for: date)
+    }
+    
+    /// Checks if a recovery score exists for the given date
+    func hasStoredScore(for date: Date) -> Bool {
+        return scoreStore.hasRecoveryScore(for: date)
     }
 } 

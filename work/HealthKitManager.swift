@@ -989,10 +989,10 @@ final class HealthKitManager {
         let startOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: calendar.date(byAdding: .day, value: -1, to: wakeDate)!))!
         let endOfWindow = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: wakeDate))!
         
-        print("🔍 Sleep Session Detection: Looking for sleep between \(startOfWindow.formatted(date: .omitted, time: .shortened)) and \(endOfWindow.formatted(date: .omitted, time: .shortened))")
+        // print("🔍 Sleep Session Detection: Looking for sleep between \(startOfWindow.formatted(date: .omitted, time: .shortened)) and \(endOfWindow.formatted(date: .omitted, time: .shortened))")
         
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
-            print("❌ Sleep: HealthKit sleep type not available")
+            // print("❌ Sleep: HealthKit sleep type not available")
             completion(nil)
             return
         }
@@ -1002,36 +1002,36 @@ final class HealthKitManager {
             let sleepSamples = (samples as? [HKCategorySample]) ?? []
             
             if sleepSamples.isEmpty {
-                print("❌ Sleep: No sleep samples found in window")
+                // print("❌ Sleep: No sleep samples found in window")
                 completion(nil)
                 return
             }
             
-            print("✅ Sleep: Found \(sleepSamples.count) sleep samples")
+           // print("✅ Sleep: Found \(sleepSamples.count) sleep samples")
             
             // Group sleep samples by session (continuous periods)
             let sleepSessions = self.groupSleepSamplesIntoSessions(sleepSamples)
             
             if sleepSessions.isEmpty {
-                print("❌ Sleep: No sleep sessions created from samples")
+                // print("❌ Sleep: No sleep sessions created from samples")
                 completion(nil)
                 return
             }
             
-            print("✅ Sleep: Created \(sleepSessions.count) sleep sessions")
+            // print("✅ Sleep: Created \(sleepSessions.count) sleep sessions")
             
             // Find the main sleep session (longest one)
             let mainSession = sleepSessions.max(by: { $0.totalDuration < $1.totalDuration }) ?? sleepSessions.first
             
             guard let session = mainSession else {
-                print("❌ Sleep: No main sleep session found")
+                // print("❌ Sleep: No main sleep session found")
                 completion(nil)
                 return
             }
             
             let sleepInterval = DateInterval(start: session.startTime, end: session.endTime)
-            let durationHours = session.totalDuration / 3600
-            print("✅ Sleep: Main session found: \(session.startTime.formatted(date: .omitted, time: .shortened)) - \(session.endTime.formatted(date: .omitted, time: .shortened)) (duration: \(String(format: "%.1f", durationHours))h)")
+            let _ = session.totalDuration / 3600 // Duration calculation for potential future use
+            // print("✅ Sleep: Main session found: \(session.startTime.formatted(date: .omitted, time: .shortened)) - \(session.endTime.formatted(date: .omitted, time: .shortened)) (duration: \(String(format: "%.1f", durationHours))h)")
             completion(sleepInterval)
         }
         
@@ -1072,7 +1072,7 @@ final class HealthKitManager {
     /// Fetches RHR data within a specific date interval (for overnight recovery analysis)
     func fetchRHRForInterval(_ interval: DateInterval, completion: @escaping (Double?) -> Void) {
         guard let type = HKObjectType.quantityType(forIdentifier: .restingHeartRate) else {
-            print("❌ RHR: HealthKit type not available")
+            // print("❌ RHR: HealthKit type not available")
             completion(nil)
             return
         }
@@ -1082,15 +1082,15 @@ final class HealthKitManager {
             let values = (samples as? [HKQuantitySample])?.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) } ?? []
             
             if values.isEmpty {
-                print("⚠️ RHR: No RHR data found during sleep session (\(interval.start.formatted(date: .omitted, time: .shortened)) - \(interval.end.formatted(date: .omitted, time: .shortened)))")
+                // print("⚠️ RHR: No RHR data found during sleep session (\(interval.start.formatted(date: .omitted, time: .shortened)) - \(interval.end.formatted(date: .omitted, time: .shortened)))")
                 
                 // Fallback: Try to get RHR for the entire day
                 self.fetchRHRForDay(containing: interval.start) { fallbackRHR in
                     if let fallbackRHR = fallbackRHR {
-                        print("✅ RHR: Using daily RHR as fallback: \(fallbackRHR) BPM")
+                        // print("✅ RHR: Using daily RHR as fallback: \(fallbackRHR) BPM")
                         completion(fallbackRHR)
                     } else {
-                        print("❌ RHR: No RHR data available for day either")
+                        // print("❌ RHR: No RHR data available for day either")
                         completion(nil)
                     }
                 }
@@ -1099,7 +1099,7 @@ final class HealthKitManager {
             
             // For recovery score, we want the lowest RHR during sleep (best recovery state)
             let lowestRHR = values.min()
-            print("✅ RHR: Found \(values.count) samples during sleep, lowest: \(lowestRHR ?? 0) BPM")
+            // print("✅ RHR: Found \(values.count) samples during sleep, lowest: \(lowestRHR ?? 0) BPM")
             completion(lowestRHR)
         }
         healthStore.execute(query)

@@ -54,6 +54,9 @@ final class HealthStatsViewModel: ObservableObject {
     // MARK: - Initialization
     
     init() {
+        // Set up as shared instance for reactive system
+        setupAsSharedInstance()
+        
         // Check if we need to force recalculate baselines due to the new circular averaging algorithm
         let lastRecalculationKey = "circularAveragingRecalculated"
         if !UserDefaults.standard.bool(forKey: lastRecalculationKey) {
@@ -61,6 +64,11 @@ final class HealthStatsViewModel: ObservableObject {
                 await forceRecalculateBaselines()
                 UserDefaults.standard.set(true, forKey: lastRecalculationKey)
             }
+        }
+        
+        // Initialize reactive HealthKit system
+        Task {
+            await ReactiveHealthKitManager.shared.initializeReactiveSystem()
         }
         
         // Load today's data by default

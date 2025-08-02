@@ -173,9 +173,9 @@ class ScoreHistoryStore {
         
         do {
             try modelContext.save()
-            print("✅ Saved recovery score for \(recoveryScore.date)")
+            // print("✅ Saved recovery score for \(recoveryScore.date)")
         } catch {
-            print("❌ Failed to save recovery score: \(error)")
+            // print("❌ Failed to save recovery score: \(error)")
         }
     }
     
@@ -220,9 +220,9 @@ class ScoreHistoryStore {
             
             do {
                 try modelContext.save()
-                print("🗑️ Deleted recovery score for \(date)")
+                // print("🗑️ Deleted recovery score for \(date)")
             } catch {
-                print("❌ Failed to delete recovery score: \(error)")
+                // print("❌ Failed to delete recovery score: \(error)")
             }
         }
     }

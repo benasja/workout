@@ -30,6 +30,11 @@ struct RecoveryDetailView: View {
                 VStack(spacing: 16) {
                     DateSliderView(selectedDate: $dateModel.selectedDate)
                     
+                    // Show reactive status for today's data
+                    if isToday {
+                        ReactiveScoreStatusView()
+                    }
+                    
                     if healthStats.isLoading {
                         loadingOverlay
                     } else if let error = healthStats.errorMessage {
@@ -184,11 +189,11 @@ struct RecoveryDetailView: View {
             }
         }
         
-        // Pending message
+        // Pending message with reactive system context
         EmptyStateView(
-            icon: "hourglass",
-            title: "Recovery Score Pending",
-            message: "Your recovery score will be calculated after your next sleep session is analyzed.",
+            icon: "heart.circle",
+            title: "Calculating Recovery Score",
+            message: "Your recovery score is being calculated. It will automatically update when your Apple Watch data finishes syncing.",
             actionTitle: nil,
             action: nil
         )

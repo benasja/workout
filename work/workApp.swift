@@ -64,6 +64,19 @@ struct workApp: App {
                     
                     // Initialize baseline engine with your personal data
                     initializeBaselineEngine()
+                    
+                    // Initialize reactive HealthKit system
+                    initializeReactiveSystem()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                    // Restart observer queries when app returns to foreground
+                    Task {
+                        await ReactiveHealthKitManager.shared.restartObserverQueries()
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                    // Keep observer queries running in background for reactive updates
+                    // They will be automatically managed by the system
                 }
                 .preferredColorScheme(
                     AppearanceMode(rawValue: appearanceMode) == .light ? .light :
@@ -134,6 +147,18 @@ struct workApp: App {
             } else {
                 // print("HealthKit authorization denied")
             }
+        }
+    }
+    
+    private func initializeReactiveSystem() {
+        // print("Initializing reactive HealthKit system...")
+        
+        Task {
+            // Initialize the reactive system after HealthKit authorization
+            await ReactiveHealthKitManager.shared.initializeReactiveSystem()
+            
+            // Enable background delivery for immediate updates
+            ReactiveHealthKitManager.shared.enableBackgroundDelivery()
         }
     }
     
