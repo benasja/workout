@@ -121,12 +121,15 @@ final class CustomFoodCreationViewModel: ObservableObject {
     
     // MARK: - Initialization
     
-    init(repository: FuelLogRepositoryProtocol, existingFood: CustomFood? = nil) {
+    init(repository: FuelLogRepositoryProtocol, existingFood: CustomFood? = nil, defaultToComposite: Bool = false) {
         self.repository = repository
         self.existingFood = existingFood
         
         if let food = existingFood {
             loadExistingFood(food)
+        } else if defaultToComposite {
+            isComposite = true
+            servingUnit = "recipe"
         }
     }
     

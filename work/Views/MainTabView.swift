@@ -65,6 +65,19 @@ struct MainTabView: View {
             }
             .tag(2)
             
+            // Hydration Tab
+            NavigationStack {
+                HydrationView()
+                    .environmentObject(dateModel)
+                    .environmentObject(tabSelectionModel)
+                    .environmentObject(dataManager)
+            }
+            .tabItem {
+                Image(systemName: "drop.fill")
+                Text("Hydration")
+            }
+            .tag(3)
+            
             // Environment Tab
             NavigationStack {
                 EnvironmentView()
@@ -76,9 +89,7 @@ struct MainTabView: View {
                 Image(systemName: "leaf.fill")
                 Text("Environment")
             }
-            .tag(3)
-            
-
+            .tag(4)
             
             // More Tab
             NavigationStack {
@@ -91,7 +102,7 @@ struct MainTabView: View {
                 Image(systemName: "ellipsis.circle.fill")
                 Text("More")
             }
-            .tag(4)
+            .tag(5)
         }
         .accentColor(AppColors.primary)
         .preferredColorScheme(colorScheme)
@@ -177,11 +188,6 @@ struct MoreView: View {
                 
                 NavigationLink(destination: SupplementsView()) {
                     Label("Supplements", systemImage: "pills.fill")
-                        .foregroundColor(.primary)
-                }
-                
-                NavigationLink(destination: HydrationView()) {
-                    Label("Hydration", systemImage: "drop.fill")
                         .foregroundColor(.primary)
                 }
             }

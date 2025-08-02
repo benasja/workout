@@ -5,7 +5,7 @@ import SwiftUI
 final class IngredientPickerViewModel: ObservableObject {
     // MARK: - Published Properties
     @Published var searchText: String = ""
-    @Published var selectedSource: IngredientSource = .custom
+    @Published var selectedSource: IngredientSource = .database
     @Published var searchResults: [IngredientSearchResult] = []
     @Published var isLoading: Bool = false
     @Published var showingError: Bool = false
@@ -33,6 +33,7 @@ final class IngredientPickerViewModel: ObservableObject {
         
         do {
             customFoods = try await repository.fetchCustomFoods()
+            // Always update search results to show the appropriate source
             updateSearchResults()
         } catch {
             showError("Failed to load custom foods: \(error.localizedDescription)")
@@ -58,10 +59,19 @@ final class IngredientPickerViewModel: ObservableObject {
                 searchResults = filteredFoods.map { IngredientSearchResult(from: $0) }
                 
             case .database:
-                // For now, just show custom foods that match
-                // In the future, this would integrate with the food database API
-                let filteredFoods = try await repository.searchCustomFoods(query: query)
-                searchResults = filteredFoods.map { IngredientSearchResult(from: $0) }
+                // Use the BasicFoodDatabase for database search
+                let basicFoods = BasicFoodDatabase.shared.searchFoods(query: query)
+                searchResults = basicFoods.map { basicFood in
+                    IngredientSearchResult(
+                        name: basicFood.name,
+                        calories: basicFood.calories,
+                        protein: basicFood.protein,
+                        carbohydrates: basicFood.carbs,
+                        fat: basicFood.fat,
+                        servingSize: basicFood.servingSize,
+                        servingUnit: basicFood.servingUnit
+                    )
+                }
             }
         } catch {
             showError("Search failed: \(error.localizedDescription)")
@@ -76,6 +86,14 @@ final class IngredientPickerViewModel: ObservableObject {
         showingPortionAdjustment = true
     }
     
+    func updateSearchResultsForSourceChange() async {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            updateSearchResults()
+        } else {
+            await performSearch()
+        }
+    }
+    
     // MARK: - Private Methods
     
     private func updateSearchResults() {
@@ -83,9 +101,19 @@ final class IngredientPickerViewModel: ObservableObject {
         case .custom:
             searchResults = customFoods.map { IngredientSearchResult(from: $0) }
         case .database:
-            // For now, show custom foods
-            // In the future, this would show database results
-            searchResults = customFoods.map { IngredientSearchResult(from: $0) }
+            // Show all foods from BasicFoodDatabase when no search query
+            let basicFoods = BasicFoodDatabase.shared.foods
+            searchResults = basicFoods.map { basicFood in
+                IngredientSearchResult(
+                    name: basicFood.name,
+                    calories: basicFood.calories,
+                    protein: basicFood.protein,
+                    carbohydrates: basicFood.carbs,
+                    fat: basicFood.fat,
+                    servingSize: basicFood.servingSize,
+                    servingUnit: basicFood.servingUnit
+                )
+            }
         }
     }
     

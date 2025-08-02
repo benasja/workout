@@ -10,11 +10,12 @@ struct CustomFoodCreationView: View {
     
     private let isEditing: Bool
     
-    init(repository: FuelLogRepositoryProtocol, customFood: CustomFood? = nil) {
+    init(repository: FuelLogRepositoryProtocol, customFood: CustomFood? = nil, defaultToComposite: Bool = false) {
         self.isEditing = customFood != nil
         self._viewModel = StateObject(wrappedValue: CustomFoodCreationViewModel(
             repository: repository,
-            existingFood: customFood
+            existingFood: customFood,
+            defaultToComposite: defaultToComposite
         ))
     }
     
@@ -320,6 +321,6 @@ struct IngredientRow: View {
     }
     
     return NavigationStack {
-        CustomFoodCreationView(repository: MockFuelLogRepository())
+        CustomFoodCreationView(repository: MockFuelLogRepository(), defaultToComposite: false)
     }
 }

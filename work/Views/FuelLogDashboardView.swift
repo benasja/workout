@@ -15,12 +15,10 @@ struct FuelLogDashboardView: View {
     @State private var showingFoodSearch = false
     @State private var selectedMealTypeForSearch: MealType = .breakfast
     @State private var showingBarcodeScan = false
-    @State private var showingQuickAdd = false
     @State private var showingQuickEdit = false
     @State private var editingFoodLog: FoodLog?
     @State private var showingGoalsSetup = false
-    @State private var showingPersonalLibrary = false
-    @State private var showingDailyLogging = false
+    @State private var showingMyFoodsTab = false
     @State private var isInitialized = false
     @State private var showingBarcodeResult = false
     @State private var barcodeResult: FoodSearchResult?
@@ -86,31 +84,13 @@ struct FuelLogDashboardView: View {
         //         }
         //     }
         // }
-        .sheet(isPresented: $showingQuickAdd) {
-            QuickAddView(selectedDate: viewModel?.selectedDate ?? Date()) { foodLog in
-                Task {
-                    await viewModel?.logFood(foodLog)
-                }
-            }
-        }
-        .sheet(isPresented: $showingPersonalLibrary) {
+        .sheet(isPresented: $showingMyFoodsTab) {
             if let repository = viewModel?.repository {
-                PersonalFoodLibraryView(repository: repository) { foodLog in
+                MyFoodsTabView(repository: repository) { foodLog in
                     Task {
                         await viewModel?.logFood(foodLog)
                     }
-                }
-            }
-        }
-        .sheet(isPresented: $showingDailyLogging) {
-            if let repository = viewModel?.repository {
-                DailyLoggingView(
-                    repository: repository,
-                    selectedDate: viewModel?.selectedDate ?? Date()
-                ) { foodLog in
-                    Task {
-                        await viewModel?.logFood(foodLog)
-                    }
+                    showingMyFoodsTab = false
                 }
             }
         }
@@ -554,14 +534,14 @@ struct FuelLogDashboardView: View {
                 .keyboardNavigationSupport()
                 
                 Button(action: { 
-                    showingPersonalLibrary = true
+                    showingMyFoodsTab = true
                     AccessibilityUtils.selectionFeedback()
                 }) {
                     VStack(spacing: AppSpacing.xs) {
                         Image(systemName: "heart.text.square")
                             .font(.title2)
-                            .scaleEffect(showingPersonalLibrary ? 1.1 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingPersonalLibrary)
+                            .scaleEffect(showingMyFoodsTab ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingMyFoodsTab)
                         Text("My Foods")
                             .font(AppTypography.caption)
                             .dynamicTypeSize(maxSize: .accessibility2)
@@ -576,83 +556,14 @@ struct FuelLogDashboardView: View {
                         )
                     )
                     .cornerRadius(AppCornerRadius.md)
-                    .scaleEffect(showingPersonalLibrary ? 0.95 : 1.0)
-                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingPersonalLibrary)
+                    .scaleEffect(showingMyFoodsTab ? 0.95 : 1.0)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingMyFoodsTab)
                 }
                 .actionButtonAccessibility(
                     label: "My food library",
                     hint: "Access your personal food library and meals"
                 )
                 .accessibilityIdentifier("personal_library_button")
-                .keyboardNavigationSupport()
-            }
-            
-            // Secondary action buttons
-            HStack(spacing: AccessibilityUtils.scaledSpacing(AppSpacing.md)) {
-                Button(action: { 
-                    showingQuickAdd = true
-                    AccessibilityUtils.selectionFeedback()
-                }) {
-                    VStack(spacing: AppSpacing.xs) {
-                        Image(systemName: "plus.circle")
-                            .font(.title2)
-                            .scaleEffect(showingQuickAdd ? 1.1 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingQuickAdd)
-                        Text("Quick Add")
-                            .font(AppTypography.caption)
-                            .dynamicTypeSize(maxSize: .accessibility2)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
-                    .background(
-                        AccessibilityUtils.contrastAwareColor(
-                            normal: AppColors.primary,
-                            highContrast: Color.blue
-                        )
-                    )
-                    .cornerRadius(AppCornerRadius.md)
-                    .scaleEffect(showingQuickAdd ? 0.95 : 1.0)
-                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingQuickAdd)
-                }
-                .actionButtonAccessibility(
-                    label: "Quick add meal",
-                    hint: "Create a new meal with custom macronutrients"
-                )
-                .accessibilityIdentifier(AccessibilityIdentifiers.quickAddButton)
-                .keyboardNavigationSupport()
-                
-                Button(action: { 
-                    showingDailyLogging = true
-                    AccessibilityUtils.selectionFeedback()
-                }) {
-                    VStack(spacing: AppSpacing.xs) {
-                        Image(systemName: "list.bullet")
-                            .font(.title2)
-                            .scaleEffect(showingDailyLogging ? 1.1 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingDailyLogging)
-                        Text("Daily Log")
-                            .font(AppTypography.caption)
-                            .dynamicTypeSize(maxSize: .accessibility2)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(AccessibilityUtils.scaledSpacing(AppSpacing.lg))
-                    .background(
-                        AccessibilityUtils.contrastAwareColor(
-                            normal: AppColors.warning,
-                            highContrast: Color.yellow
-                        )
-                    )
-                    .cornerRadius(AppCornerRadius.md)
-                    .scaleEffect(showingDailyLogging ? 0.95 : 1.0)
-                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: showingDailyLogging)
-                }
-                .actionButtonAccessibility(
-                    label: "Daily food log",
-                    hint: "View and manage today's food entries"
-                )
-                .accessibilityIdentifier("daily_logging_button")
                 .keyboardNavigationSupport()
             }
         }

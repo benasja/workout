@@ -11,6 +11,8 @@ struct StepDay: Identifiable {
 class StepsViewModel: ObservableObject {
     @Published var stepsToday: Double = 0
     @Published var allStepDays: [StepDay] = []
+    @Published var isLoading = true
+    @Published var errorMessage: String?
     private let healthKit = HealthKitManager.shared
     
     init() {
@@ -18,52 +20,58 @@ class StepsViewModel: ObservableObject {
     }
     
     func requestAuthorization() {
+        print("🚶‍♂️ Requesting HealthKit authorization for steps...")
         healthKit.requestAuthorization { [weak self] success in
-            if success {
-                self?.fetchStepsToday()
-                self?.fetchAllSteps()
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ HealthKit authorization granted for steps")
+                    self?.fetchStepsToday()
+                    self?.fetchAllSteps()
+                } else {
+                    print("❌ HealthKit authorization denied for steps")
+                    self?.errorMessage = "HealthKit access denied. Please enable in Settings > Privacy & Security > Health."
+                    self?.isLoading = false
+                }
             }
         }
     }
     
     func fetchStepsToday() {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
-        let query = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+        print("📊 Fetching today's steps...")
+        healthKit.fetchTodaySteps { [weak self] steps in
             DispatchQueue.main.async {
-                self.stepsToday = result?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                if let steps = steps {
+                    print("✅ Today's steps: \(Int(steps))")
+                    self?.stepsToday = steps
+                } else {
+                    print("⚠️ No step data available for today")
+                    self?.stepsToday = 0
+                }
             }
         }
-        healthKit.execute(query)
     }
     
     func fetchAllSteps() {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        print("📈 Fetching historical step data...")
         let calendar = Calendar.current
-        let startDate = calendar.date(byAdding: .year, value: -5, to: Date()) ?? calendar.startOfDay(for: Date())
+        let startDate = calendar.date(byAdding: .month, value: -3, to: Date()) ?? Date() // Last 3 months
         let endDate = Date()
-        var interval = DateComponents()
-        interval.day = 1
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-        let query = HKStatisticsCollectionQuery(
-            quantityType: stepType,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum,
-            anchorDate: calendar.startOfDay(for: startDate),
-            intervalComponents: interval
-        )
-        query.initialResultsHandler = { _, results, _ in
-            var days: [StepDay] = []
-            results?.enumerateStatistics(from: startDate, to: endDate) { stat, _ in
-                let steps = stat.sumQuantity()?.doubleValue(for: .count()) ?? 0
-                days.append(StepDay(date: stat.startDate, steps: steps))
-            }
+        
+        healthKit.fetchStepsForDateRange(from: startDate, to: endDate) { [weak self] stepData in
             DispatchQueue.main.async {
-                self.allStepDays = days
+                let stepDays = stepData.map { StepDay(date: $0.date, steps: $0.steps) }
+                print("✅ Fetched \(stepDays.count) days of step data")
+                self?.allStepDays = stepDays
+                self?.isLoading = false
             }
         }
-        healthKit.execute(query)
+    }
+    
+    func refresh() {
+        isLoading = true
+        errorMessage = nil
+        fetchStepsToday()
+        fetchAllSteps()
     }
 }
 
@@ -79,25 +87,82 @@ struct StepsView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 24) {
-                Text("Steps Today: \(Int(viewModel.stepsToday))")
-                    .font(.title)
-                    .padding(.top)
-                if !lastMonthSteps.isEmpty {
-                    Chart(lastMonthSteps) { day in
-                        BarMark(
-                            x: .value("Date", day.date, unit: .day),
-                            y: .value("Steps", day.steps)
-                        )
+                if viewModel.isLoading {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text("Loading step data...")
+                            .foregroundColor(.secondary)
                     }
-                    .frame(height: 200)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                        Text(errorMessage)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+                        Button("Retry") {
+                            viewModel.refresh()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                     .padding()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Text("No step data available.")
-                        .foregroundColor(.secondary)
+                    // Today's steps
+                    VStack(spacing: 8) {
+                        Text("\(Int(viewModel.stepsToday))")
+                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+                        Text("Steps Today")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.top)
+                    
+                    // Chart
+                    if !lastMonthSteps.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Last 30 Days")
+                                .font(.headline)
+                                .padding(.horizontal)
+                            
+                            Chart(lastMonthSteps) { day in
+                                BarMark(
+                                    x: .value("Date", day.date, unit: .day),
+                                    y: .value("Steps", day.steps)
+                                )
+                                .foregroundStyle(.blue.gradient)
+                            }
+                            .frame(height: 200)
+                            .padding(.horizontal)
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "figure.walk")
+                                .font(.largeTitle)
+                                .foregroundColor(.secondary)
+                            Text("No historical step data available")
+                                .foregroundColor(.secondary)
+                            Text("Start walking to see your progress!")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                    }
+                    
+                    Spacer()
                 }
-                Spacer()
             }
             .navigationTitle("Steps")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Refresh") {
+                        viewModel.refresh()
+                    }
+                }
+            }
         }
     }
 } 

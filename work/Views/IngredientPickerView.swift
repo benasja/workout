@@ -40,7 +40,7 @@ struct IngredientPickerView: View {
                 }
             }
             .sheet(isPresented: $viewModel.showingCustomFoodCreation) {
-                CustomFoodCreationView(repository: viewModel.repository)
+                CustomFoodCreationView(repository: viewModel.repository, defaultToComposite: false)
             }
             .sheet(isPresented: $viewModel.showingPortionAdjustment) {
                 if let selectedFood = viewModel.selectedFood {
@@ -60,6 +60,12 @@ struct IngredientPickerView: View {
             .task {
                 await viewModel.loadCustomFoods()
             }
+            .onAppear {
+                // Ensure we show the correct results for the selected source
+                Task {
+                    await viewModel.updateSearchResultsForSourceChange()
+                }
+            }
         }
     }
     
@@ -78,6 +84,11 @@ struct IngredientPickerView: View {
                 Text("Food Database").tag(IngredientSource.database)
             }
             .pickerStyle(.segmented)
+            .onChange(of: viewModel.selectedSource) { _, _ in
+                Task {
+                    await viewModel.updateSearchResultsForSourceChange()
+                }
+            }
         }
         .padding()
         .background(Color(.systemGroupedBackground))

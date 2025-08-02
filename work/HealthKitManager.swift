@@ -22,6 +22,7 @@ final class HealthKitManager {
         HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage)!,
         HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!,
         HKObjectType.quantityType(forIdentifier: .bodyMass)!,
+        HKObjectType.quantityType(forIdentifier: .stepCount)!,
         // Nutrition-specific read types
         HKObjectType.quantityType(forIdentifier: .height)!,
         HKObjectType.characteristicType(forIdentifier: .dateOfBirth)!,
@@ -1726,5 +1727,77 @@ extension HealthKitManager {
     
     private func fetchBiologicalSexAsync() async -> HKBiologicalSex? {
         return await fetchBiologicalSex()
+    }
+    
+    // MARK: - Step Count Methods
+    
+    /// Fetches step count for a specific date
+    func fetchSteps(for date: Date, completion: @escaping (Double?) -> Void) {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            completion(nil)
+            return
+        }
+        
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        let query = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, error in
+            if let _ = error {
+                completion(nil)
+                return
+            }
+            
+            let steps = result?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+            completion(steps)
+        }
+        
+        healthStore.execute(query)
+    }
+    
+    /// Fetches today's step count
+    func fetchTodaySteps(completion: @escaping (Double?) -> Void) {
+        fetchSteps(for: Date(), completion: completion)
+    }
+    
+    /// Fetches step count for a date range
+    func fetchStepsForDateRange(from startDate: Date, to endDate: Date, completion: @escaping ([(date: Date, steps: Double)]) -> Void) {
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            completion([])
+            return
+        }
+        
+        let calendar = Calendar.current
+        var interval = DateComponents()
+        interval.day = 1
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let query = HKStatisticsCollectionQuery(
+            quantityType: stepType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum,
+            anchorDate: calendar.startOfDay(for: startDate),
+            intervalComponents: interval
+        )
+        
+        query.initialResultsHandler = { _, results, error in
+            if let _ = error {
+                completion([])
+                return
+            }
+            
+            var stepData: [(date: Date, steps: Double)] = []
+            results?.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+                let steps = statistics.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                stepData.append((date: statistics.startDate, steps: steps))
+            }
+            
+            DispatchQueue.main.async {
+                completion(stepData)
+            }
+        }
+        
+        healthStore.execute(query)
     }
 } 

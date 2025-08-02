@@ -231,6 +231,30 @@ class DataManager: ObservableObject {
         log.currentIntakeInML = 0
         try save()
     }
+    
+    func getHydrationDataForDate(_ date: Date) -> (intake: Int, goal: Int) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        
+        let predicate = #Predicate<HydrationLog> { log in
+            log.date >= startOfDay && log.date < endOfDay
+        }
+        let descriptor = FetchDescriptor<HydrationLog>(predicate: predicate)
+        
+        do {
+            let logs = try _modelContext.fetch(descriptor)
+            if let log = logs.first {
+                return (intake: log.currentIntakeInML, goal: log.goalInML)
+            } else {
+                // Return default values if no log exists for this date
+                return (intake: 0, goal: getGlobalHydrationGoal())
+            }
+        } catch {
+            // Return default values on error
+            return (intake: 0, goal: getGlobalHydrationGoal())
+        }
+    }
 
     // MARK: - Fitness Methods
     

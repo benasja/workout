@@ -7,39 +7,30 @@ struct PortionAdjustmentView: View {
     let onPortionConfirmed: (CustomFoodIngredient) -> Void
     
     @State private var quantity: Double = 1.0
-    @State private var selectedUnit: String = ""
-    @State private var customUnit: String = ""
-    @State private var showingCustomUnit: Bool = false
-    
-    // Common units for different food types
-    private let commonUnits = [
-        "g", "kg", "oz", "lb",
-        "ml", "l", "fl oz", "cup", "tbsp", "tsp",
-        "piece", "slice", "serving", "portion"
-    ]
     
     var adjustedCalories: Double {
-        food.calories * quantity / food.servingSize
+        // Calculate nutrition per unit, then multiply by quantity
+        let nutritionPerUnit = food.calories / food.servingSize
+        return nutritionPerUnit * quantity
     }
     
     var adjustedProtein: Double {
-        food.protein * quantity / food.servingSize
+        let nutritionPerUnit = food.protein / food.servingSize
+        return nutritionPerUnit * quantity
     }
     
     var adjustedCarbohydrates: Double {
-        food.carbohydrates * quantity / food.servingSize
+        let nutritionPerUnit = food.carbohydrates / food.servingSize
+        return nutritionPerUnit * quantity
     }
     
     var adjustedFat: Double {
-        food.fat * quantity / food.servingSize
-    }
-    
-    var finalUnit: String {
-        showingCustomUnit ? customUnit : selectedUnit
+        let nutritionPerUnit = food.fat / food.servingSize
+        return nutritionPerUnit * quantity
     }
     
     var isValid: Bool {
-        quantity > 0 && !finalUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        quantity > 0
     }
     
     var body: some View {
@@ -65,9 +56,7 @@ struct PortionAdjustmentView: View {
                     .disabled(!isValid)
                 }
             }
-            .onAppear {
-                selectedUnit = food.servingUnit
-            }
+
         }
     }
     
@@ -103,43 +92,8 @@ struct PortionAdjustmentView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 80)
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Unit")
-                    .font(.headline)
-                
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 8) {
-                    ForEach(commonUnits, id: \.self) { unit in
-                        Button(action: {
-                            selectedUnit = unit
-                            showingCustomUnit = false
-                        }) {
-                            Text(unit)
-                                .font(.caption)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(selectedUnit == unit && !showingCustomUnit ? Color.blue : Color(.systemGray5))
-                                .foregroundColor(selectedUnit == unit && !showingCustomUnit ? .white : .primary)
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                
-                Toggle("Custom Unit", isOn: $showingCustomUnit)
-                    .onChange(of: showingCustomUnit) { _, isOn in
-                        if isOn {
-                            selectedUnit = ""
-                        } else {
-                            customUnit = ""
-                        }
-                    }
-                
-                if showingCustomUnit {
-                    TextField("Enter custom unit", text: $customUnit)
-                        .textFieldStyle(.roundedBorder)
-                }
+                Text(food.servingUnit)
+                    .foregroundColor(.secondary)
             }
         }
     }
@@ -167,7 +121,7 @@ struct PortionAdjustmentView: View {
     // MARK: - Computed Properties
     
     private var formattedQuantity: String {
-        let unit = finalUnit
+        let unit = food.servingUnit
         if quantity.truncatingRemainder(dividingBy: 1) == 0 {
             return "\(Int(quantity)) \(unit)"
         } else {
@@ -181,7 +135,7 @@ struct PortionAdjustmentView: View {
         let ingredient = CustomFoodIngredient(
             name: food.name,
             quantity: quantity,
-            unit: finalUnit.trimmingCharacters(in: .whitespacesAndNewlines),
+            unit: food.servingUnit,
             calories: adjustedCalories,
             protein: adjustedProtein,
             carbohydrates: adjustedCarbohydrates,
