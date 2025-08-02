@@ -276,19 +276,14 @@ struct MealSectionCard: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 20)
             } else {
-                // Food items in VStack with individual swipe actions
+                // Food items in VStack with custom swipe-to-delete
                 VStack(spacing: 8) {
                     ForEach(foodLogs, id: \.id) { foodLog in
-                        FoodItemRow(
+                        SwipeableFoodItemRow(
                             foodLog: foodLog,
                             onEdit: { onEditFood(foodLog) },
                             onDelete: { onDeleteFood(foodLog) }
                         )
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("Delete", role: .destructive) {
-                                onDeleteFood(foodLog)
-                            }
-                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -344,10 +339,79 @@ struct FoodItemRow: View {
         .padding(.horizontal, 12)
         .background(Color(.systemGray6))
         .cornerRadius(12)
+        .frame(height: 80)
         .contentShape(Rectangle())
         .onTapGesture {
             onEdit()
         }
+    }
+}
+
+// MARK: - Swipeable Food Item Row
+
+struct SwipeableFoodItemRow: View {
+    let foodLog: FoodLog
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var offset: CGFloat = 0
+    @State private var isSwiped = false
+    
+    var body: some View {
+        ZStack {
+            // Delete button background
+            HStack {
+                Spacer()
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .frame(width: 60, height: 60)
+                        .background(Color.red)
+                        .cornerRadius(12)
+                }
+            }
+            .padding(.trailing, 16)
+            
+            // Main content
+            FoodItemRow(
+                foodLog: foodLog,
+                onEdit: onEdit,
+                onDelete: onDelete
+            )
+            .offset(x: offset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.width < 0 {
+                            offset = max(value.translation.width, -80)
+                        }
+                    }
+                    .onEnded { value in
+                        withAnimation(.spring()) {
+                            if value.translation.width < -50 {
+                                offset = -80
+                                isSwiped = true
+                            } else {
+                                offset = 0
+                                isSwiped = false
+                            }
+                        }
+                    }
+            )
+            .onTapGesture {
+                if isSwiped {
+                    withAnimation(.spring()) {
+                        offset = 0
+                        isSwiped = false
+                    }
+                } else {
+                    onEdit()
+                }
+            }
+        }
+        .clipped()
+        .frame(height: 80)
     }
 }
 
